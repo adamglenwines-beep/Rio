@@ -78,6 +78,7 @@ export class Growth {
   }
 
   clear() {
+    this.renderer.invalidateAll();   // building ids restart from 0
     this.occ.fill(EMPTY);
     this.buildings = [];
     this.live = [];
@@ -144,9 +145,22 @@ export class Growth {
     for (const p of net.paths) stamp(p.points, laneRadius() - 0.15);
   }
 
+  /**
+   * Mark a house, and the houses right next to it, for redrawing: a neighbour's
+   * height decides which of their windows are hidden behind its walls.
+   */
+  _touch(b) {
+    b.ver++;
+    for (const id of this.live) {
+      const o = this.buildings[id];
+      if (o !== b && Math.abs(o.x - b.x) < 14 && Math.abs(o.z - b.z) < 14) o.ver++;
+    }
+  }
+
   _remove(id) {
     const b = this.buildings[id];
     if (!b) return;
+    this._touch(b);
     this._forCells(b.corners, RASTER_INSET, (k) => { if (k >= 0 && this.occ[k] === id) this.occ[k] = EMPTY; });
     for (const F of [b.frontage, b.frontage2]) {
       const list = F && this.front.get(F.key);
@@ -714,6 +728,7 @@ export class Growth {
       seed: (r() * 1e9) | 0,
       age: 0,
       fails: 0,
+      ver: 0,                    // bumped whenever this house must be redrawn
     });
     if (b.arch) b.floors = Math.max(b.floors, b.minFloors);
     if (b.flatiron) b.roof = r() < 0.5 ? 'hip' : 'flat';   // a ridge along a wedge looks odd
@@ -726,6 +741,7 @@ export class Growth {
     }
     if (b.frontage) this.frontLive.push(id);
     this._forCells(b.corners, RASTER_INSET, (k) => { if (k >= 0 && this.occ[k] === EMPTY) this.occ[k] = id; });
+    this._touch(b);
     this.dirty = true;
     return b;
   }
@@ -794,7 +810,7 @@ export class Growth {
     for (let k = 0; k < CONFIG.sim.floorGrowthsPerStep && this.live.length; k++) {
       const b = this.buildings[r.pick(this.live)];
       b.age++;
-      if (b.age > 2 && b.floors < this.targetFloors(b)) { b.floors++; this.dirty = true; }
+      if (b.age > 2 && b.floors < this.targetFloors(b)) { b.floors++; this._touch(b); this.dirty = true; }
     }
   }
 

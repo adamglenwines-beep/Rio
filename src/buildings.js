@@ -22,6 +22,9 @@ import { sub, norm, dist, lerp2, centroid, edgeNormal, offsetPoly } from './geom
 
 const FH = CONFIG.building.floorHeight;
 const WHITE = new THREE.Color(1, 1, 1);
+const CREAM = new THREE.Color('#f3ead6'), STONE = new THREE.Color('#9c9184');
+const DOOR_COLS = [new THREE.Color('#3b5d46'), new THREE.Color('#6b4a33'), new THREE.Color('#2f5f78')];
+const AWN_COLS = [new THREE.Color('#d24b3f'), new THREE.Color('#2e7cb8'), new THREE.Color('#3b9c6b'), new THREE.Color('#e3a63a')];
 
 // ---- geometry helpers ---------------------------------------------------------
 
@@ -75,6 +78,14 @@ class GeoBuilder {
     }
     if (top) this.face(poly.map((p) => [p[0], y1, p[1]]), c, [0, 1, 0]);
     if (bottom) this.face(poly.map((p) => [p[0], y0, p[1]]), c, [0, -1, 0]);
+  }
+
+  /** Typed arrays for this builder's triangles, plus per-vertex occlusion params (see step 4). */
+  arrays(b) {
+    const n = this.pos.length;
+    const ao = new Float32Array(n);
+    for (let i = 0; i < n; i += 3) { ao[i] = b ? b.gMin : 0; ao[i + 1] = 0; ao[i + 2] = 0; }
+    return { pos: new Float32Array(this.pos), nor: new Float32Array(this.nor), col: new Float32Array(this.col), ao };
   }
 
   toGeometry() {
@@ -134,6 +145,7 @@ export class BuildingRenderer {
     const vc = lambert({ vertexColors: true });
     this.massMat = lambert({ vertexColors: true });
     this.mass = null;   // the merged walls + roofs mesh
+    this.cache = new Map();   // house id → its generated geometry and instances
 
     // Instanced details: geometry + material + whether it casts shadows.
     this.parts = {
@@ -241,149 +253,204 @@ export class BuildingRenderer {
     gb.face(p, col, [0, -1, 0]);   // the eaves seen from below
   }
 
+  /** Forget every cached house (the next rebuild redraws the whole town). */
+  invalidateAll() { this.cache.clear(); }
+
+  /**
+   * Redraw the town. Only houses whose `ver` changed since they were last
+   * built are regenerated (growth bumps `ver` on a house and its neighbours
+   * when it is added, gains a floor or is removed); everything else is copied
+   * from the per-house cache into the shared buffers.
+   */
   rebuild(buildings) {
+    // tops first, so neighbour checks use the current heights
+    for (const b of buildings) b.top = b.gMax + b.floors * FH;
+    const seen = new Set();
+    let rebuilt = 0;
+    for (const b of buildings) {
+      seen.add(b.id);
+      const c = this.cache.get(b.id);
+      if (!c || c.ver !== b.ver) { this.cache.set(b.id, this._buildOne(b)); rebuilt++; }
+    }
+    for (const id of [...this.cache.keys()]) if (!seen.has(id)) this.cache.delete(id);
+    this.lastRebuilt = rebuilt;
+
+    // --- the merged walls + roofs mesh: concatenate the cached pieces ---
+    let nv = 0;
+    for (const b of buildings) nv += this.cache.get(b.id).pos.length;
+    if (!this.mass || this.massCap < nv) {
+      // (re)allocate with head-room, so most rebuilds just copy into existing buffers
+      this.massCap = Math.ceil((nv * 1.4 + 3000) / 9) * 9;   // whole triangles (3 vertices × 3 floats)
+      const geo = new THREE.BufferGeometry();
+      for (const [name, size] of [['position', 3], ['normal', 3], ['color', 3], ['aoParams', 3]]) {
+        geo.setAttribute(name, new THREE.BufferAttribute(new Float32Array(this.massCap), size).setUsage(THREE.DynamicDrawUsage));
+      }
+      if (this.mass) { this.mass.geometry.dispose(); this.mass.geometry = geo; }
+      else {
+        this.mass = new THREE.Mesh(geo, this.massMat);
+        this.mass.castShadow = true;
+        this.mass.receiveShadow = true;
+        this.mass.frustumCulled = false;
+        this.group.add(this.mass);
+      }
+    }
+    const A = this.mass.geometry.attributes;
+    let o = 0;
+    for (const b of buildings) {
+      const c = this.cache.get(b.id);
+      A.position.array.set(c.pos, o); A.normal.array.set(c.nor, o); A.color.array.set(c.col, o); A.aoParams.array.set(c.ao, o);
+      o += c.pos.length;
+    }
+    for (const a of Object.values(A)) { a.clearUpdateRanges(); a.addUpdateRange(0, nv); a.needsUpdate = true; }
+    this.mass.geometry.setDrawRange(0, nv / 3);
+
+    // --- instance buffers: concatenate the cached matrices and colours ---
+    for (const k of Object.keys(this.parts)) {
+      let n = 0;
+      for (const b of buildings) n += this.cache.get(b.id).parts[k].n;
+      const mesh = this._ensure(k, n);
+      const M = mesh.instanceMatrix.array, C = mesh.instanceColor.array;
+      let i = 0;
+      for (const b of buildings) {
+        const p = this.cache.get(b.id).parts[k];
+        if (!p.n) continue;
+        M.set(p.m, i * 16); C.set(p.c, i * 3);
+        i += p.n;
+      }
+      mesh.count = n;
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.instanceColor.needsUpdate = true;
+    }
+  }
+
+  /** Generate one house: its wall/roof triangles and its detail instances. */
+  _buildOne(b) {
     const t = this.terrain;
     const lists = {};
     for (const k of Object.keys(this.parts)) lists[k] = [];
     // instance = [x, y, z, rotY, sx, sy, sz, colour]
     const put = (k, x, y, z, rot, sx, sy, sz, col) => lists[k].push(x, y, z, rot, sx, sy, sz, col.r, col.g, col.b);
-    const cream = new THREE.Color('#f3ead6');
-    const stone = new THREE.Color('#9c9184');
-    const doorCols = [new THREE.Color('#3b5d46'), new THREE.Color('#6b4a33'), new THREE.Color('#2f5f78')];
-    const awnCols = [new THREE.Color('#d24b3f'), new THREE.Color('#2e7cb8'), new THREE.Color('#3b9c6b'), new THREE.Color('#e3a63a')];
+    const cream = CREAM, stone = STONE, doorCols = DOOR_COLS, awnCols = AWN_COLS;
     const gb = new GeoBuilder();
     const ov = CONFIG.building.roofOverhang, pitch = CONFIG.building.roofPitch;
 
-    // tops first, so neighbour checks use the current heights
-    for (const b of buildings) b.top = b.gMax + b.floors * FH;
+    const rng = makeRng(b.seed);
+    const base = b.gMin - 1.2;
+    const q = b.corners;
 
-    for (const b of buildings) {
-      const rng = makeRng(b.seed);
-      const base = b.gMin - 1.2;
-      const q = b.corners;
-
-      // --- walls, stone plinth, cornice ---
-      if (b.arch) {
-        // Archway / covered passage: the house sits on two piers over the lane.
-        const a = b.arch, hw = b.w / 2, hd = b.d / 2;
-        gb.prism(q, a.y, b.top, b.facade, false, true);
-        const piers = a.axis === 'f'
-          ? [this._rectPart(b, -hw, a.lo, -hd, hd), this._rectPart(b, a.hi, hw, -hd, hd)]
-          : [this._rectPart(b, -hw, hw, -hd, a.lo), this._rectPart(b, -hw, hw, a.hi, hd)];
-        for (const pier of piers) if (dist(pier[0], pier[1]) > 0.2 && dist(pier[1], pier[2]) > 0.2) gb.prism(pier, base, a.y + 0.05, b.facade, false);
-        // a stone lintel over each opening
-        const lint = a.axis === 'f' ? this._rectPart(b, a.lo - 0.15, a.hi + 0.15, -hd - 0.05, hd + 0.05)
-                                    : this._rectPart(b, -hw - 0.05, hw + 0.05, a.lo - 0.15, a.hi + 0.15);
-        gb.prism(lint, a.y - 0.4, a.y - 0.1, stone);
+    // --- walls, stone plinth, cornice ---
+    if (b.arch) {
+      // Archway / covered passage: the house sits on two piers over the lane.
+      const a = b.arch, hw = b.w / 2, hd = b.d / 2;
+      gb.prism(q, a.y, b.top, b.facade, false, true);
+      const piers = a.axis === 'f'
+        ? [this._rectPart(b, -hw, a.lo, -hd, hd), this._rectPart(b, a.hi, hw, -hd, hd)]
+        : [this._rectPart(b, -hw, hw, -hd, a.lo), this._rectPart(b, -hw, hw, a.hi, hd)];
+      for (const pier of piers) if (dist(pier[0], pier[1]) > 0.2 && dist(pier[1], pier[2]) > 0.2) gb.prism(pier, base, a.y + 0.05, b.facade, false);
+      // a stone lintel over each opening
+      const lint = a.axis === 'f' ? this._rectPart(b, a.lo - 0.15, a.hi + 0.15, -hd - 0.05, hd + 0.05)
+                                  : this._rectPart(b, -hw - 0.05, hw + 0.05, a.lo - 0.15, a.hi + 0.15);
+      gb.prism(lint, a.y - 0.4, a.y - 0.1, stone);
+    } else {
+      gb.prism(q, base, b.top, b.facade, false);
+      const hb = this._harbourBase(b, rng);
+      if (hb) {
+        // rough stone base, battered at the foot, with a pale string course on top
+        gb.prism(offsetPoly(q, 0.14), base, hb.top, hb.col);
+        gb.prism(offsetPoly(q, 0.26), base, b.gMin + 0.9, hb.col.clone().multiplyScalar(0.9));
+        gb.prism(offsetPoly(q, 0.18), hb.top - 0.04, hb.top + 0.16, cream);
+        if (hb.vault) {
+          const { edge, w, h } = hb.vault;
+          const A = q[edge], Bc = q[(edge + 1) % 4], n = edgeNormal(q, edge);
+          const m = lerp2(A, Bc, 0.5), g = t.heightAt(m[0], m[1]);
+          put('vault', m[0] + n[0] * 0.16, g - 0.05, m[1] + n[1] * 0.16, Math.atan2(n[0], n[1]), w, h / 1.1, 1, WHITE);
+        }
       } else {
-        gb.prism(q, base, b.top, b.facade, false);
-        const hb = this._harbourBase(b, rng);
-        if (hb) {
-          // rough stone base, battered at the foot, with a pale string course on top
-          gb.prism(offsetPoly(q, 0.14), base, hb.top, hb.col);
-          gb.prism(offsetPoly(q, 0.26), base, b.gMin + 0.9, hb.col.clone().multiplyScalar(0.9));
-          gb.prism(offsetPoly(q, 0.18), hb.top - 0.04, hb.top + 0.16, cream);
-          if (hb.vault) {
-            const { edge, w, h } = hb.vault;
-            const A = q[edge], Bc = q[(edge + 1) % 4], n = edgeNormal(q, edge);
-            const m = lerp2(A, Bc, 0.5), g = t.heightAt(m[0], m[1]);
-            put('vault', m[0] + n[0] * 0.16, g - 0.05, m[1] + n[1] * 0.16, Math.atan2(n[0], n[1]), w, h / 1.1, 1, WHITE);
-          }
-        } else {
-          gb.prism(offsetPoly(q, 0.06), base, b.gMin + 0.45, stone);
-        }
+        gb.prism(offsetPoly(q, 0.06), base, b.gMin + 0.45, stone);
       }
-      const corniceCol = rng() < 0.6 ? cream : b.facade.clone().offsetHSL(0, -0.1, 0.12);
-      gb.prism(offsetPoly(q, 0.11), b.top - 0.32, b.top, corniceCol);
+    }
+    const corniceCol = rng() < 0.6 ? cream : b.facade.clone().offsetHSL(0, -0.1, 0.12);
+    gb.prism(offsetPoly(q, 0.11), b.top - 0.32, b.top, corniceCol);
 
-      // --- roof ---
-      this._roof(gb, b, ov, pitch);
-      if (rng() < 0.55) {
-        const back = lerp2(q[2], q[3], 0.5 + (rng() - 0.5) * 0.6);
-        const p = lerp2(centroid(q), back, 0.55);
-        put('chimney', p[0], b.top + 0.35, p[1], b.theta, 1, 1, 1, b.facade);
-      }
+    // --- roof ---
+    this._roof(gb, b, ov, pitch);
+    if (rng() < 0.55) {
+      const back = lerp2(q[2], q[3], 0.5 + (rng() - 0.5) * 0.6);
+      const p = lerp2(centroid(q), back, 0.55);
+      put('chimney', p[0], b.top + 0.35, p[1], b.theta, 1, 1, 1, b.facade);
+    }
 
-      // --- facades: windows along every wall ---
-      const closedChance = rng() * 0.6;
-      for (let i = 0; i < 4; i++) {
-        const A = q[i], Bc = q[(i + 1) % 4];
-        const L = dist(A, Bc);
-        if (L < 1.6) continue;
-        const n = edgeNormal(q, i), e = norm(sub(Bc, A));
-        const front = i === 0;
-        const cols = front ? Math.max(1, Math.round(L / 2.0)) : Math.max(1, Math.round(L / 2.9));
-        const srot = Math.atan2(n[0], n[1]);
-        let lowestFloor = true;
-        for (let k = 0; ; k++) {
-          const floorBottom = b.top - FH * (k + 1);
-          if (floorBottom < base) break;
-          const wy = floorBottom + 1.55;
-          let any = false;
-          for (let ci = 0; ci < cols; ci++) {
-            const u = L * ((ci + 0.5) / cols);
-            const wx = A[0] + e[0] * u, wz = A[1] + e[1] * u;
-            const ground = t.heightAt(wx, wz);
-            if (floorBottom < ground - 0.4) continue;           // this storey is underground here
-            if (b.arch && floorBottom < b.arch.y - 0.2) continue; // below the rooms of an archway house
-            if (b.stoneTop && floorBottom < b.stoneTop - 0.5) continue; // the stone base / boat store
-            // hidden behind a neighbour's wall?
-            if (this.growth.blockerTop(wx + n[0] * 0.8, wz + n[1] * 0.8) > wy - 0.5) continue;
-            const px = wx + n[0] * 0.02, pz = wz + n[1] * 0.02;
-            const groundFloor = floorBottom < ground + 1.2;
-            if (front && groundFloor) {
-              any = true;
-              if (b.kind === ZONE.COM) {
-                if (ci === Math.floor(cols / 2) || cols === 1) {
-                  put('shop', px, Math.max(floorBottom, ground - 0.1), pz, srot, Math.min(1, L / cols / 2.6), 1, 1, WHITE);
-                  put('awning', px + n[0] * 0.55, Math.max(floorBottom, ground) + 2.75, pz + n[1] * 0.55, srot, Math.min(2.6, L / cols), 1, 1, awnCols[(b.seed >> 3) % awnCols.length]);
-                }
-              } else if (b.vaultEdge === i) {
-                // the boat store is this wall's ground floor
-              } else if (ci === Math.floor((cols - 1) / 2)) {
-                put('door', px, Math.max(floorBottom, ground - 0.1), pz, srot, 1, 1, 1, doorCols[(b.seed >> 5) % 3]);
-              } else {
-                this._window(put, px, wy, pz, srot, b, rng, closedChance, false);
-              }
-              continue;
-            }
+    // --- facades: windows along every wall ---
+    const closedChance = rng() * 0.6;
+    for (let i = 0; i < 4; i++) {
+      const A = q[i], Bc = q[(i + 1) % 4];
+      const L = dist(A, Bc);
+      if (L < 1.6) continue;
+      const n = edgeNormal(q, i), e = norm(sub(Bc, A));
+      const front = i === 0;
+      const cols = front ? Math.max(1, Math.round(L / 2.0)) : Math.max(1, Math.round(L / 2.9));
+      const srot = Math.atan2(n[0], n[1]);
+      let lowestFloor = true;
+      for (let k = 0; ; k++) {
+        const floorBottom = b.top - FH * (k + 1);
+        if (floorBottom < base) break;
+        const wy = floorBottom + 1.55;
+        let any = false;
+        for (let ci = 0; ci < cols; ci++) {
+          const u = L * ((ci + 0.5) / cols);
+          const wx = A[0] + e[0] * u, wz = A[1] + e[1] * u;
+          const ground = t.heightAt(wx, wz);
+          if (floorBottom < ground - 0.4) continue;           // this storey is underground here
+          if (b.arch && floorBottom < b.arch.y - 0.2) continue; // below the rooms of an archway house
+          if (b.stoneTop && floorBottom < b.stoneTop - 0.5) continue; // the stone base / boat store
+          // hidden behind a neighbour's wall?
+          if (this.growth.blockerTop(wx + n[0] * 0.8, wz + n[1] * 0.8) > wy - 0.5) continue;
+          const px = wx + n[0] * 0.02, pz = wz + n[1] * 0.02;
+          const groundFloor = floorBottom < ground + 1.2;
+          if (front && groundFloor) {
             any = true;
-            const balcony = front && b.balconies && !lowestFloor && rng() < 0.4;
-            this._window(put, px, wy, pz, srot, b, rng, closedChance, balcony);
+            if (b.kind === ZONE.COM) {
+              if (ci === Math.floor(cols / 2) || cols === 1) {
+                put('shop', px, Math.max(floorBottom, ground - 0.1), pz, srot, Math.min(1, L / cols / 2.6), 1, 1, WHITE);
+                put('awning', px + n[0] * 0.55, Math.max(floorBottom, ground) + 2.75, pz + n[1] * 0.55, srot, Math.min(2.6, L / cols), 1, 1, awnCols[(b.seed >> 3) % awnCols.length]);
+              }
+            } else if (b.vaultEdge === i) {
+              // the boat store is this wall's ground floor
+            } else if (ci === Math.floor((cols - 1) / 2)) {
+              put('door', px, Math.max(floorBottom, ground - 0.1), pz, srot, 1, 1, 1, doorCols[(b.seed >> 5) % 3]);
+            } else {
+              this._window(put, px, wy, pz, srot, b, rng, closedChance, false);
+            }
+            continue;
           }
-          if (any) lowestFloor = false;
+          any = true;
+          const balcony = front && b.balconies && !lowestFloor && rng() < 0.4;
+          this._window(put, px, wy, pz, srot, b, rng, closedChance, balcony);
         }
+        if (any) lowestFloor = false;
       }
     }
 
-    // --- the merged walls + roofs mesh ---
-    if (this.mass) { this.group.remove(this.mass); this.mass.geometry.dispose(); }
-    this.mass = new THREE.Mesh(gb.toGeometry(), this.massMat);
-    this.mass.castShadow = true;
-    this.mass.receiveShadow = true;
-    this.group.add(this.mass);
-
-    // --- write instance buffers ---
+    // --- pack the detail instances as ready-made matrices ---
+    const parts = {};
     for (const [k, arr] of Object.entries(lists)) {
-      const n = arr.length / 10;
-      const mesh = this._ensure(k, n);
-      const M = mesh.instanceMatrix.array, C = mesh.instanceColor.array;
+      const n = arr.length / 10, M = new Float32Array(n * 16), C = new Float32Array(n * 3);
       for (let i = 0; i < n; i++) {
         const o = i * 10, m = i * 16;
         const x = arr[o], y = arr[o + 1], z = arr[o + 2], r = arr[o + 3];
         const sx = arr[o + 4], sy = arr[o + 5], sz = arr[o + 6];
         const c = Math.cos(r), s = Math.sin(r);
         // column-major matrix for: translate · rotateY(r) · scale(sx, sy, sz)
-        M[m] = c * sx; M[m + 1] = 0; M[m + 2] = -s * sx; M[m + 3] = 0;
-        M[m + 4] = 0; M[m + 5] = sy; M[m + 6] = 0; M[m + 7] = 0;
-        M[m + 8] = s * sz; M[m + 9] = 0; M[m + 10] = c * sz; M[m + 11] = 0;
+        M[m] = c * sx; M[m + 2] = -s * sx;
+        M[m + 5] = sy;
+        M[m + 8] = s * sz; M[m + 10] = c * sz;
         M[m + 12] = x; M[m + 13] = y; M[m + 14] = z; M[m + 15] = 1;
         C[i * 3] = arr[o + 7]; C[i * 3 + 1] = arr[o + 8]; C[i * 3 + 2] = arr[o + 9];
       }
-      mesh.count = n;
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.instanceColor.needsUpdate = true;
+      parts[k] = { n, m: M, c: C };
     }
+    const g = gb.arrays(b);
+    return { ver: b.ver, pos: g.pos, nor: g.nor, col: g.col, ao: g.ao, parts };
   }
 
   _window(put, x, y, z, rot, b, rng, closedChance, balcony) {
