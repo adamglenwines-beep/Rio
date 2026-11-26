@@ -300,6 +300,12 @@ export class BuildingRenderer {
     gb.face(p, col, [0, -1, 0]);   // the eaves seen from below
   }
 
+  /** Detail meshes too small to matter in a ripply reflection. */
+  smallParts() {
+    return ['shutterOpen', 'shutterClosed', 'balcony', 'door', 'awning', 'chimney', 'vault']
+      .map((k) => this.parts[k].mesh).filter(Boolean);
+  }
+
   /** Forget every cached house (the next rebuild redraws the whole town). */
   invalidateAll() { this.cache.clear(); }
 

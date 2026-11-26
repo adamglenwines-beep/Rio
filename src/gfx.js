@@ -304,7 +304,58 @@ export class Graphics {
     }
   }
 
+  // ---- harbour reflections: a mirrored render of the town, sampled by the sea ----
+
+  _renderReflection() {
+    const P = this.preset, g = this.game, r = this.renderer;
+    const U = g.sea.uniforms;
+    if (!P.reflection) { U.uReflStrength.value = 0; return; }
+    const size = r.getDrawingBufferSize(new THREE.Vector2()).multiplyScalar(P.reflection).floor();
+    if (!this.reflRT || this.reflRT.width !== size.x || this.reflRT.height !== size.y) {
+      if (this.reflRT) this.reflRT.dispose();
+      this.reflRT = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType });
+      this.reflCam = new THREE.PerspectiveCamera();
+      this.reflCam.layers.enableAll();
+    }
+    const cam = this.camera, vc = this.reflCam, y0 = CONFIG.graphics.reflectionPlane;
+    // mirror the camera in the sea plane (as three.js's Reflector does)
+    const cp = new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld);
+    if (cp.y < y0 + 0.2) { U.uReflStrength.value = 0; return; }
+    const rot = new THREE.Matrix4().extractRotation(cam.matrixWorld);
+    const look = new THREE.Vector3(0, 0, -1).applyMatrix4(rot).add(cp);
+    vc.position.set(cp.x, 2 * y0 - cp.y, cp.z);
+    vc.up.set(0, 1, 0).applyMatrix4(rot); vc.up.y = -vc.up.y;
+    vc.lookAt(look.x, 2 * y0 - look.y, look.z);
+    vc.far = cam.far;
+    vc.updateMatrixWorld();
+    vc.projectionMatrix.copy(cam.projectionMatrix);
+    U.uReflMatrix.value.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1)
+      .multiply(vc.projectionMatrix).multiply(vc.matrixWorldInverse);
+    // oblique near plane = the sea surface, so nothing underwater is reflected
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -y0).applyMatrix4(vc.matrixWorldInverse);
+    const clip = new THREE.Vector4(plane.normal.x, plane.normal.y, plane.normal.z, plane.constant);
+    const pm = vc.projectionMatrix.elements;
+    const q = new THREE.Vector4((Math.sign(clip.x) + pm[8]) / pm[0], (Math.sign(clip.y) + pm[9]) / pm[5], -1, (1 + pm[10]) / pm[14]);
+    clip.multiplyScalar(2 / clip.dot(q));
+    pm[2] = clip.x; pm[6] = clip.y; pm[10] = clip.z + 1; pm[14] = clip.w;
+    // skip what barely shows in a ripply reflection (and the sea itself)
+    const hide = [g.sea.water, g.infill.group, g.scenery.group, g.zones.mesh, ...g.growth.renderer.smallParts()];
+    const was = hide.map((o) => o.visible);
+    hide.forEach((o) => (o.visible = false));
+    const prevTarget = r.getRenderTarget(), prevShadow = r.shadowMap.autoUpdate;
+    r.shadowMap.autoUpdate = false;
+    r.setRenderTarget(this.reflRT);
+    r.clear();
+    r.render(this.scene, vc);
+    r.setRenderTarget(prevTarget);
+    r.shadowMap.autoUpdate = prevShadow;
+    hide.forEach((o, i) => (o.visible = was[i]));
+    U.uRefl.value = this.reflRT.texture;
+    U.uReflStrength.value = CONFIG.graphics.reflectionStrength;
+  }
+
   render() {
+    this._renderReflection();
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
   }

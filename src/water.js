@@ -9,7 +9,11 @@ export class Sea {
   constructor(terrain) {
     this.terrain = terrain;
     this.group = new THREE.Group();
-    this.uniforms = { uTime: { value: 0 } };
+    this.uniforms = {
+      uTime: { value: 0 },
+      // planar reflection (filled in by gfx.js on Medium/High; strength 0 = off)
+      uRefl: { value: null }, uReflMatrix: { value: new THREE.Matrix4() }, uReflStrength: { value: 0 }, uRipple: { value: 0.035 },
+    };
 
     // Faceted water: the waves are computed in the vertex shader and
     // flatShading derives a normal per triangle, so it sparkles low-poly style.
@@ -21,15 +25,30 @@ export class Sea {
       transparent: true, opacity: 0.82, flatShading: true,
     });
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.uTime = this.uniforms.uTime;
-      shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader.replace(
+      Object.assign(shader.uniforms, this.uniforms);
+      // reflections: project the wavy surface into the mirrored render, nudged by
+      // the facet normals (ripples), and blend more at grazing angles (Fresnel)
+      shader.fragmentShader = 'uniform sampler2D uRefl;\nuniform float uReflStrength, uRipple;\nvarying vec4 vReflUv;\n' + shader.fragmentShader.replace(
+        '#include <opaque_fragment>',
+        `if (uReflStrength > 0.0) {
+           vec2 ruv = vReflUv.xy / vReflUv.w + normal.xy * uRipple;
+           // tinted by the water, so the stylised blue sea stays blue
+           vec3 refl = texture2D(uRefl, ruv).rgb * mix(vec3(1.0), diffuseColor.rgb * 2.2, 0.45);
+           float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
+           float k = uReflStrength * mix(0.12, 0.7, fres);
+           outgoingLight = mix(outgoingLight, refl, k);
+           diffuseColor.a = mix(diffuseColor.a, 1.0, k);
+         }
+         #include <opaque_fragment>`);
+      shader.vertexShader = 'uniform float uTime;\nuniform mat4 uReflMatrix;\nvarying vec4 vReflUv;\n' + shader.vertexShader.replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
          vec4 wp = modelMatrix * vec4(position, 1.0);
          float w = sin(wp.x * 0.21 + uTime * 0.9) * 0.16
                  + sin(wp.z * 0.17 - uTime * 0.7) * 0.14
                  + sin((wp.x + wp.z) * 0.37 + uTime * 1.3) * 0.07;
-         transformed.y += w;`
+         transformed.y += w;
+         vReflUv = uReflMatrix * (modelMatrix * vec4(transformed, 1.0));`
       );
     };
     this.water = new THREE.Mesh(geo, mat);
