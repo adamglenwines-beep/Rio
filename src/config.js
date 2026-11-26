@@ -54,6 +54,9 @@ export const CONFIG = {
       maxGround: 5,        // …and standing this low get a stone base
       height: [2.8, 3.6],  // base height (about one storey)
       vaultChance: 0.6,    // share of them with a big arched opening facing the water
+      openChance: 0.35,    // share of those boat stores left open (the rest have timber doors)
+      portalDepth: 0.4,    // how far the stone arch frame stands out from the base (m)
+      frameWidth: 0.38,    // width of the stone frame around the opening (m)
     },
   },
 
@@ -73,6 +76,7 @@ export const CONFIG = {
     archChance: 0.6,       // how often the town tries to build archways over side stairs and lanes
     archHeadroom: 2.4,     // clear height above the highest step under the arch
     archMinPier: 0.8,      // each pier must be at least this wide
+    archRise: 0.75,        // rise of the stone vault lining a passage under a house (m)
     // Sharp forks: where two lanes meet at less than this angle, the tip of the fork is
     // kept for a pointed (flatiron) building fronting both lanes, or else for infill.
     forkMaxAngle: 70,      // degrees

@@ -24,6 +24,8 @@ const FH = CONFIG.building.floorHeight;
 const WHITE = new THREE.Color(1, 1, 1);
 const CREAM = new THREE.Color('#f3ead6'), STONE = new THREE.Color('#9c9184');
 const DOOR_COLS = [new THREE.Color('#3b5d46'), new THREE.Color('#6b4a33'), new THREE.Color('#2f5f78')];
+const DARK = new THREE.Color('#2a2420'), IRON = new THREE.Color('#2e2b28');
+const DOOR_WEATHERED = ['#7d6b55', '#6e5f4e', '#8a7a64', '#5f6e5f', '#5d6b78', '#7a5e48'];   // sun-bleached timber, faded paint
 const AWN_COLS = [new THREE.Color('#d24b3f'), new THREE.Color('#2e7cb8'), new THREE.Color('#3b9c6b'), new THREE.Color('#e3a63a')];
 
 // ---- geometry helpers ---------------------------------------------------------
@@ -54,6 +56,20 @@ class GeoBuilder {
     this.pos.push(a[0], a[1], a[2], b[0], b[1], b[2], d[0], d[1], d[2]);
     this.nor.push(n[0], n[1], n[2], n[0], n[1], n[2], n[0], n[1], n[2]);
     this.col.push(c.r, c.g, c.b, c.r, c.g, c.b, c.r, c.g, c.b);
+  }
+
+  /** Add every triangle of a three.js geometry, transformed by `m`, in one colour. */
+  geometry(geo, m, c) {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    const P = g.attributes.position, v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    for (let i = 0; i < P.count; i += 3) {
+      for (let k = 0; k < 3; k++) v[k].fromBufferAttribute(P, i + k).applyMatrix4(m);
+      const n = new THREE.Vector3().subVectors(v[1], v[0]).cross(new THREE.Vector3().subVectors(v[2], v[0]));
+      const l = n.length();
+      if (l < 1e-9) continue;
+      n.divideScalar(l);
+      this._tri(v[0].toArray(), v[1].toArray(), v[2].toArray(), n.toArray(), c);
+    }
   }
 
   /** Vertical prism over a convex 2D polygon from y0 to y1 (fast path: normals known). */
@@ -136,18 +152,13 @@ function mergeColoured(parts) {
 }
 const box = (w, h, d, x = 0, y = 0, z = 0) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 
-/** A round-headed opening (unit width/height, origin at bottom centre) with a stone surround. */
-function vaultGeometry() {
-  const opening = new THREE.Shape();
-  opening.moveTo(-0.5, 0); opening.lineTo(0.5, 0); opening.lineTo(0.5, 0.6);
-  opening.absarc(0, 0.6, 0.5, 0, Math.PI, false); opening.lineTo(-0.5, 0);
-  const ring = new THREE.Shape();
-  ring.moveTo(-0.62, 0); ring.lineTo(-0.5, 0); ring.lineTo(-0.5, 0.6);
-  ring.absarc(0, 0.6, 0.5, Math.PI, 0, true); ring.lineTo(0.5, 0); ring.lineTo(0.62, 0); ring.lineTo(0.62, 0.6);
-  ring.absarc(0, 0.6, 0.62, 0, Math.PI, false); ring.lineTo(-0.62, 0);
-  const g1 = new THREE.ShapeGeometry(opening, 10).translate(0, 0, 0.03);
-  const g2 = new THREE.ShapeGeometry(ring, 10).translate(0, 0, 0.05);
-  return mergeColoured([[g1, '#2c2622'], [g2, '#b9ad97']]);
+/** A round-headed arch outline: width w, total height h, origin at the bottom centre. */
+function archShape(w, h, shape = new THREE.Shape()) {
+  const r = w / 2, ys = h - r;
+  shape.moveTo(-r, 0); shape.lineTo(r, 0); shape.lineTo(r, ys);
+  shape.absarc(0, ys, r, 0, Math.PI, false);
+  shape.lineTo(-r, 0);
+  return shape;
 }
 
 // ---- the renderer -------------------------------------------------------------
@@ -192,7 +203,8 @@ export class BuildingRenderer {
       shop:    { geo: mergeColoured([[box(2.5, 2.4, 0.08, 0, 1.2, 0), '#ece3cf'], [box(2.2, 2.1, 0.06, 0, 1.12, 0.04), '#3a3d44']]), mat: vc, shadow: false },
       awning:  { geo: box(1, 0.08, 1.3).rotateX(0.4), mat: lambert(), shadow: true },
       chimney: { geo: mergeColoured([[box(0.55, 1.2, 0.55, 0, 0.6, 0), '#ffffff'], [box(0.75, 0.12, 0.75, 0, 1.25, 0), '#d8d0c0']]), mat: lambert({ vertexColors: true }), shadow: true },
-      vault:   { geo: vaultGeometry(), mat: lambert({ vertexColors: true, side: THREE.DoubleSide }), shadow: false },
+      // the inside of an open boat store: an interior-mapped vaulted room (see _storeMaterial)
+      storeRoom: { geo: new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0), mat: this._storeMaterial(), shadow: false },
     };
     for (const p of Object.values(this.parts)) { p.mesh = null; p.cap = 0; }
   }
@@ -233,6 +245,184 @@ export class BuildingRenderer {
   /** Corners of part of an archway house's rectangle, in its local frame. */
   _rectPart(b, u0, u1, v0, v1) {
     return [[u0, v1], [u1, v1], [u1, v0], [u0, v0]].map(([u, v]) => [b.x + b.rx * u + b.fx * v, b.z + b.rz * u + b.fz * v]);
+  }
+
+  /** A local frame on a wall: origin `o` (x, z), x along the wall, z out of it. */
+  _wallFrame(ox, oy, oz, nx, nz) {
+    const ez = new THREE.Vector3(nx, 0, nz).normalize(), ey = new THREE.Vector3(0, 1, 0);
+    const ex = new THREE.Vector3().crossVectors(ey, ez);
+    return new THREE.Matrix4().makeBasis(ex, ey, ez).setPosition(ox, oy, oz);
+  }
+
+  /**
+   * A boat store with real depth: a thick dressed-stone arch standing out from
+   * the stone base, its reveal (the arched tunnel through the frame) lit and
+   * shadowed like any wall, and at the back either weathered timber double
+   * doors or — for a few — the open store itself (an interior-mapped vaulted
+   * room with a boat or nets; see _storeMaterial).
+   */
+  _boatStore(gb, put, b, v, rng) {
+    const S = CONFIG.harbour.stoneBase, t = this.terrain, q = b.corners;
+    const { edge, w, h } = v;
+    const A = q[edge], Bc = q[(edge + 1) % 4], n = edgeNormal(q, edge);
+    const mid = lerp2(A, Bc, 0.5), g = t.heightAt(mid[0], mid[1]) - 0.05;
+    const M = this._wallFrame(mid[0] + n[0] * 0.14, g, mid[1] + n[1] * 0.14, n[0], n[1]);
+    const F = S.frameWidth, P = S.portalDepth;
+    // the frame: a stone block with the arch cut through it (the reveal comes free)
+    const outer = new THREE.Shape();
+    outer.moveTo(-w / 2 - F, 0); outer.lineTo(w / 2 + F, 0); outer.lineTo(w / 2 + F, h + F * 0.8); outer.lineTo(-w / 2 - F, h + F * 0.8); outer.lineTo(-w / 2 - F, 0);
+    outer.holes.push(archShape(w, h, new THREE.Path()));
+    const frameCol = new THREE.Color('#bcb09a').offsetHSL(0, 0, (rng() - 0.5) * 0.05);
+    gb.geometry(new THREE.ExtrudeGeometry(outer, { depth: P, bevelEnabled: false, curveSegments: 12 }), M, frameCol);
+    // a keystone, standing a little proud
+    const key = new THREE.BoxGeometry(0.34, 0.42, 0.08).translate(0, h + 0.05, P + 0.03);
+    gb.geometry(key, M, frameCol.clone().multiplyScalar(1.06));
+    // the back of the opening
+    const r = w / 2, ys = h - r;
+    const at = (x, z) => new THREE.Vector3(x, 0, z);
+    gb.geometry(new THREE.ShapeGeometry(archShape(w, h), 12).translate(0, 0, 0.01), M, DARK);
+    if (rng() < S.openChance) {
+      // open: the store inside, interior-mapped behind the arch (lit some nights)
+      const o = at(0, 0.03).applyMatrix4(M);
+      this._gc.setRGB(rng(), rng(), rng());
+      put('storeRoom', o.x, o.y, o.z, Math.atan2(n[0], n[1]), w, h, 1, this._gc);
+      return;
+    }
+    // closed: weathered timber double doors, plank by plank
+    const base = new THREE.Color(rng.pick(DOOR_WEATHERED));
+    const N = 2 * Math.max(3, Math.round(w / 0.5));      // even, so the leaves meet in the middle
+    const pw = w / N, topAt = (x) => ys + Math.sqrt(Math.max(r * r - x * x, 0));
+    for (let i = 0; i < N; i++) {
+      const x0 = -r + i * pw + (i === N / 2 ? 0.03 : 0.012), x1 = -r + (i + 1) * pw - (i === N / 2 - 1 ? 0.03 : 0.012);
+      const z = 0.03 + rng() * 0.012;
+      const c = base.clone().offsetHSL((rng() - 0.5) * 0.02, (rng() - 0.5) * 0.08, (rng() - 0.5) * 0.08);
+      const pts = [[x0, 0.02], [x1, 0.02], [x1, topAt(x1) - 0.02], [x0, topAt(x0) - 0.02]].map(([x, y]) => new THREE.Vector3(x, y, z).applyMatrix4(M).toArray());
+      gb.face(pts, c, new THREE.Vector3(n[0], 0, n[1]).toArray());
+    }
+    // iron straps across each leaf, and a ring handle
+    for (const y of [0.35, Math.min(ys, h * 0.72)]) for (const s of [-1, 1]) {
+      const strap = new THREE.BoxGeometry(r - 0.12, 0.07, 0.02).translate(s * (r / 2 + 0.02), y, 0.05);
+      gb.geometry(strap, M, IRON);
+    }
+    gb.geometry(new THREE.TorusGeometry(0.07, 0.015, 4, 8).translate(0.1, 1.05, 0.06), M, IRON);
+  }
+
+  /**
+   * A lane passing under a house gets a stone vault: a segmental arch lining
+   * the passage from end to end, so it reads as a tunnel, not a flat slot.
+   */
+  _passageVault(gb, b, stone) {
+    const a = b.arch, hw = b.w / 2, hd = b.d / 2;
+    const half = (a.hi - a.lo) / 2, mid = (a.lo + a.hi) / 2;
+    const rise = Math.min(CONFIG.path.archRise, half * 0.9);
+    const R = (half * half + rise * rise) / (2 * rise);
+    // the spandrels: the space between the flat soffit and the arch curve
+    const sh = new THREE.Shape();
+    const spring = a.y - rise, a1 = Math.atan2(R - rise, half);
+    sh.moveTo(a.lo, spring); sh.lineTo(a.lo, a.y + 0.02); sh.lineTo(a.hi, a.y + 0.02); sh.lineTo(a.hi, spring);
+    sh.absarc(mid, a.y - R, R, a1, Math.PI - a1, false);
+    // a frame along the passage: x across the lane, z along it
+    let ex, ez, len;
+    if (a.axis === 'f') { ex = new THREE.Vector3(b.rx, 0, b.rz); ez = new THREE.Vector3(b.fx, 0, b.fz); len = 2 * hd; }
+    else { ex = new THREE.Vector3(b.fx, 0, b.fz); ez = new THREE.Vector3(-b.rx, 0, -b.rz); len = 2 * hw; }
+    const ey = new THREE.Vector3(0, 1, 0);
+    const M = new THREE.Matrix4().makeBasis(ex, ey, ez).setPosition(b.x, 0, b.z);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: len + 0.06, bevelEnabled: false, curveSegments: 10 }).translate(0, 0, -len / 2 - 0.03);
+    gb.geometry(geo, M, stone.clone().multiplyScalar(1.12));
+    // dressed-stone arch rings at both ends
+    const ring = new THREE.Shape();
+    ring.absarc(mid, a.y - R, R + 0.22, a1 - 0.05, Math.PI - a1 + 0.05, false);
+    ring.absarc(mid, a.y - R, R, Math.PI - a1, a1, true);
+    for (const z of [-len / 2 - 0.08, len / 2 - 0.02]) {
+      gb.geometry(new THREE.ExtrudeGeometry(ring, { depth: 0.1, bevelEnabled: false, curveSegments: 10 }).translate(0, 0, z), M, CREAM);
+    }
+  }
+
+  /**
+   * Inside an open boat store: a ray from the eye is marched into a barrel-
+   * vaulted room behind the arch (in metres, in the opening's own frame), which
+   * may hold a boat on the floor and nets hanging on a side wall. Dim by day,
+   * darker toward the back; some light a warm lantern as evening falls.
+   */
+  _storeMaterial() {
+    const m = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+    m.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.glassUniforms);
+      sh.vertexShader = 'varying vec3 vPosM;\nvarying vec3 vCamM;\nvarying vec2 vDim;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        mat4 mI = modelMatrix;
+        vec3 sc = vec3(1.0);
+        #ifdef USE_INSTANCING
+          mI = modelMatrix * instanceMatrix;
+          sc = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), 1.0);
+        #endif
+        vDim = sc.xy;                                    // opening width, height (m)
+        vPosM = position * sc;
+        vCamM = (inverse(mI) * vec4(cameraPosition, 1.0)).xyz * sc;`);
+      sh.fragmentShader = `uniform float uLit, uDay; uniform vec3 uWarm;
+        varying vec3 vPosM; varying vec3 vCamM; varying vec2 vDim;
+        // what is at p inside the store: 0 air, 1 boat, 2 floor, 3 back wall, 4 side wall / vault
+        float storeCell(vec3 p, vec3 boatC, bool boat, float W, float D, float spring, float rise) {
+          if (boat) {
+            vec3 b = (p - boatC) / vec3(0.75, 0.55, 2.1);
+            float rr = dot(b.xz, b.xz);
+            // an open hull: solid shell, hollow inside down to its boards
+            if (rr < 1.0 && p.y < 0.55 && p.y > 0.55 - 0.55 * sqrt(1.0 - rr) && !(rr < 0.72 && p.y > 0.22)) return 1.0;
+          }
+          if (p.y < 0.0) return 2.0;
+          if (p.z < -D) return 3.0;
+          float ceil = spring + rise * sqrt(max(1.0 - (p.x * p.x) / (W * W), 0.0));
+          if (abs(p.x) > W || p.y > ceil) return 4.0;
+          return 0.0;
+        }
+        ` + sh.fragmentShader.replace('#include <color_fragment>', `
+        vec3 rnd = vec3(0.5);
+        #if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )
+          rnd = vColor.rgb;
+        #endif
+        float r = vDim.x * 0.5;
+        // only inside the arch outline
+        if (vPosM.y > vDim.y - r && length(vec2(vPosM.x, vPosM.y - (vDim.y - r))) > r) discard;
+        vec3 o = vPosM, d = normalize(vPosM - vCamM);
+        float W = r + 0.7, D = 5.5, spring = max(vDim.y - r - 0.2, 1.4), rise = W * 0.75;
+        // march into the room, then bisect each hit for clean edges
+        vec3 boatC = vec3((rnd.g - 0.5) * 0.6, 0.0, -2.8);
+        bool boat = rnd.b > 0.2, nets = rnd.b < 0.8;
+        float hit = 0.0, tt = 0.0, kind = 0.0;
+        vec3 p = o; vec3 col = vec3(0.0);
+        for (int i = 0; i < 56; i++) {
+          tt += 0.12;
+          p = o + d * tt;
+          if (p.z > 0.05) break;
+          kind = storeCell(p, boatC, boat, W, D, spring, rise);
+          if (kind > 0.0) { hit = 1.0; break; }
+        }
+        if (hit > 0.5) {
+          float lo = tt - 0.12, hi = tt;
+          for (int k = 0; k < 6; k++) { float m = 0.5 * (lo + hi); if (storeCell(o + d * m, boatC, boat, W, D, spring, rise) > 0.0) hi = m; else lo = m; }
+          p = o + d * hi;
+          kind = storeCell(p, boatC, boat, W, D, spring, rise);
+          if (kind == 1.0) {
+            vec3 bb = (p - boatC) / vec3(0.75, 0.55, 2.1);
+            if (dot(bb.xz, bb.xz) < 0.72) col = vec3(0.5, 0.36, 0.22) * (0.85 + 0.15 * step(0.5, fract(p.z * 4.0)));   // boards
+            else col = p.y > 0.5 ? vec3(0.75, 0.25, 0.2) : (p.y > 0.3 ? vec3(0.92, 0.9, 0.84) : vec3(0.22, 0.42, 0.62));
+          }
+          else if (kind == 2.0) col = vec3(0.45, 0.42, 0.38) * (0.8 + 0.2 * step(0.5, fract(p.x * 1.5 + floor(p.z * 1.5) * 0.5)));
+          else if (kind == 3.0) col = vec3(0.62, 0.57, 0.5);
+          else {
+            col = vec3(0.66, 0.6, 0.52) * (p.y > spring ? 0.85 : 1.0);
+            if (nets && p.x < 0.0 && p.y > 0.5 && p.y < 2.2 && p.z < -1.0 && p.z > -3.8 &&
+                (fract(p.y * 7.0 + p.z * 2.0) < 0.22 || fract(p.z * 7.0) < 0.22)) col = vec3(0.32, 0.24, 0.16);
+          }
+        }
+        if (hit < 0.5) col = vec3(0.3, 0.27, 0.24);
+        // light: daylight from the doorway, falling off into the dark; or a lantern
+        float depth = clamp(-p.z / D, 0.0, 1.0);
+        float day = (0.06 + 0.3 * uDay) * mix(1.0, 0.18, depth) * (p.y > spring ? 0.75 : 1.0);
+        float lit = smoothstep(rnd.r, rnd.r + 0.04, uLit * 0.8);
+        vec3 lamp = uWarm * 1.4 / (1.0 + 0.25 * dot(p - vec3(0.0, spring, -1.5), p - vec3(0.0, spring, -1.5)));
+        diffuseColor.rgb = col * (day + lit * lamp);`);
+    };
+    return m;
   }
 
   /**
@@ -379,7 +569,7 @@ export class BuildingRenderer {
 
   /** Detail meshes too small to matter in a ripply reflection. */
   smallParts() {
-    return ['shutterOpen', 'shutterClosed', 'balcony', 'door', 'awning', 'chimney', 'vault']
+    return ['shutterOpen', 'shutterClosed', 'balcony', 'door', 'awning', 'chimney', 'storeRoom']
       .map((k) => this.parts[k].mesh).filter(Boolean);
   }
 
@@ -477,10 +667,7 @@ export class BuildingRenderer {
         ? [this._rectPart(b, -hw, a.lo, -hd, hd), this._rectPart(b, a.hi, hw, -hd, hd)]
         : [this._rectPart(b, -hw, hw, -hd, a.lo), this._rectPart(b, -hw, hw, a.hi, hd)];
       for (const pier of piers) if (dist(pier[0], pier[1]) > 0.2 && dist(pier[1], pier[2]) > 0.2) gb.prism(pier, base, a.y + 0.05, b.facade, false);
-      // a stone lintel over each opening
-      const lint = a.axis === 'f' ? this._rectPart(b, a.lo - 0.15, a.hi + 0.15, -hd - 0.05, hd + 0.05)
-                                  : this._rectPart(b, -hw - 0.05, hw + 0.05, a.lo - 0.15, a.hi + 0.15);
-      gb.prism(lint, a.y - 0.4, a.y - 0.1, stone);
+      this._passageVault(gb, b, stone);
     } else {
       gb.prism(q, base, b.top, b.facade, false);
       const hb = this._harbourBase(b, rng);
@@ -489,12 +676,7 @@ export class BuildingRenderer {
         gb.prism(offsetPoly(q, 0.14), base, hb.top, hb.col);
         gb.prism(offsetPoly(q, 0.26), base, b.gMin + 0.9, hb.col.clone().multiplyScalar(0.9));
         gb.prism(offsetPoly(q, 0.18), hb.top - 0.04, hb.top + 0.16, cream);
-        if (hb.vault) {
-          const { edge, w, h } = hb.vault;
-          const A = q[edge], Bc = q[(edge + 1) % 4], n = edgeNormal(q, edge);
-          const m = lerp2(A, Bc, 0.5), g = t.heightAt(m[0], m[1]);
-          put('vault', m[0] + n[0] * 0.16, g - 0.05, m[1] + n[1] * 0.16, Math.atan2(n[0], n[1]), w, h / 1.1, 1, WHITE);
-        }
+        if (hb.vault) this._boatStore(gb, put, b, hb.vault, rng);
       } else {
         gb.prism(offsetPoly(q, 0.06), base, b.gMin + 0.45, stone);
       }
