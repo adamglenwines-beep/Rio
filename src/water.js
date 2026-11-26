@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { makeRng } from './noise.js';
+import { harbourLayout } from './paths.js';
 
 export class Sea {
   constructor(terrain) {
@@ -42,6 +43,7 @@ export class Sea {
   _buildBoats() {
     const t = this.terrain, h = t.harbour;
     const rng = makeRng(t.seed * 7 + 3);
+    const lay = harbourLayout(t);
 
     // Hull: a box with pinched, raised ends — a little gozzo fishing boat.
     const hull = new THREE.BoxGeometry(1.3, 0.55, 3.6, 1, 1, 4);
@@ -63,11 +65,13 @@ export class Sea {
       const r = rng.range(9, 26);
       const x = h.x + Math.sin(ang) * r * 1.3, z = h.z + 4 + Math.cos(ang) * r * 0.8;
       if (t.heightAt(x, z) > -0.6) continue;
+      if (Math.abs(x - lay.slipX) < 3 && z < t.coastZ(x) + 6) continue; // keep the slipway clear
       if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < 3.2)) continue;
       spots.push({ x, z, rot: ang * 0.6 + rng.range(-0.3, 0.3), phase: rng() * 6 });
     }
     // Two boats hauled up on the harbour floor.
-    for (let k = 0; k < 2; k++) spots.push({ x: h.x - 4 + k * 3.2, z: h.z + 1, rot: 0.2 * k, phase: 0, beached: true });
+    // Two boats hauled up on the slipway.
+    for (let k = 0; k < 2; k++) spots.push({ x: lay.slipX + (k ? 0.8 : -0.6), z: lay.slipZ0 + 2.5 + k * 4, rot: k ? 0.08 : -0.05, phase: 0, beached: true });
 
     const hullColours = ['#f4f1e8', '#2f7fbf', '#d64a3b', '#f2c94c', '#3b9c6b', '#e7e3d6', '#5aa6d6'];
     const hullMat = new THREE.MeshStandardMaterial({ roughness: 0.6 });

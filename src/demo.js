@@ -34,5 +34,10 @@ export function layDemo(game) {
       }
     }
   }
-  for (const dz of [0, -5, -10, -16]) { const p = P(dz); zones.paint(p.x, p.z, 7, ZONE.COM); }
+  // the waterfront either side of the piazza
+  for (let dx = -24; dx <= 24; dx += 3) {
+    const x = t.ravineX(h.z) + dx, z = t.coastZ(x) - 5;    // right down to the quay
+    zones.paint(x, z, 4, ZONE.RES);
+  }
+  for (const dz of [-2, -8, -14]) { const p = P(dz); zones.paint(p.x, p.z, 6, ZONE.COM); }
 }

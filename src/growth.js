@@ -29,7 +29,7 @@
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { CONFIG, FACADE_COLOURS, SHUTTER_COLOURS, ROOF_COLOURS } from './config.js';
-import { makeRng, clamp, smoothstep } from './noise.js';
+import { makeRng, clamp, lerp, smoothstep } from './noise.js';
 import { BAND } from './terrain.js';
 import { ZONE } from './zones.js';
 import { PathNetwork } from './paths.js';
@@ -115,7 +115,11 @@ export class Growth {
         }
       }
     };
-    stamp(net.quay.points, 3.2);
+    const H = CONFIG.harbour, lay = net.layout;
+    stamp(net.quay.points, H.quayHalfWidth);
+    // keep the piazza and slipway open
+    stamp([{ x: lay.x, z: lay.piazzaZ }, { x: lay.x, z: lay.piazzaZ + 0.01 }], lay.piazzaR);
+    stamp([{ x: lay.slipX, z: lay.slipZ0 }, { x: lay.slipX, z: lay.slipZ1 }], lay.slipW / 2 + 0.4);
     for (const p of net.paths) stamp(p.points, CONFIG.path.clearance);
   }
 
@@ -153,12 +157,15 @@ export class Growth {
     return { x, z, theta, fx, fz, rx: fz, rz: -fx, w, d };
   }
 
-  _sizeFor(band, kind) {
+  _sizeFor(band, kind, x, z) {
     const key = kind === ZONE.COM || band === BAND.FLAT ? 'flat' : band === BAND.STEEP ? 'steep' : 'moderate';
-    const r = this.rng;
+    const r = this.rng, H = CONFIG.harbour, h = this.terrain.harbour;
+    // slim tower-houses along the harbour front
+    const front = band !== BAND.STEEP && Math.hypot(x - h.x, z - h.z) < H.frontRadius;
+    const wr = front ? H.frontWidth : B.width[key], dr = front ? H.frontDepth : B.depth[key];
     // quantise widths a little so rows read as one consistent town
-    const w = Math.round(r.range(...B.width[key]) * 2) / 2;
-    const d = Math.round(r.range(...B.depth[key]) * 2) / 2;
+    const w = Math.round(r.range(...wr) * 2) / 2;
+    const d = Math.round(r.range(...dr) * 2) / 2;
     return { w, d, key };
   }
 
@@ -175,7 +182,7 @@ export class Growth {
    */
   _attachVariants(b, side) {
     const r = this.rng, t = this.terrain;
-    let { w, d } = this._sizeFor(t.bandAt(b.x, b.z), b.kind);
+    let { w, d } = this._sizeFor(t.bandAt(b.x, b.z), b.kind, b.x, b.z);
     if (r() < 0.65) d = b.d;                      // keep row depth consistent
     const out = [];
     if (side === 'left' || side === 'right') {
@@ -234,7 +241,7 @@ export class Growth {
     if (near && Math.abs(angleDiff(near.theta, theta)) < 0.6) theta = near.theta;
     const band = t.bandAt(n.x, n.z);
     const kind = g.zones.at(n.x, n.z) === ZONE.COM ? ZONE.COM : ZONE.RES;
-    const { w, d } = this._sizeFor(band, kind);
+    const { w, d } = this._sizeFor(band, kind, n.x, n.z);
     const c = this._make(n.x, n.z, theta, w, d);
     // put the house on one side of the lane: its back, front or a side to it
     const which = r.int(0, 3);
@@ -276,7 +283,7 @@ export class Growth {
     }
     if (bad > 1) return false;                      // (one corner on a rocky bit is ok)
     if (zonedRes + zonedCom < 7 || effN < 7) return false;
-    if (gMin < 0.9) return false;                   // keep feet dry
+    if (gMin < B.minGround) return false;           // keep feet dry
     if (gMax - gMin > 9) return false;              // absurd stilts
     c.kind = zonedCom > zonedRes ? ZONE.COM : ZONE.RES;
     c.band = steep >= 4 ? BAND.STEEP : flat >= 5 ? BAND.FLAT : BAND.MODERATE;
@@ -352,9 +359,19 @@ export class Growth {
     const E = CONFIG.effort;
     let maxF = b.band === BAND.STEEP ? B.maxFloors.steep : b.band === BAND.FLAT ? B.maxFloors.flat : B.maxFloors.moderate;
     if (b.kind === ZONE.COM) maxF = Math.min(maxF, B.commercialMaxFloors);
+    // the harbour front stands tallest, easing back to the normal cap with effort
+    if (b.band !== BAND.STEEP) {
+      const H = CONFIG.harbour;
+      maxF = Math.max(maxF, Math.round(H.maxFloors - (H.maxFloors - maxF) * smoothstep(0, H.tallEffort, b.effort)));
+    }
     const core = Math.pow(1 - smoothstep(0, E.edgeEffort, b.effort), 0.8);   // 1 at the harbour
     const dens = clamp(this._neighbourCount(b, 11) / 7, 0, 1);
-    const f = 1 + Math.round((maxF - 1) * core * (0.3 + 0.7 * dens)) + b.bonus;
+    // density lifts heights inland; right on the harbour front houses stand tall regardless
+    const H = CONFIG.harbour;
+    const inland = smoothstep(H.tallEffort * 0.4, H.tallEffort, b.effort);   // 0 on the harbour front
+    const densF = lerp(1, 0.3 + 0.7 * dens, inland);
+    const bonus = inland > 0 ? b.bonus : Math.max(b.bonus, 0);
+    const f = 1 + Math.round((maxF - 1) * core * densF) + bonus;
     return clamp(f, 1, maxF);
   }
 

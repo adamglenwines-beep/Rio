@@ -19,6 +19,21 @@ import { BAND } from './terrain.js';
 
 const P = CONFIG.path;
 
+/**
+ * Where the harbour's fixed pieces go: the piazza at the foot of the main
+ * street and a slipway down into the water beside it. Shared with water.js
+ * (boats are hauled up on the slipway) and growth.js (kept clear of houses).
+ */
+export function harbourLayout(t) {
+  const H = CONFIG.harbour, h = t.harbour;
+  const slipX = h.x + H.slipwayOffset;
+  return {
+    x: h.x, piazzaZ: h.z - 1, piazzaR: H.piazzaRadius,
+    slipX, slipW: H.slipwayWidth,
+    slipZ0: h.z - 1, slipZ1: t.coastZ(slipX) + 4,
+  };
+}
+
 export class PathNetwork {
   constructor(terrain) {
     this.terrain = terrain;
@@ -43,21 +58,24 @@ export class PathNetwork {
   // ---- The harbour (root of the network) ---------------------------------
 
   _buildHarbour() {
-    const t = this.terrain, h = t.harbour;
-    // A quay running along the waterfront through the harbour point.
+    const t = this.terrain, H = CONFIG.harbour;
+    const lay = harbourLayout(t);
+    // A narrow quay walkway along the waterfront through the harbour point.
     const pts = [];
-    for (let dx = -13; dx <= 13; dx += P.nodeSpacing) {
-      const x = h.x + dx;
-      const z = t.coastZ(x) - 4.5;
-      if (t.heightAt(x, z) < 0.5 || t.heightAt(x, z) > 4) continue;
+    for (let dx = -H.quayReach; dx <= H.quayReach; dx += P.nodeSpacing) {
+      const x = lay.x + dx;
+      const z = t.coastZ(x) - H.quayInset;
+      const hh = t.heightAt(x, z);
+      if (hh < 0.4 || hh > 4.5) continue;
       pts.push({ x, z });
     }
     const ids = this._addNodeChain(pts, true);
     this.quay = { points: pts, nodeIds: ids };
+    this.layout = lay;
     // Stone jetty out into the water (decorative, not walkable in the graph).
     this.jetty = [];
-    const z0 = t.coastZ(h.x) - 2;
-    for (let d = 0; d < 16; d += 1.0) this.jetty.push({ x: h.x + 3 + d * 0.25, z: z0 + d });
+    const z0 = t.coastZ(lay.x) - 2;
+    for (let d = 0; d < 16; d += 1.0) this.jetty.push({ x: lay.x + 4 + d * 0.25, z: z0 + d });
   }
 
   isHarbourNode(id) { return this.nodes[id].harbour; }
@@ -257,10 +275,22 @@ export class PathNetwork {
 
   rebuildMesh() {
     const slabs = [];
-    this._slabsFor(this.quay.points, 5, slabs);
+    const t = this.terrain, lay = this.layout;
+    this._slabsFor(this.quay.points, CONFIG.harbour.quayHalfWidth * 2 + 0.4, slabs);
+    // the piazza: square paving stones over a small disc
+    for (let dz = -lay.piazzaR; dz <= lay.piazzaR; dz += 1.4) for (let dx = -lay.piazzaR; dx <= lay.piazzaR; dx += 1.4) {
+      if (dx * dx + dz * dz > lay.piazzaR * lay.piazzaR) continue;
+      const x = lay.x + dx, z = lay.piazzaZ + dz;
+      if (t.heightAt(x, z) < 0.3) continue;
+      slabs.push({ x, z, y: t.surfaceAt(x, z) + 0.12, rot: 0, len: 1.42, width: 1.42, depth: 1.2 });
+    }
+    // the slipway: a stone ramp running down under the water
+    for (let z = lay.slipZ0; z <= lay.slipZ1; z += 0.9) {
+      const g = t.heightAt(lay.slipX, z);
+      slabs.push({ x: lay.slipX, z, y: g + 0.12, rot: 0, len: 0.95, width: lay.slipW, depth: 1.2 });
+    }
     for (const p of this.paths) this._slabsFor(p.points, P.width, slabs);
     // the jetty
-    const t = this.terrain;
     for (const j of this.jetty) {
       if (t.heightAt(j.x, j.z) > 1) continue;
       slabs.push({ x: j.x, z: j.z, y: 1.1, rot: 0.25, len: 1.05, width: 2.6, depth: 1.1 - t.heightAt(j.x, j.z) });

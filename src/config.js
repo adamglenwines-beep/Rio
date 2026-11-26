@@ -35,6 +35,21 @@ export const CONFIG = {
                            // >= 42° cliff     → nothing
   },
 
+  // ---- Harbour ----------------------------------------------------------------
+  harbour: {
+    quayInset: 2.5,        // quay walkway centre, metres inland of the waterline
+    quayHalfWidth: 1.4,    // clear strip each side of the quay centreline (walkway ≈ 2.8 m)
+    quayReach: 16,         // quay runs this far either side of the harbour point
+    piazzaRadius: 5,       // small open piazza where the main street meets the quay
+    slipwayWidth: 3.6,     // boat ramp running down into the water…
+    slipwayOffset: -5,     // …this many metres along the shore from the piazza
+    frontRadius: 30,       // "harbour front": within this distance of the harbour point
+    frontWidth: [3.4, 4.4],// slimmer footprints on the harbour front…
+    frontDepth: [6.0, 8.0],
+    maxFloors: 8,          // …and up to 8 storeys (above uphill ground) right at the water
+    tallEffort: 45,        // walking effort over which that eases to the normal cap
+  },
+
   // ---- Paths ----------------------------------------------------------------
   path: {
     maxGrade: 0.62,        // rise/run a stair may climb before it switchbacks (~32°)
@@ -62,6 +77,7 @@ export const CONFIG = {
     // footprint sizes [min, max] by slope band (width = along the contour)
     width:  { flat: [4.5, 6.5], moderate: [3.8, 5.2], steep: [3.4, 4.2] },
     depth:  { flat: [6.0, 8.5], moderate: [6.5, 8.5], steep: [4.8, 6.0] },
+    minGround: 0.5,        // lowest ground (m above sea) a house may stand on
     alleyChance: 0.22,     // chance a new uphill row leaves a narrow alley
     alleyWidth: 1.4,
   },
