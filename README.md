@@ -86,11 +86,26 @@ New houses mostly **attach** to existing ones:
 - an uphill neighbour sits back-to-back, so the rows step up the slope;
 - if the full-size house doesn't fit, it shrinks to fill the gap.
 
+Sometimes a new house straddles a lane instead: it stands on two piers with the stair or
+passage running underneath (an archway), which helps the rows merge into one mass.
+
+Along the harbour front, footprints are slimmer and houses reach up to 8 storeys. A narrow
+quay walkway, a small piazza and a slipway are always kept open.
+
 A brand-new cluster can only start right beside a connected path. Every candidate must sit
 on zoned, reachable, non-cliff land. The best-scoring one gets built: low walking effort,
 touching many neighbours, plus a little randomness. Meanwhile, houses gain storeys toward
 a target set by how close they are to the harbour (in effort), local density and the
 slope band (steep = small houses only).
+
+The look is tuned mainly through `src/config.js`:
+- `terrain.ravine`: shape of the ravine (floor width, flank slopes, where the cliffs start);
+- `slope`: the slope bands (moderate < 33°, steep < 42°, cliff above);
+- `harbour`: quay, piazza, slipway, the waterfront's slim tall houses;
+- `path`: lane width, clearance, archways;
+- `building`: sizes, storeys, roof pitch.
+
+`docs/progress/` holds before/after screenshots for each tuning step.
 
 The browser console has a few helpers:
 - `game.demo()` lays out the demo village;
