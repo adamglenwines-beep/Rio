@@ -61,9 +61,13 @@ export class Terrain {
     for (let i = 0; i < this._flankLUT.length; i++) {
       const s = i * ds;
       this._flankLUT[i] = h;
-      let slope = 0.28 + 0.0105 * Math.min(s, 44);           // 0.28 → 0.74 (16° → 36°)
-      slope += 0.6 * smoothstep(43, 48, s) * (1 - smoothstep(53, 59, s)); // cliff band
-      slope = lerp(slope, 0.3, smoothstep(55, 75, s));         // hilltops
+      const R = CONFIG.terrain.ravine;
+      // leave the floor quickly, then steepen steadily up the buildable flank
+      let slope = lerp(R.flankSlopeBottom, R.flankSlopeTop, Math.min(s / R.flankRun, 1));
+      slope *= 0.35 + 0.65 * smoothstep(0, 2.5, s);
+      const c0 = R.cliffStart;
+      slope += 0.65 * smoothstep(c0, c0 + 5, s) * (1 - smoothstep(c0 + 10, c0 + 16, s)); // cliff band
+      slope = lerp(slope, 0.3, smoothstep(c0 + 12, c0 + 32, s));                      // hilltops
       h += slope * ds;
     }
     this._flankDs = ds;
@@ -85,10 +89,12 @@ export class Terrain {
     const ax = Math.abs(x - xc);
 
     // Ravine floor: flat harbour for the first ~12 m, then rising inland.
+    const R = CONFIG.terrain.ravine;
     const di = Math.max(d - 12, 0);
-    const floor = 1.3 + 0.17 * di + 0.0011 * di * di;
-    // Half-width of the ravine floor (narrow, widening a touch inland).
-    const fw = 5 + 0.025 * Math.max(d, 0) + 2 * fbm(z * 0.05, 1.3, 2);
+    const floor = 1.3 + R.floorRise * di + R.floorRiseCurve * di * di;
+    // Half-width of the ravine floor: a narrow gully, wider at the harbour mouth.
+    const mouth = 1 - smoothstep(R.harbourLength * 0.5, R.harbourLength, d);
+    const fw = lerp(R.floorHalfWidth, R.harbourHalfWidth, mouth) + 0.01 * Math.max(d, 0) + 1.2 * fbm(z * 0.05, 1.3, 2);
     const s = Math.max(ax - fw, 0);
     // The flanks are a bit lower right at the coast so the headland cliffs
     // are tall but not absurd.
@@ -98,8 +104,8 @@ export class Terrain {
     // Irregularity: broad lumps on the flanks + fine bumps everywhere except
     // the harbour floor.
     const onFlank = smoothstep(0, 14, s);
-    h += 4.5 * fbm(x * 0.017 + 11, z * 0.017 - 5, 4) * onFlank;
-    h += 0.9 * fbm(x * 0.09, z * 0.09, 2) * smoothstep(8, 22, d + s);
+    h += R.lumpiness * fbm(x * 0.017 + 11, z * 0.017 - 5, 4) * onFlank;
+    h += R.bumpiness * fbm(x * 0.09, z * 0.09, 2) * smoothstep(8, 22, d + s);
 
     // Into the sea: blend down to the sea floor over a few metres. Where the
     // land is high this produces a sheer cliff, at the harbour a gentle shore.

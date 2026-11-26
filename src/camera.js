@@ -41,12 +41,12 @@ export class CameraRig {
   /** The postcard: from out on the water, slightly to the side, like the photo. */
   postcard(instant = false) {
     const h = this.terrain.harbour;
-    const target = new THREE.Vector3(h.x - 12, 13, h.z - 28);
+    const target = new THREE.Vector3(h.x - 12, 16, h.z - 35);
     // From the water off the eastern headland (like the photo). On a tall
     // phone screen, swing round to face the cove more squarely from the sea
     // so stepping back doesn't put the headland in the way.
     const portrait = this.camera.aspect < 1;
-    const pos = portrait ? new THREE.Vector3(h.x + 24, 25, h.z + 40) : new THREE.Vector3(h.x + 60, 33, h.z + 28);
+    const pos = portrait ? new THREE.Vector3(h.x + 26, 30, h.z + 45) : new THREE.Vector3(h.x + 66, 40, h.z + 40);
     this._fitAspect(pos, target);
     this.flyTo(pos, target, instant ? 0 : 1.6);
   }

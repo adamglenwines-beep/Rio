@@ -11,14 +11,28 @@ export const CONFIG = {
     size: 240,             // world is size x size metres, centred on (0, 0)
     cell: 2,               // grid spacing (also the zoning resolution)
     seaFloor: -14,
+    // Shape of the ravine the town climbs. Slopes are rise/run (0.47 ≈ 25°, 0.70 ≈ 35°).
+    ravine: {
+      floorHalfWidth: 3,       // half-width of the ravine floor inland (narrow!)
+      harbourHalfWidth: 9,     // the floor widens at the mouth for the harbour piazza
+      harbourLength: 24,       // how far inland that wider mouth reaches
+      flankSlopeBottom: 0.38,  // designed slope leaving the floor (lumps add ~4°, so ~25° in practice)
+      flankSlopeTop: 0.52,     // designed slope at the top of the buildable flank (~31° in practice)
+      flankRun: 44,            // horizontal metres over which it steepens
+      cliffStart: 50,          // horizontal distance from the floor where cliffs begin
+      lumpiness: 2.5,          // height (m) of the broad irregular lumps on the flanks
+      bumpiness: 0.45,         // height (m) of the small low-poly bumps everywhere
+      floorRise: 0.11,         // how steeply the ravine floor climbs inland…
+      floorRiseCurve: 0.0007,  // …and how much that steepens further in
+    },
   },
 
   // Slope bands, in degrees. A cell's band decides what can grow there.
   slope: {
     flatMax: 10,           // < 10°  flat      → piazzas, shops, harbour
-    moderateMax: 28,       // < 28°  moderate  → classic tall narrow houses
-    steepMax: 40,          // < 40°  steep     → only small houses
-                           // >= 40° cliff     → nothing
+    moderateMax: 33,       // < 33°  moderate  → classic tall narrow houses
+    steepMax: 42,          // < 42°  steep     → only small houses
+                           // >= 42° cliff     → nothing
   },
 
   // ---- Paths ----------------------------------------------------------------
