@@ -55,12 +55,15 @@ export const CONFIG = {
     maxGrade: 0.62,        // rise/run a stair may climb before it switchbacks (~32°)
     switchbackWidth: 9,    // lateral width of a zig-zag leg
     stepLength: 0.9,       // length of one stone step / paving slab
-    width: 1.6,            // lane width (the stone steps)
+    width: 2.0,            // paved lane width (the stone steps and paving)
     snapRadius: 4.5,       // taps this close to an existing path join it
     nodeSpacing: 1.5,      // spacing of graph nodes along a path
-    clearance: 0.95,       // buildings keep this far from a path centreline
+    setback: 0.25,         // house fronts stand this far back from the paving edge
+                           // (so walls are width/2 + setback = 1.25 m from the centreline)
+    frontageReserve: 4.5,  // a band this deep along each lane is kept for houses that FRONT
+                           // that lane; back/side lots from other rows stop at its edge
     // Archways / covered passages: a house may straddle a lane on two piers.
-    archChance: 0.3,       // share of new houses allowed to bridge a lane they land on
+    archChance: 0.6,       // how often the town tries to build archways over side stairs and lanes
     archHeadroom: 2.4,     // clear height above the highest step under the arch
     archMinPier: 0.8,      // each pier must be at least this wide
   },
@@ -82,10 +85,8 @@ export const CONFIG = {
     width:  { flat: [4.5, 6.5], moderate: [3.8, 5.2], steep: [3.4, 4.2] },
     depth:  { flat: [6.0, 8.5], moderate: [6.5, 8.5], steep: [4.8, 6.0] },
     roofPitch: 0.07,       // roof rise per metre of span (0.07 ≈ 8°: nearly flat, like Ligurian slate)
-    roofOverhang: 0.3,     // eaves overhang (m)
+    roofOverhang: 0.2,     // eaves overhang (m); kept below path.setback so eaves never reach the steps
     minGround: 0.5,        // lowest ground (m above sea) a house may stand on
-    alleyChance: 0.22,     // chance a new uphill row leaves a narrow alley
-    alleyWidth: 1.4,
   },
 
   // ---- Simulation -----------------------------------------------------------

@@ -53,6 +53,7 @@ export function computeAccess(terrain, network) {
   // ---- 1. path graph ---------------------------------------------------------
   const nodes = network.nodes;
   const nodeEffort = new Float64Array(nodes.length).fill(Infinity);
+  const prev = new Int32Array(nodes.length).fill(-1);
   const heap = new MinHeap();
   nodes.forEach((n, i) => { if (n.harbour) { nodeEffort[i] = 0; heap.push(0, i); } });
   while (heap.size) {
@@ -60,9 +61,14 @@ export function computeAccess(terrain, network) {
     if (d > nodeEffort[i]) continue;
     for (const [j, c] of nodes[i].adj) {
       const nd = d + c;
-      if (nd < nodeEffort[j]) { nodeEffort[j] = nd; heap.push(nd, j); }
+      if (nd < nodeEffort[j]) { nodeEffort[j] = nd; prev[j] = i; heap.push(nd, j); }
     }
   }
+  // Foot traffic: how many path nodes walk to the harbour THROUGH each node.
+  // The trunk lanes near the harbour carry the most — they are the main lanes.
+  const nodeFlow = new Float64Array(nodes.length);
+  const order = [...nodes.keys()].filter((i) => isFinite(nodeEffort[i])).sort((a, b) => nodeEffort[b] - nodeEffort[a]);
+  for (const i of order) { nodeFlow[i] += 1; if (prev[i] >= 0) nodeFlow[prev[i]] += nodeFlow[i]; }
 
   // ---- 2. ground cells ---------------------------------------------------------
   const { N, cell } = terrain;
@@ -98,7 +104,7 @@ export function computeAccess(terrain, network) {
       if (nd < cellEffort[k]) { cellEffort[k] = nd; offDist[k] = od; h2.push(nd, k); }
     }
   }
-  return { nodeEffort, cellEffort, offDist };
+  return { nodeEffort, nodeFlow, cellEffort, offDist };
 }
 
 /** Effort at a world position (from the cell it falls in). */

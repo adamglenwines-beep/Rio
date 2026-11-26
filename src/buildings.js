@@ -1,12 +1,14 @@
 // ---------------------------------------------------------------------------
-// buildings.js — turns building records into instanced low-poly meshes.
+// buildings.js — turns building records into low-poly meshes.
 //
-// Every part type (walls, roofs, windows, shutters, balconies, doors, ...) is
-// ONE InstancedMesh, so a town of hundreds of houses is only a dozen draw
-// calls — important for phones. The whole set is rebuilt a few times per
-// second while the town grows (fast: it's only filling number arrays).
+// Footprints are convex quadrilaterals (trapezoids and wedges as well as
+// rectangles), so walls, cornices, stone bases and roofs are generated as
+// polygon prisms and merged into ONE mesh (one draw call). Small repeated
+// details — windows, shutters, balconies, doors, shopfronts, awnings,
+// chimneys, boat-store vaults — are InstancedMeshes laid out along each wall.
+// Everything is rebuilt a few times per second while the town grows.
 //
-// A building's body runs from below its lowest ground up to
+// A building's walls run from below its lowest ground up to
 //     top = (uphill ground) + floors × floorHeight
 // so on a slope the downhill facade is taller ("stepping down the hill").
 // Windows are laid out per storey from the roof down and are skipped where
@@ -16,40 +18,52 @@ import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { makeRng } from './noise.js';
 import { ZONE } from './zones.js';
+import { sub, norm, dist, lerp2, centroid, edgeNormal, offsetPoly } from './geom.js';
 
 const FH = CONFIG.building.floorHeight;
 
 // ---- geometry helpers ---------------------------------------------------------
 
-/** Convex polyhedron from triangles; winds every face outward automatically. */
-function convexGeo(tris, centre) {
-  const pos = [];
-  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-  const n = new THREE.Vector3(), m = new THREE.Vector3();
-  for (const [p, q, r] of tris) {
-    a.fromArray(p); b.fromArray(q); c.fromArray(r);
-    n.subVectors(b, a).cross(m.subVectors(c, a));
-    const mid = new THREE.Vector3().add(a).add(b).add(c).divideScalar(3).sub(centre);
-    if (n.dot(mid) < 0) pos.push(...p, ...r, ...q); else pos.push(...p, ...q, ...r);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.computeVertexNormals();
-  return g;
-}
-const quad = (a, b, c, d) => [[a, b, c], [a, c, d]];
+/** Accumulates flat-shaded, vertex-coloured triangles into one BufferGeometry. */
+class GeoBuilder {
+  constructor() { this.pos = []; this.nor = []; this.col = []; }
 
-/** Unit gable roof: base 1×1 at y=0, ridge along x at y=1. */
-function gableGeometry() {
-  const A = [-0.5, 0, -0.5], Bq = [0.5, 0, -0.5], C = [0.5, 0, 0.5], D = [-0.5, 0, 0.5];
-  const R1 = [-0.5, 1, 0], R2 = [0.5, 1, 0];
-  return convexGeo([...quad(D, C, R2, R1), ...quad(Bq, A, R1, R2), [A, D, R1], [C, Bq, R2], ...quad(A, Bq, C, D)], new THREE.Vector3(0, 0.35, 0));
-}
-/** Unit hip roof: like the gable but the ends slope too. */
-function hipGeometry() {
-  const A = [-0.5, 0, -0.5], Bq = [0.5, 0, -0.5], C = [0.5, 0, 0.5], D = [-0.5, 0, 0.5];
-  const R1 = [-0.2, 1, 0], R2 = [0.2, 1, 0];
-  return convexGeo([...quad(D, C, R2, R1), ...quad(Bq, A, R1, R2), [A, D, R1], [C, Bq, R2], ...quad(A, Bq, C, D)], new THREE.Vector3(0, 0.35, 0));
+  /** A planar convex face from 3D points; wound to face along `want` (if given). */
+  face(pts, c, want) {
+    if (pts.length < 3) return;
+    const [a, b, d] = pts;
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+    let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const l = Math.hypot(n[0], n[1], n[2]);
+    if (l < 1e-9) return;
+    n = n.map((k) => k / l);
+    if (want && n[0] * want[0] + n[1] * want[1] + n[2] * want[2] < 0) { pts = [...pts].reverse(); n = n.map((k) => -k); }
+    for (let i = 1; i + 1 < pts.length; i++) {
+      for (const p of [pts[0], pts[i], pts[i + 1]]) {
+        this.pos.push(p[0], p[1], p[2]); this.nor.push(n[0], n[1], n[2]); this.col.push(c.r, c.g, c.b);
+      }
+    }
+  }
+
+  /** Vertical prism over a convex 2D polygon from y0 to y1. */
+  prism(poly, y0, y1, c, top = true, bottom = false) {
+    if (y1 - y0 < 0.01) return;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length], n = edgeNormal(poly, i);
+      this.face([[a[0], y0, a[1]], [b[0], y0, b[1]], [b[0], y1, b[1]], [a[0], y1, a[1]]], c, [n[0], 0, n[1]]);
+    }
+    if (top) this.face(poly.map((p) => [p[0], y1, p[1]]), c, [0, 1, 0]);
+    if (bottom) this.face(poly.map((p) => [p[0], y0, p[1]]), c, [0, -1, 0]);
+  }
+
+  toGeometry() {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+    g.computeBoundingSphere();
+    return g;
+  }
 }
 
 /** Merge several (geometry, colour) pairs into one vertex-coloured geometry. */
@@ -58,6 +72,7 @@ function mergeColoured(parts) {
   const c = new THREE.Color();
   for (const [geo, hex] of parts) {
     const g = geo.index ? geo.toNonIndexed() : geo;
+    if (!g.attributes.normal) g.computeVertexNormals();
     c.set(hex);
     pos.push(...g.attributes.position.array);
     nor.push(...g.attributes.normal.array);
@@ -71,6 +86,20 @@ function mergeColoured(parts) {
 }
 const box = (w, h, d, x = 0, y = 0, z = 0) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 
+/** A round-headed opening (unit width/height, origin at bottom centre) with a stone surround. */
+function vaultGeometry() {
+  const opening = new THREE.Shape();
+  opening.moveTo(-0.5, 0); opening.lineTo(0.5, 0); opening.lineTo(0.5, 0.6);
+  opening.absarc(0, 0.6, 0.5, 0, Math.PI, false); opening.lineTo(-0.5, 0);
+  const ring = new THREE.Shape();
+  ring.moveTo(-0.62, 0); ring.lineTo(-0.5, 0); ring.lineTo(-0.5, 0.6);
+  ring.absarc(0, 0.6, 0.5, Math.PI, 0, true); ring.lineTo(0.5, 0); ring.lineTo(0.62, 0); ring.lineTo(0.62, 0.6);
+  ring.absarc(0, 0.6, 0.62, 0, Math.PI, false); ring.lineTo(-0.62, 0);
+  const g1 = new THREE.ShapeGeometry(opening, 10).translate(0, 0, 0.03);
+  const g2 = new THREE.ShapeGeometry(ring, 10).translate(0, 0, 0.05);
+  return mergeColoured([[g1, '#2c2622'], [g2, '#b9ad97']]);
+}
+
 // ---- the renderer -------------------------------------------------------------
 
 export class BuildingRenderer {
@@ -82,15 +111,11 @@ export class BuildingRenderer {
 
     const lambert = (opts = {}) => new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0, flatShading: true, ...opts });
     const vc = lambert({ vertexColors: true });
+    this.massMat = lambert({ vertexColors: true });
+    this.mass = null;   // the merged walls + roofs mesh
 
-    // Each "part" = geometry + material + whether it casts shadows.
+    // Instanced details: geometry + material + whether it casts shadows.
     this.parts = {
-      body:    { geo: box(1, 1, 1, 0, 0.5, 0), mat: lambert(), shadow: true },
-      plinth:  { geo: box(1, 1, 1, 0, 0.5, 0), mat: lambert({ color: '#9c9184' }), shadow: false },
-      cornice: { geo: box(1, 1, 1, 0, 0.5, 0), mat: lambert(), shadow: false },
-      gable:   { geo: gableGeometry(), mat: lambert(), shadow: true },
-      hip:     { geo: hipGeometry(), mat: lambert(), shadow: true },
-      terrace: { geo: box(1, 1, 1, 0, 0.5, 0), mat: lambert(), shadow: true },
       window:  { geo: mergeColoured([[box(1.0, 1.5, 0.08, 0, 0, 0.0), '#f1e9d6'], [box(0.74, 1.24, 0.06, 0, 0, 0.04), '#3a3d44']]), mat: vc, shadow: false },
       shutterOpen:   { geo: mergeColoured([[box(0.42, 1.3, 0.05, -0.68, 0, 0.03), '#ffffff'], [box(0.42, 1.3, 0.05, 0.68, 0, 0.03), '#ffffff']]), mat: lambert(), shadow: false },
       shutterClosed: { geo: mergeColoured([[box(0.8, 1.3, 0.06, 0, 0, 0.07), '#ffffff'], [box(0.8, 0.05, 0.02, 0, 0, 0.11), '#c8c8c8']]), mat: lambert({ vertexColors: true }), shadow: false },
@@ -101,6 +126,7 @@ export class BuildingRenderer {
       shop:    { geo: mergeColoured([[box(2.5, 2.4, 0.08, 0, 1.2, 0), '#ece3cf'], [box(2.2, 2.1, 0.06, 0, 1.12, 0.04), '#3a3d44']]), mat: vc, shadow: false },
       awning:  { geo: box(1, 0.08, 1.3).rotateX(0.4), mat: lambert(), shadow: true },
       chimney: { geo: mergeColoured([[box(0.55, 1.2, 0.55, 0, 0.6, 0), '#ffffff'], [box(0.75, 0.12, 0.75, 0, 1.25, 0), '#d8d0c0']]), mat: lambert({ vertexColors: true }), shadow: true },
+      vault:   { geo: vaultGeometry(), mat: lambert({ vertexColors: true, side: THREE.DoubleSide }), shadow: false },
     };
     for (const p of Object.values(this.parts)) { p.mesh = null; p.cap = 0; }
   }
@@ -122,6 +148,47 @@ export class BuildingRenderer {
     return m;
   }
 
+  /** Corners of part of an archway house's rectangle, in its local frame. */
+  _rectPart(b, u0, u1, v0, v1) {
+    return [[u0, v1], [u1, v1], [u1, v0], [u0, v0]].map(([u, v]) => [b.x + b.rx * u + b.fx * v, b.z + b.rz * u + b.fz * v]);
+  }
+
+  /** Nearly-flat roofs over any convex quad: gable, hip, gable end-on, or a roof terrace. */
+  _roof(gb, b, ov, pitch) {
+    const P = offsetPoly(b.corners, ov);
+    const top = b.top;
+    const up = [0, 1, 0];
+    const lift = (p, y) => [p[0], y, p[1]];
+    const side = (i) => { const n = edgeNormal(P, i); return [n[0], 0, n[1]]; };
+    if (b.roof === 'flat') {
+      // a roof terrace: low parapet in a lighter shade, tiled floor inside
+      gb.prism(offsetPoly(b.corners, 0.05), top, top + 0.55, b.facade.clone().offsetHSL(0, -0.05, 0.06));
+      gb.prism(offsetPoly(b.corners, -0.25), top + 0.05, top + 0.57, b.roofCol);
+      return;
+    }
+    const depth = (dist(P[1], P[2]) + dist(P[0], P[3])) / 2, width = (dist(P[0], P[1]) + dist(P[2], P[3])) / 2;
+    const along = b.roof !== 'gableX';                  // ridge parallel to the front wall?
+    const yr = top + pitch * (along ? depth : width) + 0.15;
+    let R0, R1;
+    if (along) { R0 = lerp2(P[3], P[0], 0.5); R1 = lerp2(P[1], P[2], 0.5); }
+    else { R0 = lerp2(P[0], P[1], 0.5); R1 = lerp2(P[2], P[3], 0.5); }
+    if (b.roof === 'hip') { const C = centroid(P); R0 = lerp2(R0, C, 0.35); R1 = lerp2(R1, C, 0.35); }
+    const p = P.map((q) => lift(q, top)), r0 = lift(R0, yr), r1 = lift(R1, yr);
+    const col = b.roofCol, hip = b.roof === 'hip';
+    if (along) {
+      gb.face([p[0], p[1], r1, r0], col, up);
+      gb.face([p[2], p[3], r0, r1], col, up);
+      gb.face([p[1], p[2], r1], col, hip ? up : side(1));
+      gb.face([p[3], p[0], r0], col, hip ? up : side(3));
+    } else {
+      gb.face([p[3], p[0], r0, r1], col, up);
+      gb.face([p[1], p[2], r1, r0], col, up);
+      gb.face([p[0], p[1], r0], col, side(0));
+      gb.face([p[2], p[3], r1], col, side(2));
+    }
+    gb.face(p, col, [0, -1, 0]);   // the eaves seen from below
+  }
+
   rebuild(buildings) {
     const t = this.terrain;
     const lists = {};
@@ -130,8 +197,11 @@ export class BuildingRenderer {
     const put = (k, x, y, z, rot, sx, sy, sz, col) => lists[k].push(x, y, z, rot, sx, sy, sz, col.r, col.g, col.b);
     const WHITE = new THREE.Color(1, 1, 1);
     const cream = new THREE.Color('#f3ead6');
+    const stone = new THREE.Color('#9c9184');
     const doorCols = [new THREE.Color('#3b5d46'), new THREE.Color('#6b4a33'), new THREE.Color('#2f5f78')];
     const awnCols = [new THREE.Color('#d24b3f'), new THREE.Color('#2e7cb8'), new THREE.Color('#3b9c6b'), new THREE.Color('#e3a63a')];
+    const gb = new GeoBuilder();
+    const ov = CONFIG.building.roofOverhang, pitch = CONFIG.building.roofPitch;
 
     // tops first, so neighbour checks use the current heights
     for (const b of buildings) b.top = b.gMax + b.floors * FH;
@@ -139,63 +209,46 @@ export class BuildingRenderer {
     for (const b of buildings) {
       const rng = makeRng(b.seed);
       const base = b.gMin - 1.2;
-      const H = b.top - base;
-      const rot = b.theta;
+      const q = b.corners;
+
       // --- walls, stone plinth, cornice ---
       if (b.arch) {
         // Archway / covered passage: the house sits on two piers over the lane.
-        const a = b.arch;
-        put('body', b.x, a.y, b.z, rot, b.w, b.top - a.y, b.d, b.facade);
+        const a = b.arch, hw = b.w / 2, hd = b.d / 2;
+        gb.prism(q, a.y, b.top, b.facade, false, true);
         const piers = a.axis === 'f'
-          ? [[-b.w / 2, a.lo, 'x'], [a.hi, b.w / 2, 'x']]
-          : [[-b.d / 2, a.lo, 'z'], [a.hi, b.d / 2, 'z']];
-        for (const [lo, hi, ax] of piers) {
-          const mid = (lo + hi) / 2, len = hi - lo;
-          if (len < 0.2) continue;
-          const px = b.x + (ax === 'x' ? b.rx : b.fx) * mid, pz = b.z + (ax === 'x' ? b.rz : b.fz) * mid;
-          if (ax === 'x') put('body', px, base, pz, rot, len, a.y - base + 0.05, b.d, b.facade);
-          else put('body', px, base, pz, rot, b.w, a.y - base + 0.05, len, b.facade);
-        }
+          ? [this._rectPart(b, -hw, a.lo, -hd, hd), this._rectPart(b, a.hi, hw, -hd, hd)]
+          : [this._rectPart(b, -hw, hw, -hd, a.lo), this._rectPart(b, -hw, hw, a.hi, hd)];
+        for (const pier of piers) if (dist(pier[0], pier[1]) > 0.2 && dist(pier[1], pier[2]) > 0.2) gb.prism(pier, base, a.y + 0.05, b.facade, false);
         // a stone lintel over each opening
-        const lintW = a.axis === 'f' ? a.hi - a.lo + 0.3 : b.w + 0.1;
-        const lintD = a.axis === 'f' ? b.d + 0.1 : a.hi - a.lo + 0.3;
-        const lm = (a.lo + a.hi) / 2;
-        const lx = b.x + (a.axis === 'f' ? b.rx * lm : b.fx * lm), lz = b.z + (a.axis === 'f' ? b.rz * lm : b.fz * lm);
-        put('plinth', lx, a.y - 0.25, lz, rot, lintW, 0.3, lintD, WHITE);
+        const lint = a.axis === 'f' ? this._rectPart(b, a.lo - 0.15, a.hi + 0.15, -hd - 0.05, hd + 0.05)
+                                    : this._rectPart(b, -hw - 0.05, hw + 0.05, a.lo - 0.15, a.hi + 0.15);
+        gb.prism(lint, a.y - 0.4, a.y - 0.1, stone);
       } else {
-        put('body', b.x, base, b.z, rot, b.w, H, b.d, b.facade);
-        put('plinth', b.x, base, b.z, rot, b.w + 0.12, b.gMin - base + 0.45, b.d + 0.12, WHITE);
+        gb.prism(q, base, b.top, b.facade, false);
+        gb.prism(offsetPoly(q, 0.06), base, b.gMin + 0.45, stone);
       }
       const corniceCol = rng() < 0.6 ? cream : b.facade.clone().offsetHSL(0, -0.1, 0.12);
-      put('cornice', b.x, b.top - 0.32, b.z, rot, b.w + 0.22, 0.32, b.d + 0.22, corniceCol);
+      gb.prism(offsetPoly(q, 0.11), b.top - 0.32, b.top, corniceCol);
 
       // --- roof ---
-      const ov = CONFIG.building.roofOverhang, pitch = CONFIG.building.roofPitch;
-      if (b.roof === 'flat') {
-        put('terrace', b.x, b.top, b.z, rot, b.w + 0.1, 0.55, b.d + 0.1, b.facade.clone().offsetHSL(0, -0.05, 0.06));
-        put('terrace', b.x, b.top + 0.05, b.z, rot, b.w - 0.5, 0.52, b.d - 0.5, b.roofCol);
-      } else if (b.roof === 'gableX') {
-        // ridge runs downhill: gable end faces the sea
-        put('gable', b.x, b.top, b.z, rot + Math.PI / 2, b.d + ov * 2, pitch * (b.w + 2 * ov) + 0.15, b.w + ov * 2, b.roofCol);
-      } else {
-        put(b.roof === 'hip' ? 'hip' : 'gable', b.x, b.top, b.z, rot, b.w + ov * 2, pitch * (b.d + 2 * ov) + 0.15, b.d + ov * 2, b.roofCol);
-      }
+      this._roof(gb, b, ov, pitch);
       if (rng() < 0.55) {
-        const u = (rng() - 0.5) * b.w * 0.6, v = -b.d * 0.25;
-        put('chimney', b.x + b.rx * u + b.fx * v, b.top + 0.4, b.z + b.rz * u + b.fz * v, rot, 1, 1, 1, b.facade);
+        const back = lerp2(q[2], q[3], 0.5 + (rng() - 0.5) * 0.6);
+        const p = lerp2(centroid(q), back, 0.55);
+        put('chimney', p[0], b.top + 0.35, p[1], b.theta, 1, 1, 1, b.facade);
       }
 
-      // --- facades ---
-      const sides = [
-        { nx: b.fx, nz: b.fz, e: b.d / 2, tx: b.rx, tz: b.rz, L: b.w, front: true },
-        { nx: -b.fx, nz: -b.fz, e: b.d / 2, tx: -b.rx, tz: -b.rz, L: b.w },
-        { nx: b.rx, nz: b.rz, e: b.w / 2, tx: -b.fx, tz: -b.fz, L: b.d },
-        { nx: -b.rx, nz: -b.rz, e: b.w / 2, tx: b.fx, tz: b.fz, L: b.d },
-      ];
+      // --- facades: windows along every wall ---
       const closedChance = rng() * 0.6;
-      for (const s of sides) {
-        const cols = s.front ? Math.max(1, Math.round(b.w / 2.0)) : Math.max(1, Math.round(s.L / 2.9));
-        const srot = Math.atan2(s.nx, s.nz);
+      for (let i = 0; i < 4; i++) {
+        const A = q[i], Bc = q[(i + 1) % 4];
+        const L = dist(A, Bc);
+        if (L < 1.6) continue;
+        const n = edgeNormal(q, i), e = norm(sub(Bc, A));
+        const front = i === 0;
+        const cols = front ? Math.max(1, Math.round(L / 2.0)) : Math.max(1, Math.round(L / 2.9));
+        const srot = Math.atan2(n[0], n[1]);
         let lowestFloor = true;
         for (let k = 0; ; k++) {
           const floorBottom = b.top - FH * (k + 1);
@@ -203,21 +256,22 @@ export class BuildingRenderer {
           const wy = floorBottom + 1.55;
           let any = false;
           for (let ci = 0; ci < cols; ci++) {
-            const u = s.L * ((ci + 0.5) / cols - 0.5);
-            const wx = b.x + s.nx * s.e + s.tx * u, wz = b.z + s.nz * s.e + s.tz * u;
+            const u = L * ((ci + 0.5) / cols);
+            const wx = A[0] + e[0] * u, wz = A[1] + e[1] * u;
             const ground = t.heightAt(wx, wz);
             if (floorBottom < ground - 0.4) continue;           // this storey is underground here
             if (b.arch && floorBottom < b.arch.y - 0.2) continue; // below the rooms of an archway house
+            if (b.stoneTop && floorBottom < b.stoneTop - 0.5) continue; // the stone base / boat store
             // hidden behind a neighbour's wall?
-            if (this.growth.blockerTop(wx + s.nx * 0.8, wz + s.nz * 0.8) > wy - 0.5) continue;
-            const px = wx + s.nx * 0.02, pz = wz + s.nz * 0.02;
+            if (this.growth.blockerTop(wx + n[0] * 0.8, wz + n[1] * 0.8) > wy - 0.5) continue;
+            const px = wx + n[0] * 0.02, pz = wz + n[1] * 0.02;
             const groundFloor = floorBottom < ground + 1.2;
-            if (s.front && groundFloor) {
+            if (front && groundFloor) {
               any = true;
               if (b.kind === ZONE.COM) {
                 if (ci === Math.floor(cols / 2) || cols === 1) {
-                  put('shop', px, Math.max(floorBottom, ground - 0.1), pz, srot, Math.min(1, s.L / cols / 2.6), 1, 1, WHITE);
-                  put('awning', px + s.nx * 0.55, Math.max(floorBottom, ground) + 2.75, pz + s.nz * 0.55, srot, Math.min(2.6, s.L / cols), 1, 1, awnCols[(b.seed >> 3) % awnCols.length]);
+                  put('shop', px, Math.max(floorBottom, ground - 0.1), pz, srot, Math.min(1, L / cols / 2.6), 1, 1, WHITE);
+                  put('awning', px + n[0] * 0.55, Math.max(floorBottom, ground) + 2.75, pz + n[1] * 0.55, srot, Math.min(2.6, L / cols), 1, 1, awnCols[(b.seed >> 3) % awnCols.length]);
                 }
               } else if (ci === Math.floor((cols - 1) / 2)) {
                 put('door', px, Math.max(floorBottom, ground - 0.1), pz, srot, 1, 1, 1, doorCols[(b.seed >> 5) % 3]);
@@ -227,13 +281,20 @@ export class BuildingRenderer {
               continue;
             }
             any = true;
-            const balcony = s.front && b.balconies && !lowestFloor && rng() < 0.4;
+            const balcony = front && b.balconies && !lowestFloor && rng() < 0.4;
             this._window(put, px, wy, pz, srot, b, rng, closedChance, balcony);
           }
           if (any) lowestFloor = false;
         }
       }
     }
+
+    // --- the merged walls + roofs mesh ---
+    if (this.mass) { this.group.remove(this.mass); this.mass.geometry.dispose(); }
+    this.mass = new THREE.Mesh(gb.toGeometry(), this.massMat);
+    this.mass.castShadow = true;
+    this.mass.receiveShadow = true;
+    this.group.add(this.mass);
 
     // --- write instance buffers ---
     for (const [k, arr] of Object.entries(lists)) {
