@@ -48,6 +48,13 @@ export const CONFIG = {
     frontDepth: [6.0, 8.0],
     maxFloors: 8,          // …and up to 8 storeys (above uphill ground) right at the water
     tallEffort: 45,        // walking effort over which that eases to the normal cap
+    // Waterfront houses stand on rough stone bases, some with boat-store vaults.
+    stoneBase: {
+      coastDistance: 16,   // houses this close to the waterline (m)…
+      maxGround: 5,        // …and standing this low get a stone base
+      height: [2.8, 3.6],  // base height (about one storey)
+      vaultChance: 0.6,    // share of them with a big arched opening facing the water
+    },
   },
 
   // ---- Paths ----------------------------------------------------------------

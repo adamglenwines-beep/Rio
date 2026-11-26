@@ -77,40 +77,48 @@ The first load needs internet access, to fetch Three.js from the CDN.
 | `src/paths.js` | Stairs/lanes: switchback routing, the path graph, stone-step rendering |
 | `src/zones.js` | Zone painting on a hidden 2 m grid, soft overlay |
 | `src/access.js` | Walking effort (Dijkstra over paths, then onto the ground) |
+| `src/lanes.js` | Lanes as the town's skeleton: frontage lines, lane ranking, the no-overlap rule |
+| `src/geom.js` | Small 2D polygon helpers |
 | `src/growth.js` | **The growth simulation** (placement, scoring, storeys) |
-| `src/buildings.js` | Instanced low-poly houses: walls, roofs, windows, shutters, balconies… |
+| `src/buildings.js` | Low-poly houses from footprint polygons: walls, roofs, stone bases, windows, shutters… |
 | `src/scenery.js` | Dry-stone terraces, vines and trees |
 | `src/demo.js` | The sample village layout |
 | `src/ui.js` | Tools, touch/mouse handling, hints |
 
-### Growth in one paragraph
+### How the town grows
 
-Each house is an oriented rectangle whose facade faces downhill (from a smoothed slope
-field) and whose width runs along the contour. Floors are counted from the **uphill**
-ground, and the walls extend down to the lowest ground, so downhill facades are taller.
-New houses mostly **attach** to existing ones:
-- a side neighbour hinges on the shared front corner, so the two share a wall and the
-  row follows the contour;
-- an uphill neighbour sits back-to-back, so the rows step up the slope;
-- if the full-size house doesn't fit, it shrinks to fill the gap.
+**Lanes come first.** Every house footprint is a four-cornered polygon, and houses are
+laid out from the lanes inward, the way real hill towns are:
+- **Lane-front houses** take a stretch of a lane's edge. The front wall is flush along the
+  lane at a small setback, and the side walls run square to the lane and are shared exactly
+  with the neighbours. On a bend the footprints become trapezoids and wedges that follow
+  the curve, so each lane reads as a continuous corridor between walls.
+- **Main lanes win.** Lanes are ranked by foot traffic to the harbour. A band along each
+  lane is reserved for houses that front it, and a corner house always fronts the busier
+  lane.
+- **Blocks fill edge to edge.** Lots run back to the next row (or the middle of the block),
+  narrow blocks get through-houses, and back lots continue the lot lines. Wedge and corner
+  pieces close the gaps where rows of different alignment meet. Irregular back walls are
+  hidden in the middle of blocks.
+- **Paths are never built on.** An exact geometric test keeps every ordinary wall clear of
+  every lane, the quay, the piazza and the slipway. The only exceptions are deliberate
+  **archways**: a house spanning a side stair where it leaves a lane, or a covered passage
+  built across a lane, always with full headroom.
+- Only houses with no lane nearby fall back to facing downhill.
 
-Sometimes a new house straddles a lane instead: it stands on two piers with the stair or
-passage running underneath (an archway), which helps the rows merge into one mass.
-
-Along the harbour front, footprints are slimmer and houses reach up to 8 storeys. A narrow
-quay walkway, a small piazza and a slipway are always kept open.
-
-A brand-new cluster can only start right beside a connected path. Every candidate must sit
-on zoned, reachable, non-cliff land. The best-scoring one gets built: low walking effort,
-touching many neighbours, plus a little randomness. Meanwhile, houses gain storeys toward
-a target set by how close they are to the harbour (in effort), local density and the
-slope band (steep = small houses only).
+Floors are counted from the **uphill** ground and walls go down to the lowest ground, so
+downhill facades are taller. Along the harbour front, footprints are slimmer, houses reach
+up to 8 storeys, and they stand on **rough stone bases**, many with an arched boat store
+facing the water. Every candidate must sit on zoned, reachable, non-cliff land. The
+best-scoring one gets built: low walking effort, fronting a lane, touching neighbours,
+plus a little randomness. Houses gain storeys toward a target set by closeness to the
+harbour, local density and the slope band.
 
 The look is tuned mainly through `src/config.js`:
 - `terrain.ravine`: shape of the ravine (floor width, flank slopes, where the cliffs start);
 - `slope`: the slope bands (moderate < 33°, steep < 42°, cliff above);
-- `harbour`: quay, piazza, slipway, the waterfront's slim tall houses;
-- `path`: lane width, clearance, archways;
+- `harbour`: quay, piazza, slipway, the waterfront's slim tall houses and stone bases;
+- `path`: lane width, setback, the band reserved along lanes, archways;
 - `building`: sizes, storeys, roof pitch.
 
 `docs/progress/` holds before/after screenshots for each tuning step.

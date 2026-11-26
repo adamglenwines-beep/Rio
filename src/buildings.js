@@ -21,6 +21,7 @@ import { ZONE } from './zones.js';
 import { sub, norm, dist, lerp2, centroid, edgeNormal, offsetPoly } from './geom.js';
 
 const FH = CONFIG.building.floorHeight;
+const WHITE = new THREE.Color(1, 1, 1);
 
 // ---- geometry helpers ---------------------------------------------------------
 
@@ -45,12 +46,32 @@ class GeoBuilder {
     }
   }
 
-  /** Vertical prism over a convex 2D polygon from y0 to y1. */
+  /** Push one triangle with a known normal. */
+  _tri(a, b, d, n, c) {
+    this.pos.push(a[0], a[1], a[2], b[0], b[1], b[2], d[0], d[1], d[2]);
+    this.nor.push(n[0], n[1], n[2], n[0], n[1], n[2], n[0], n[1], n[2]);
+    this.col.push(c.r, c.g, c.b, c.r, c.g, c.b, c.r, c.g, c.b);
+  }
+
+  /** Vertical prism over a convex 2D polygon from y0 to y1 (fast path: normals known). */
   prism(poly, y0, y1, c, top = true, bottom = false) {
     if (y1 - y0 < 0.01) return;
-    for (let i = 0; i < poly.length; i++) {
-      const a = poly[i], b = poly[(i + 1) % poly.length], n = edgeNormal(poly, i);
-      this.face([[a[0], y0, a[1]], [b[0], y0, b[1]], [b[0], y1, b[1]], [a[0], y1, a[1]]], c, [n[0], 0, n[1]]);
+    const n = poly.length;
+    let area = 0;
+    for (let i = 0; i < n; i++) { const a = poly[i], b = poly[(i + 1) % n]; area += a[0] * b[1] - a[1] * b[0]; }
+    const ccw = area > 0;
+    for (let i = 0; i < n; i++) {
+      const a = poly[i], b = poly[(i + 1) % n];
+      let ex = b[0] - a[0], ez = b[1] - a[1];
+      const l = Math.hypot(ex, ez);
+      if (l < 1e-6) continue;
+      ex /= l; ez /= l;
+      const nx = ccw ? ez : -ez, nz = ccw ? -ex : ex;      // outward
+      const A0 = [a[0], y0, a[1]], B0 = [b[0], y0, b[1]], B1 = [b[0], y1, b[1]], A1 = [a[0], y1, a[1]];
+      const N = [nx, 0, nz];
+      // wind so the face points outward: (B0-A0) x (A1-A0) has direction (-ez, 0, ex)·sign
+      if (ccw) { this._tri(A0, A1, B1, N, c); this._tri(A0, B1, B0, N, c); }
+      else { this._tri(A0, B0, B1, N, c); this._tri(A0, B1, A1, N, c); }
     }
     if (top) this.face(poly.map((p) => [p[0], y1, p[1]]), c, [0, 1, 0]);
     if (bottom) this.face(poly.map((p) => [p[0], y0, p[1]]), c, [0, -1, 0]);
@@ -153,6 +174,37 @@ export class BuildingRenderer {
     return [[u0, v1], [u1, v1], [u1, v0], [u0, v0]].map(([u, v]) => [b.x + b.rx * u + b.fx * v, b.z + b.rz * u + b.fz * v]);
   }
 
+  /**
+   * Waterfront houses stand on a rough stone base (sets b.stoneTop) and may
+   * have a boat-store vault in the wall that faces the water.
+   */
+  _harbourBase(b, rng) {
+    const S = CONFIG.harbour.stoneBase, t = this.terrain;
+    const [cx, cz] = centroid(b.corners);
+    if (b.gMin > S.maxGround || t.coastZ(cx) - cz > S.coastDistance) { b.stoneTop = 0; return null; }
+    const top = b.gMin + S.height[0] + rng() * (S.height[1] - S.height[0]);
+    b.stoneTop = Math.min(top, b.top - FH);              // always leave rooms above
+    const stones = ['#8f8576', '#9a8f7d', '#857b6d', '#a39883'];
+    const col = new THREE.Color(stones[(b.seed >> 7) % stones.length]);
+    let vault = null;
+    if (rng() < S.vaultChance) {
+      // the wall that faces the sea most squarely (+z is seaward)
+      let edge = 0, best = -Infinity;
+      for (let i = 0; i < 4; i++) {
+        const n = edgeNormal(b.corners, i), L = dist(b.corners[i], b.corners[(i + 1) % 4]);
+        const score = n[1] + (L > 3 ? 0.2 : -1);
+        if (score > best) { best = score; edge = i; }
+      }
+      const L = dist(b.corners[edge], b.corners[(edge + 1) % 4]);
+      const m = lerp2(b.corners[edge], b.corners[(edge + 1) % 4], 0.5);
+      const h = Math.min(3.4, b.stoneTop - t.heightAt(m[0], m[1]) - 0.15);
+      const w = Math.min(3.6, L - 1.0);
+      if (h > 2.1 && w > 1.8 && edgeNormal(b.corners, edge)[1] > 0.2) vault = { edge, w, h };
+    }
+    b.vaultEdge = vault ? vault.edge : -1;
+    return { top: b.stoneTop, col, vault };
+  }
+
   /** Nearly-flat roofs over any convex quad: gable, hip, gable end-on, or a roof terrace. */
   _roof(gb, b, ov, pitch) {
     const P = offsetPoly(b.corners, ov);
@@ -195,7 +247,6 @@ export class BuildingRenderer {
     for (const k of Object.keys(this.parts)) lists[k] = [];
     // instance = [x, y, z, rotY, sx, sy, sz, colour]
     const put = (k, x, y, z, rot, sx, sy, sz, col) => lists[k].push(x, y, z, rot, sx, sy, sz, col.r, col.g, col.b);
-    const WHITE = new THREE.Color(1, 1, 1);
     const cream = new THREE.Color('#f3ead6');
     const stone = new THREE.Color('#9c9184');
     const doorCols = [new THREE.Color('#3b5d46'), new THREE.Color('#6b4a33'), new THREE.Color('#2f5f78')];
@@ -226,7 +277,21 @@ export class BuildingRenderer {
         gb.prism(lint, a.y - 0.4, a.y - 0.1, stone);
       } else {
         gb.prism(q, base, b.top, b.facade, false);
-        gb.prism(offsetPoly(q, 0.06), base, b.gMin + 0.45, stone);
+        const hb = this._harbourBase(b, rng);
+        if (hb) {
+          // rough stone base, battered at the foot, with a pale string course on top
+          gb.prism(offsetPoly(q, 0.14), base, hb.top, hb.col);
+          gb.prism(offsetPoly(q, 0.26), base, b.gMin + 0.9, hb.col.clone().multiplyScalar(0.9));
+          gb.prism(offsetPoly(q, 0.18), hb.top - 0.04, hb.top + 0.16, cream);
+          if (hb.vault) {
+            const { edge, w, h } = hb.vault;
+            const A = q[edge], Bc = q[(edge + 1) % 4], n = edgeNormal(q, edge);
+            const m = lerp2(A, Bc, 0.5), g = t.heightAt(m[0], m[1]);
+            put('vault', m[0] + n[0] * 0.16, g - 0.05, m[1] + n[1] * 0.16, Math.atan2(n[0], n[1]), w, h / 1.1, 1, WHITE);
+          }
+        } else {
+          gb.prism(offsetPoly(q, 0.06), base, b.gMin + 0.45, stone);
+        }
       }
       const corniceCol = rng() < 0.6 ? cream : b.facade.clone().offsetHSL(0, -0.1, 0.12);
       gb.prism(offsetPoly(q, 0.11), b.top - 0.32, b.top, corniceCol);
@@ -273,6 +338,8 @@ export class BuildingRenderer {
                   put('shop', px, Math.max(floorBottom, ground - 0.1), pz, srot, Math.min(1, L / cols / 2.6), 1, 1, WHITE);
                   put('awning', px + n[0] * 0.55, Math.max(floorBottom, ground) + 2.75, pz + n[1] * 0.55, srot, Math.min(2.6, L / cols), 1, 1, awnCols[(b.seed >> 3) % awnCols.length]);
                 }
+              } else if (b.vaultEdge === i) {
+                // the boat store is this wall's ground floor
               } else if (ci === Math.floor((cols - 1) / 2)) {
                 put('door', px, Math.max(floorBottom, ground - 0.1), pz, srot, 1, 1, 1, doorCols[(b.seed >> 5) % 3]);
               } else {
@@ -320,9 +387,11 @@ export class BuildingRenderer {
   }
 
   _window(put, x, y, z, rot, b, rng, closedChance, balcony) {
-    put('window', x, y, z, rot, 1, 1, 1, new THREE.Color(1, 1, 1));
-    const shut = b.shutter.clone().offsetHSL(0, 0, (rng() - 0.5) * 0.05);
+    put('window', x, y, z, rot, 1, 1, 1, WHITE);
+    // a few slightly different shades per house, made once (not per window)
+    if (!b.shutterShades) b.shutterShades = [-0.025, 0, 0.025].map((k) => b.shutter.clone().offsetHSL(0, 0, k));
+    const shut = b.shutterShades[(rng() * 3) | 0];
     put(rng() < closedChance ? 'shutterClosed' : 'shutterOpen', x, y, z, rot, 1, 1, 1, shut);
-    if (balcony) put('balcony', x, y, z, rot, 1, 1, 1, new THREE.Color(1, 1, 1));
+    if (balcony) put('balcony', x, y, z, rot, 1, 1, 1, WHITE);
   }
 }
