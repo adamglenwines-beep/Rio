@@ -170,15 +170,15 @@ export class BuildingRenderer {
       put('cornice', b.x, b.top - 0.32, b.z, rot, b.w + 0.22, 0.32, b.d + 0.22, corniceCol);
 
       // --- roof ---
-      const ov = 0.3;
+      const ov = CONFIG.building.roofOverhang, pitch = CONFIG.building.roofPitch;
       if (b.roof === 'flat') {
         put('terrace', b.x, b.top, b.z, rot, b.w + 0.1, 0.55, b.d + 0.1, b.facade.clone().offsetHSL(0, -0.05, 0.06));
         put('terrace', b.x, b.top + 0.05, b.z, rot, b.w - 0.5, 0.52, b.d - 0.5, b.roofCol);
       } else if (b.roof === 'gableX') {
         // ridge runs downhill: gable end faces the sea
-        put('gable', b.x, b.top, b.z, rot + Math.PI / 2, b.d + ov * 2, 0.22 * b.w + 0.3, b.w + ov * 2, b.roofCol);
+        put('gable', b.x, b.top, b.z, rot + Math.PI / 2, b.d + ov * 2, pitch * (b.w + 2 * ov) + 0.15, b.w + ov * 2, b.roofCol);
       } else {
-        put(b.roof === 'hip' ? 'hip' : 'gable', b.x, b.top, b.z, rot, b.w + ov * 2, 0.16 * b.d + 0.3, b.d + ov * 2, b.roofCol);
+        put(b.roof === 'hip' ? 'hip' : 'gable', b.x, b.top, b.z, rot, b.w + ov * 2, pitch * (b.d + 2 * ov) + 0.15, b.d + ov * 2, b.roofCol);
       }
       if (rng() < 0.55) {
         const u = (rng() - 0.5) * b.w * 0.6, v = -b.d * 0.25;

@@ -81,6 +81,8 @@ export const CONFIG = {
     // footprint sizes [min, max] by slope band (width = along the contour)
     width:  { flat: [4.5, 6.5], moderate: [3.8, 5.2], steep: [3.4, 4.2] },
     depth:  { flat: [6.0, 8.5], moderate: [6.5, 8.5], steep: [4.8, 6.0] },
+    roofPitch: 0.07,       // roof rise per metre of span (0.07 ≈ 8°: nearly flat, like Ligurian slate)
+    roofOverhang: 0.3,     // eaves overhang (m)
     minGround: 0.5,        // lowest ground (m above sea) a house may stand on
     alleyChance: 0.22,     // chance a new uphill row leaves a narrow alley
     alleyWidth: 1.4,
@@ -101,6 +103,8 @@ export const FACADE_COLOURS = [
   ['#e8c4a4', 2], ['#cfdcc4', 1], ['#c3d6de', 1], ['#e7d36f', 2],
 ];
 export const SHUTTER_COLOURS = ['#2f6b46', '#3c7a50', '#285c3d', '#43835a'];
+// Roofs: mostly grey slate (ardesia), with the occasional terracotta.
 export const ROOF_COLOURS = [
-  ['#b4553b', 5], ['#c2683f', 4], ['#a2483a', 3], ['#8a8079', 2], ['#7a726d', 1],
+  ['#6e6b69', 5], ['#7c7874', 5], ['#5f5d5c', 3], ['#8a8580', 3], ['#696460', 3],
+  ['#b4553b', 2], ['#c2683f', 1],
 ];
