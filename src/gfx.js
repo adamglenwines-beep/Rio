@@ -9,6 +9,9 @@
 // a target hour over a couple of seconds, so lights and lit windows fade.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { CONFIG } from './config.js';
 
 // ---- quality presets ------------------------------------------------------------
@@ -133,15 +136,40 @@ export class Graphics {
       if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
     }
     this._applySize();
+    this._buildPipeline();
     this._fps.cooldown = 3;
     this._emit();
   }
+
+  /**
+   * The post-processing chain for this preset. Low draws straight to the screen
+   * (the canvas's own 4x multisampling smooths the edges). Medium and High
+   * render into a high-dynamic-range target with 4x multisampling — so edges
+   * stay smooth through the effects — then the effects, then tone mapping.
+   */
+  _buildPipeline() {
+    if (this.composer) { this.composer.dispose(); this.composer = null; }
+    const P = this.preset;
+    if (!P.post) return;
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: P.msaa });
+    const c = (this.composer = new EffectComposer(this.renderer, rt));
+    c.setPixelRatio(this.renderer.getPixelRatio());
+    c.setSize(innerWidth, innerHeight);
+    c.addPass(new RenderPass(this.scene, this.camera));
+    this._addEffects(c);
+    c.addPass(new OutputPass());
+  }
+
+  /** Effects between the scene render and tone mapping (filled in by later steps). */
+  _addEffects(c) {}
 
   _applySize() {
     const pr = Math.min(window.devicePixelRatio || 1, this.preset.pixelRatio) * this.resolution;
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(innerWidth, innerHeight);
     this.pixelRatio = pr;
+    if (this.composer) { this.composer.setPixelRatio(pr); this.composer.setSize(innerWidth, innerHeight); }
   }
 
   resize() { this._applySize(); }
@@ -254,6 +282,7 @@ export class Graphics {
   }
 
   render() {
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 }
