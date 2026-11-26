@@ -18,7 +18,8 @@ import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { makeRng } from './noise.js';
 import { ZONE } from './zones.js';
-import { sub, norm, dist, lerp2, centroid, edgeNormal, offsetPoly } from './geom.js';
+import { sub, norm, dist, lerp2, centroid, edgeNormal, offsetPoly, chamferPoly } from './geom.js';
+import { STYLES, registerStyled } from './style.js';
 
 const FH = CONFIG.building.floorHeight;
 const WHITE = new THREE.Color(1, 1, 1);
@@ -73,7 +74,7 @@ class GeoBuilder {
   }
 
   /** Vertical prism over a convex 2D polygon from y0 to y1 (fast path: normals known). */
-  prism(poly, y0, y1, c, top = true, bottom = false) {
+  prism(poly, y0, y1, c, top = true, bottom = false, edgeNormals = null) {
     if (y1 - y0 < 0.01) return;
     const n = poly.length;
     let area = 0;
@@ -88,6 +89,18 @@ class GeoBuilder {
       const nx = ccw ? ez : -ez, nz = ccw ? -ex : ex;      // outward
       const A0 = [a[0], y0, a[1]], B0 = [b[0], y0, b[1]], B1 = [b[0], y1, b[1]], A1 = [a[0], y1, a[1]];
       const N = [nx, 0, nz];
+      const en = edgeNormals && edgeNormals[i];
+      if (en) {
+        // a rounded corner: normals blend from one wall's to the next
+        const NA = [en[0][0], 0, en[0][1]], NB = [en[1][0], 0, en[1][1]];
+        const tri = (p1, n1, p2, n2, p3, n3) => {
+          this.pos.push(...p1, ...p2, ...p3); this.nor.push(...n1, ...n2, ...n3);
+          for (let k = 0; k < 3; k++) this.col.push(c.r, c.g, c.b);
+        };
+        if (ccw) { tri(A0, NA, A1, NA, B1, NB); tri(A0, NA, B1, NB, B0, NB); }
+        else { tri(A0, NA, B0, NB, B1, NB); tri(A0, NA, B1, NB, A1, NA); }
+        continue;
+      }
       // wind so the face points outward: (B0-A0) x (A1-A0) has direction (-ez, 0, ex)·sign
       if (ccw) { this._tri(A0, A1, B1, N, c); this._tri(A0, B1, B0, N, c); }
       else { this._tri(A0, B0, B1, N, c); this._tri(A0, B1, A1, N, c); }
@@ -188,6 +201,7 @@ export class BuildingRenderer {
     };
     this.mass = null;   // the merged walls + roofs mesh
     this.cache = new Map();   // house id → its generated geometry and instances
+    this.style = STYLES.clean;
 
     // Instanced details: geometry + material + whether it casts shadows.
     this.parts = {
@@ -207,6 +221,12 @@ export class BuildingRenderer {
       storeRoom: { geo: new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0), mat: this._storeMaterial(), shadow: false },
     };
     for (const p of Object.values(this.parts)) { p.mesh = null; p.cap = 0; }
+    registerStyled(this.massMat, 'surface');
+    const seen = new Set([this.massMat]);
+    for (const p of Object.values(this.parts)) {
+      if (seen.has(p.mat) || p.mat.isMeshBasicMaterial) continue;
+      seen.add(p.mat); registerStyled(p.mat, 'surface');
+    }
   }
 
   /** Make sure a part's InstancedMesh can hold n instances. */
@@ -567,6 +587,21 @@ export class BuildingRenderer {
     return m;
   }
 
+  /** Walls of a footprint: chamfered (and shaded round) in the softer styles. */
+  _walls(gb, poly, y0, y1, col, top = false) {
+    const S = this.style;
+    if (!S.chamfer) return gb.prism(poly, y0, y1, col, top);
+    const ch = chamferPoly(poly, S.chamfer);
+    gb.prism(ch.poly, y0, y1, col, top, false, S.smoothCorners ? ch.normals : null);
+  }
+
+  /** Switch art style: materials follow via style.js; houses are rebuilt. */
+  setStyle(style, buildings) {
+    this.style = style;
+    this.invalidateAll();
+    if (buildings) this.rebuild(buildings);
+  }
+
   /** Detail meshes too small to matter in a ripply reflection. */
   smallParts() {
     return ['shutterOpen', 'shutterClosed', 'balcony', 'door', 'awning', 'chimney', 'storeRoom']
@@ -652,7 +687,7 @@ export class BuildingRenderer {
     const put = (k, x, y, z, rot, sx, sy, sz, col) => lists[k].push(x, y, z, rot, sx, sy, sz, col.r, col.g, col.b);
     const cream = CREAM, stone = STONE, doorCols = DOOR_COLS, awnCols = AWN_COLS;
     const gb = new GeoBuilder();
-    const ov = CONFIG.building.roofOverhang, pitch = CONFIG.building.roofPitch;
+    const ov = this.style.overhang, pitch = CONFIG.building.roofPitch;
 
     const rng = makeRng(b.seed);
     const base = b.gMin - 1.2;
@@ -669,7 +704,7 @@ export class BuildingRenderer {
       for (const pier of piers) if (dist(pier[0], pier[1]) > 0.2 && dist(pier[1], pier[2]) > 0.2) gb.prism(pier, base, a.y + 0.05, b.facade, false);
       this._passageVault(gb, b, stone);
     } else {
-      gb.prism(q, base, b.top, b.facade, false);
+      this._walls(gb, q, base, b.top, b.facade);
       const hb = this._harbourBase(b, rng);
       if (hb) {
         // rough stone base, battered at the foot, with a pale string course on top
@@ -678,11 +713,12 @@ export class BuildingRenderer {
         gb.prism(offsetPoly(q, 0.18), hb.top - 0.04, hb.top + 0.16, cream);
         if (hb.vault) this._boatStore(gb, put, b, hb.vault, rng);
       } else {
-        gb.prism(offsetPoly(q, 0.06), base, b.gMin + 0.45, stone);
+        this._walls(gb, offsetPoly(q, 0.06), base, b.gMin + 0.45, stone, true);
       }
     }
     const corniceCol = rng() < 0.6 ? cream : b.facade.clone().offsetHSL(0, -0.1, 0.12);
-    gb.prism(offsetPoly(q, 0.11), b.top - 0.32, b.top, corniceCol);
+    const cor = this.style.cornice;
+    this._walls(gb, offsetPoly(q, 0.11 + (cor - 0.32) * 0.4), b.top - cor, b.top, corniceCol, true);
 
     // --- roof ---
     this._roof(gb, b, ov, pitch);
@@ -766,15 +802,16 @@ export class BuildingRenderer {
   }
 
   _window(put, x, y, z, rot, b, rng, closedChance, balcony) {
-    put('window', x, y, z, rot, 1, 1, 1, WHITE);
+    const k = this.style.detailScale;
+    put('window', x, y, z, rot, k, k, 1, WHITE);
     // per-window randoms (packed in the instance colour): when its light comes on,
     // the room's wall colour, and how far its curtain is drawn
     this._gc.setRGB(rng(), rng(), rng());
-    put('glass', x, y, z, rot, 1, 1, 1, this._gc);
+    put('glass', x, y, z, rot, k, k, 1, this._gc);
     // a few slightly different shades per house, made once (not per window)
     if (!b.shutterShades) b.shutterShades = [-0.025, 0, 0.025].map((k) => b.shutter.clone().offsetHSL(0, 0, k));
     const shut = b.shutterShades[(rng() * 3) | 0];
-    put(rng() < closedChance ? 'shutterClosed' : 'shutterOpen', x, y, z, rot, 1, 1, 1, shut);
-    if (balcony) put('balcony', x, y, z, rot, 1, 1, 1, WHITE);
+    put(rng() < closedChance ? 'shutterClosed' : 'shutterOpen', x, y, z, rot, k, k, 1, shut);
+    if (balcony) put('balcony', x, y, z, rot, k, k, 1, WHITE);
   }
 }

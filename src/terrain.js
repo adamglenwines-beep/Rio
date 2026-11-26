@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { makeNoise2D, makeRng, clamp, lerp, smoothstep } from './noise.js';
+import { registerStyled } from './style.js';
 
 export const BAND = { FLAT: 0, MODERATE: 1, STEEP: 2, CLIFF: 3, SEA: 4 };
 export const BAND_NAMES = ['flat', 'moderate', 'steep', 'cliff', 'sea'];
@@ -352,7 +353,10 @@ export class Terrain {
     geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     geo.computeVertexNormals(); // non-indexed → per-face normals → flat shading
     this.baseColors = col.slice();
+    this.flatNormals = geo.attributes.normal.array.slice();
+    this.activeColors = this.baseColors;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, flatShading: true });
+    registerStyled(mat, 'ground');
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     mesh.castShadow = true;
@@ -360,10 +364,49 @@ export class Terrain {
     return mesh;
   }
 
+  /**
+   * Art style: faceted (flat normals, per-triangle colours) or smooth (normals
+   * and colours averaged at each grid vertex, for gentle gradients).
+   */
+  setStyle(style) {
+    const g = this.mesh.geometry, nor = g.attributes.normal, col = g.attributes.color;
+    if (style.smoothTerrain) {
+      if (!this.smoothNormals) this._buildSmooth();
+      nor.array.set(this.smoothNormals); this.activeColors = this.smoothColors;
+    } else {
+      nor.array.set(this.flatNormals); this.activeColors = this.baseColors;
+    }
+    col.array.set(this.activeColors);
+    nor.needsUpdate = true; col.needsUpdate = true;
+  }
+
+  _buildSmooth() {
+    const { N, V, cell } = this, g = this.mesh.geometry, uv = g.attributes.uv.array;
+    const nCount = g.attributes.position.count;
+    // per grid vertex: normal from the heights, colour = average of the triangles touching it
+    const sum = new Float32Array(V * V * 3), cnt = new Float32Array(V * V);
+    const base = this.baseColors;
+    const gid = (k) => Math.round(uv[k * 2 + 1] * N) * V + Math.round(uv[k * 2] * N);
+    for (let k = 0; k < nCount; k++) {
+      const id = gid(k);
+      sum[id * 3] += base[k * 3]; sum[id * 3 + 1] += base[k * 3 + 1]; sum[id * 3 + 2] += base[k * 3 + 2]; cnt[id]++;
+    }
+    this.smoothNormals = new Float32Array(nCount * 3);
+    this.smoothColors = new Float32Array(nCount * 3);
+    const H = (i, j) => this.h[clamp(j, 0, V - 1) * V + clamp(i, 0, V - 1)];
+    for (let k = 0; k < nCount; k++) {
+      const id = gid(k), i = id % V, j = (id / V) | 0;
+      const nx = (H(i - 1, j) - H(i + 1, j)) / (2 * cell), nz = (H(i, j - 1) - H(i, j + 1)) / (2 * cell);
+      const l = Math.hypot(nx, 1, nz);
+      this.smoothNormals[k * 3] = nx / l; this.smoothNormals[k * 3 + 1] = 1 / l; this.smoothNormals[k * 3 + 2] = nz / l;
+      for (let c = 0; c < 3; c++) this.smoothColors[k * 3 + c] = sum[id * 3 + c] / cnt[id];
+    }
+  }
+
   /** Re-tint the terrain to show slope bands (true) or natural colours (false). */
   showSlopeBands(on) {
     const col = this.mesh.geometry.attributes.color;
-    if (!on) { col.array.set(this.baseColors); col.needsUpdate = true; return; }
+    if (!on) { col.array.set(this.activeColors); col.needsUpdate = true; return; }
     const bandCol = [new THREE.Color('#9fd27a'), new THREE.Color('#f1d36b'),
                      new THREE.Color('#ef9550'), new THREE.Color('#c0473f'), null];
     const { N } = this;

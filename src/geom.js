@@ -146,3 +146,22 @@ export function convexOverlap(P, Q) {
   }
   return depth;
 }
+
+/**
+ * Cut every corner of a convex polygon by up to `c` (at most 30% of each
+ * adjacent edge). Returns { poly, normals }: normals[i] is null for an original
+ * wall edge, or [nA, nB] (the outward normals of the two walls it joins) for a
+ * new corner edge, so a renderer can shade the corner smoothly round.
+ */
+export function chamferPoly(poly, c) {
+  const n = poly.length, out = [], normals = [];
+  const ccw = signedArea(poly) > 0;
+  const outward = (a, b) => { const e = norm(sub(b, a)); return ccw ? [e[1], -e[0]] : [-e[1], e[0]]; };
+  for (let i = 0; i < n; i++) {
+    const p = poly[(i - 1 + n) % n], v = poly[i], q = poly[(i + 1) % n];
+    const ca = Math.min(c, 0.3 * dist(p, v)), cb = Math.min(c, 0.3 * dist(v, q));
+    out.push(add(v, mul(norm(sub(p, v)), ca)), add(v, mul(norm(sub(q, v)), cb)));
+    normals.push([outward(p, v), outward(v, q)], null);
+  }
+  return { poly: out, normals };
+}

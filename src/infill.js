@@ -26,6 +26,7 @@ import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { makeRng } from './noise.js';
 import { BAND } from './terrain.js';
+import { registerStyled } from './style.js';
 
 const FREE = 0, HOUSE = 1, LANE = 2, OPEN = 3, VOID = 4;
 const C = (hex) => new THREE.Color(hex);
@@ -57,17 +58,25 @@ export class Infill {
     this.grid = null;      // the published grid (what's on screen)
     this.wg = null;        // the grid being worked on
     this.job = null;
-    const mat = new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0, flatShading: true });
+    const mat = registerStyled(new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0, flatShading: true }), 'foliage');
+    this.blobGeos = { faceted: new THREE.IcosahedronGeometry(1, 0), round: new THREE.IcosahedronGeometry(1, 2) };
     const geos = {
       box: new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
       cyl: new THREE.CylinderGeometry(1, 1, 1, 8).translate(0, 0.5, 0),
       cone: new THREE.ConeGeometry(1, 1, 5).translate(0, 0.5, 0),
-      blob: new THREE.IcosahedronGeometry(1, 0),
+      blob: this.blobGeos.faceted,
     };
     this.kinds = {};
     for (const [k, geo] of Object.entries(geos)) this.kinds[k] = { geo, mat, mesh: null, cap: 0, shadow: k !== 'box' || true };
     this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._e = new THREE.Euler(0, 0, 0, 'YXZ');
     this._v = new THREE.Vector3(); this._s = new THREE.Vector3();
+  }
+
+  /** Art style: faceted or round foliage and rocks. */
+  setStyle(style) {
+    const K = this.kinds.blob;
+    K.geo = style.roundFoliage ? this.blobGeos.round : this.blobGeos.faceted;
+    if (K.mesh) K.mesh.geometry = K.geo;
   }
 
   /** Is (x, z) covered by a decoration (used by scenery and the gap metric)? */

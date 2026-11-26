@@ -7,6 +7,7 @@
 // inside a house is skipped; the set is refreshed when paths or houses change.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
+import { registerStyled } from './style.js';
 import { makeRng } from './noise.js';
 import { BAND } from './terrain.js';
 
@@ -18,13 +19,19 @@ export class Scenery {
     this.group = new THREE.Group();
     this.walls = this._contourWalls();
     this.trees = this._placeTrees();
-    const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, flatShading: true });
+    const mat = (c, kind = 'ground') => registerStyled(new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, flatShading: true }), kind);
+    this.crownGeos = { faceted: new THREE.IcosahedronGeometry(1, 0), round: new THREE.IcosahedronGeometry(1, 2) };
     this.meshes = {
       wall: this._mesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), mat('#ffffff'), this.walls.length, false),
       vine: this._mesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), mat('#ffffff'), this.walls.length, false),
       trunk: this._mesh(new THREE.CylinderGeometry(0.18, 0.28, 1, 5).translate(0, 0.5, 0), mat('#6b5040'), this.trees.length, true),
-      crown: this._mesh(new THREE.IcosahedronGeometry(1, 0), mat('#ffffff'), this.trees.length, true),
+      crown: this._mesh(this.crownGeos.faceted, mat('#ffffff', 'foliage'), this.trees.length, true),
     };
+  }
+
+  /** Art style: faceted or round tree crowns (materials follow via style.js). */
+  setStyle(style) {
+    this.meshes.crown.geometry = style.roundFoliage ? this.crownGeos.round : this.crownGeos.faceted;
   }
 
   _mesh(geo, material, n, shadow) {

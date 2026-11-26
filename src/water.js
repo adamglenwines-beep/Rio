@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { makeRng } from './noise.js';
 import { harbourLayout } from './paths.js';
+import { registerStyled } from './style.js';
 
 export class Sea {
   constructor(terrain) {
@@ -51,6 +52,7 @@ export class Sea {
          vReflUv = uReflMatrix * (modelMatrix * vec4(transformed, 1.0));`
       );
     };
+    registerStyled(mat, 'water');
     this.water = new THREE.Mesh(geo, mat);
     this.water.receiveShadow = true;
     this.water.renderOrder = 1;
@@ -93,7 +95,7 @@ export class Sea {
     for (let k = 0; k < 2; k++) spots.push({ x: lay.slipX + (k ? 0.8 : -0.6), z: lay.slipZ0 + 2.5 + k * 4, rot: k ? 0.08 : -0.05, phase: 0, beached: true });
 
     const hullColours = ['#f4f1e8', '#2f7fbf', '#d64a3b', '#f2c94c', '#3b9c6b', '#e7e3d6', '#5aa6d6'];
-    const hullMat = new THREE.MeshStandardMaterial({ roughness: 0.6 });
+    const hullMat = registerStyled(new THREE.MeshStandardMaterial({ roughness: 0.6 }), 'surface');
     const innerMat = new THREE.MeshStandardMaterial({ color: '#c9a77a', roughness: 0.9 });
     this.boats = new THREE.InstancedMesh(hull, hullMat, spots.length);
     this.boatInner = new THREE.InstancedMesh(inner, innerMat, spots.length);

@@ -14,6 +14,29 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { STYLES } from './style.js';
+
+// Colour grade (linear HDR, before tone mapping): white balance for Warmth,
+// and per-style saturation and contrast.
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, uWB: { value: new THREE.Vector3(1, 1, 1) }, uSat: { value: 1 }, uContrast: { value: 1 } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform vec3 uWB; uniform float uSat, uContrast; varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec3 col = c.rgb * uWB;
+      float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = mix(vec3(l), col, uSat);
+      col = 0.18 * pow(max(col, 0.0) / 0.18, vec3(uContrast));
+      gl_FragColor = vec4(col, c.a);
+    }`,
+};
+const WARMTH = {
+  cool:    { k: -1, sun: '#dbe6ff', sky: '#9fc7ef' },
+  neutral: { k: 0 },
+  warm:    { k: 1, sun: '#ffc68a', sky: '#ffd2a8' },
+};
 import { CONFIG } from './config.js';
 
 // ---- distance haze ---------------------------------------------------------------
@@ -55,10 +78,10 @@ const ORDER = ['low', 'medium', 'high'];
 // Keyframes by hour; everything in between is interpolated.
 export const TIMES = { midday: 12, golden: 18.6, dusk: 20.4, night: 23 };
 const KEYS = [
-  { h: 12, elev: 62, az: 35, sun: '#fff6e8', sunI: 3.0, sky: '#e6f4ff', ground: '#9a8466', hemiI: 1.5,
-    top: '#3f97d6', hor: '#cfe7f2', glow: '#fff4dc', glowI: 0.6, fog: '#cfe7f2', exp: 1.1, lit: 0 },
-  { h: 18.6, elev: 14, az: 40, sun: '#ffcf94', sunI: 3.3, sky: '#ffe9d2', ground: '#9a7a5c', hemiI: 1.4,
-    top: '#5b93d4', hor: '#ffd2a6', glow: '#ffb878', glowI: 2.2, fog: '#f2d2b2', exp: 1.15, lit: 0.06 },
+  { h: 12, elev: 50, az: 35, sun: '#fffaf2', sunI: 3.0, sky: '#e2f0ff', ground: '#94866e', hemiI: 1.5,
+    top: '#2c86d4', hor: '#bfe0f5', glow: '#fff6e6', glowI: 0.6, fog: '#c3dcee', exp: 1.08, lit: 0 },
+  { h: 18.6, elev: 14, az: 40, sun: '#ffdcb6', sunI: 3.2, sky: '#eef0f2', ground: '#94806a', hemiI: 1.4,
+    top: '#4f8fd6', hor: '#f6dcc6', glow: '#ffc79c', glowI: 2.0, fog: '#e4dad2', exp: 1.12, lit: 0.06 },
   { h: 20.4, elev: 7, az: 75, sun: '#ff9a7a', sunI: 0.35, sky: '#8a7fb8', ground: '#3d3550', hemiI: 0.95,
     top: '#1e2f5e', hor: '#e48a6f', glow: '#ff8a60', glowI: 1.4, fog: '#8f6f86', exp: 1.3, lit: 0.35 },
   { h: 23, elev: 40, az: -30, sun: '#9fb6ff', sunI: 0.5, sky: '#3a4a78', ground: '#1c1c2a', hemiI: 0.75,
@@ -68,7 +91,11 @@ const KEYS = [
 export class Graphics {
   constructor(game, renderer, scene, camera) {
     this.game = game; this.renderer = renderer; this.scene = scene; this.camera = camera;
-    this.hour = TIMES.golden; this.targetHour = this.hour;
+    this.hour = TIMES.midday; this.targetHour = this.hour;
+    this.timeName = 'midday';
+    this.warmth = this._loadSetting('warmth', 'neutral');   // 'cool' | 'neutral' | 'warm'
+    this.style = STYLES[this._loadSetting('style', 'clean')] || STYLES.clean;
+    this.styleName = Object.keys(STYLES).find((k) => STYLES[k] === this.style);
     this.resolution = 1;           // extra scale on top of the preset (Auto lowers it if needed)
     this.mode = 'auto';            // 'auto' or a preset name
     this.preset = null;
@@ -86,17 +113,27 @@ export class Graphics {
     // sky dome: vertical gradient + a soft glow around the sun (bright enough to bloom)
     this.skyU = {
       uTop: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uGlow: { value: new THREE.Color() },
-      uGlowI: { value: 1 }, uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+      uGlowI: { value: 1 }, uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uClouds: { value: 0 },
     };
     const skyMat = new THREE.ShaderMaterial({
       uniforms: this.skyU, side: THREE.BackSide, depthWrite: false, fog: false,
       vertexShader: `varying vec3 vDir;
         void main() { vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }`,
-      fragmentShader: `uniform vec3 uTop, uHor, uGlow; uniform float uGlowI; uniform vec3 uSunDir; varying vec3 vDir;
+      fragmentShader: `uniform vec3 uTop, uHor, uGlow; uniform float uGlowI, uClouds; uniform vec3 uSunDir; varying vec3 vDir;
+        float h2(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+        float n2(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(h2(i), h2(i + vec2(1, 0)), u.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), u.x), u.y); }
+        float f2(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * n2(p); p = p * 2.07 + 11.3; a *= 0.5; } return s; }
         void main() {
           vec3 d = normalize(vDir);
           float t = clamp(d.y / 0.42, 0.0, 1.0);
           vec3 c = mix(uHor, uTop, pow(t, 0.75));
+          if (uClouds > 0.0 && d.y > 0.0) {
+            // painted clouds: soft horizontal brush streaks
+            vec2 q = d.xz / (d.y + 0.12);
+            float cl = smoothstep(0.52, 0.78, f2(vec2(q.x * 0.9, q.y * 2.6)));
+            c = mix(c, mix(uHor, vec3(1.0), 0.6), cl * uClouds * 0.75 * smoothstep(0.02, 0.2, d.y));
+          }
           float s = max(dot(d, normalize(uSunDir)), 0.0);
           c += uGlow * uGlowI * (pow(s, 6.0) * 0.35 + pow(s, 64.0) * 0.8 + pow(s, 900.0) * 3.0);
           gl_FragColor = vec4(c, 1.0);
@@ -188,7 +225,10 @@ export class Graphics {
     c.setSize(innerWidth, innerHeight);
     c.addPass(new RenderPass(this.scene, this.camera));
     this._addEffects(c);
+    this.grade = new ShaderPass(GradeShader);
+    c.addPass(this.grade);
     c.addPass(new OutputPass());
+    this._applyGrade();
   }
 
   /** Effects between the scene render and tone mapping. */
@@ -224,6 +264,30 @@ export class Graphics {
 
   resize() { this._applySize(); }
 
+  _applyGrade() {
+    if (!this.grade) return;
+    const k = (WARMTH[this.warmth] || WARMTH.neutral).k, U = this.grade.uniforms;
+    U.uWB.value.set(1 + 0.05 * k, 1 + 0.008 * k, 1 - 0.07 * k);
+    U.uSat.value = this.style.sat; U.uContrast.value = this.style.contrast;
+  }
+
+  /** 'cool' | 'neutral' | 'warm': light colour, sky and colour grade. */
+  setWarmth(w) {
+    this.warmth = WARMTH[w] ? w : 'neutral';
+    this._saveSetting('warmth', this.warmth);
+    this._applyTime(this.hour);
+    this._emit();
+  }
+
+  /** Art style ('clean' | 'soft' | 'painted'): lighting and grade here; the rest via game.setStyle. */
+  setStyle(name) {
+    this.style = STYLES[name] || STYLES.clean;
+    this.styleName = Object.keys(STYLES).find((k) => STYLES[k] === this.style);
+    this._saveSetting('style', this.styleName);
+    this._applyTime(this.hour);
+    this._emit();
+  }
+
   // ---- time of day ------------------------------------------------------------------
 
   /** A name from TIMES or an hour; glides there unless `instant`. */
@@ -251,13 +315,18 @@ export class Graphics {
     this.tod = { hour: h, lit: L('lit'), fog: C('fog'), hor: C('hor'), night: THREE.MathUtils.smoothstep(h, 19.5, 22) };
     const elev = THREE.MathUtils.degToRad(L('elev')), az = THREE.MathUtils.degToRad(L('az'));
     this.sunDir = new THREE.Vector3(Math.sin(az) * Math.cos(elev), Math.sin(elev), Math.cos(az) * Math.cos(elev));
-    this.sun.color.copy(C('sun')); this.sun.intensity = L('sunI');
-    this.hemi.color.copy(C('sky')); this.hemi.groundColor.copy(C('ground')); this.hemi.intensity = L('hemiI');
-    this.skyU.uTop.value.copy(C('top')); this.skyU.uHor.value.copy(C('hor'));
+    const W = WARMTH[this.warmth] || WARMTH.neutral, St = this.style;
+    const tint = (col, hex, k) => (hex ? col.lerp(new THREE.Color(hex), k) : col);
+    this.sun.color.copy(tint(C('sun'), W.sun, 0.3)); this.sun.intensity = L('sunI') * St.sun;
+    this.hemi.color.copy(tint(C('sky'), W.sky, 0.15)); this.hemi.groundColor.copy(C('ground')); this.hemi.intensity = L('hemiI') * St.hemi;
+    this.skyU.uTop.value.copy(tint(C('top'), W.sky, 0.12)); this.skyU.uHor.value.copy(tint(C('hor'), W.sky, 0.2));
+    if (St.sky.soft) this.skyU.uTop.value.lerp(this.skyU.uHor.value, 0.22 * St.sky.soft);
+    this.skyU.uClouds.value = St.sky.clouds;
     this.skyU.uGlow.value.copy(C('glow')); this.skyU.uGlowI.value = L('glowI');
     // the visible sun sits a little lower than the light (so golden-hour shadows stay readable)
     this.skyU.uSunDir.value.copy(this.sunDir).setY(this.sunDir.y * 0.45).normalize();
-    this.scene.fog.color.copy(C('fog'));
+    this.scene.fog.color.copy(tint(C('fog'), W.sky, 0.2));
+    this._applyGrade();
     // the zone overlay is unlit: dim it with the light, so it doesn't glow at dusk
     // interior-mapped windows: how many rooms are lit, how bright the day is
     const gu = this.game.growth && this.game.growth.renderer.glassUniforms;

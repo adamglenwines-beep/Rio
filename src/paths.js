@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { makeRng, clamp } from './noise.js';
 import { BAND } from './terrain.js';
+import { registerStyled } from './style.js';
 
 const P = CONFIG.path;
 
@@ -46,7 +47,7 @@ export class PathNetwork {
     const slab = new THREE.BoxGeometry(1, 1, 1);
     slab.translate(0, -0.5, 0); // origin at the top face, so y = walking surface
     this.slabGeo = slab;
-    this.slabMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true });
+    this.slabMat = registerStyled(new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true }), 'surface');
     this.mesh = null;
     this.previewMat = new THREE.MeshStandardMaterial({ color: '#f39a4a', transparent: true, opacity: 0.85, emissive: '#7a3a10', emissiveIntensity: 0.25 });
     this.preview = null;

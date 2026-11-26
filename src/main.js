@@ -16,6 +16,7 @@ import { Infill } from './infill.js';
 import { UI } from './ui.js';
 import { Graphics } from './gfx.js';
 import { VERSION } from './version.js';
+import { STYLES, applyStyleToMaterials } from './style.js';
 
 // ---- Renderer ---------------------------------------------------------------
 const app = document.getElementById('app');
@@ -69,6 +70,17 @@ game.refreshAccess = (force = false) => {
 game.reset = () => { paths.clear(); zones.clear(); game.growth.clear(); game.refreshAccess(true); };
 game.demo = () => { layDemo(game); game.refreshAccess(true); };
 game.refreshAccess(true);
+/** Switch the whole scene to an art style ('clean' | 'soft' | 'painted'). */
+game.setStyle = (name) => {
+  const st = STYLES[name] || STYLES.clean;
+  game.gfx.setStyle(name);
+  applyStyleToMaterials(st);
+  terrain.setStyle(st);
+  scenery.setStyle(st);
+  game.infill.setStyle(st);
+  game.growth.renderer.setStyle(st, game.growth.live.map((id) => game.growth.buildings[id]));
+};
+game.setStyle(game.gfx.styleName);
 game.ui = new UI(game);
 window.game = game; // handy for poking at things from the browser console
 

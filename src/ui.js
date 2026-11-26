@@ -83,15 +83,19 @@ export class UI {
     panel.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => gfx.setPreset(b.dataset.q)));
     panel.querySelectorAll('[data-r]').forEach((b) => (b.onclick = () => gfx.setResolution(+b.dataset.r)));
     panel.querySelectorAll('[data-t]').forEach((b) => (b.onclick = () => gfx.setTimeOfDay(b.dataset.t)));
+    panel.querySelectorAll('[data-s]').forEach((b) => (b.onclick = () => this.game.setStyle(b.dataset.s)));
+    panel.querySelectorAll('[data-w]').forEach((b) => (b.onclick = () => gfx.setWarmth(b.dataset.w)));
     const sync = () => {
       panel.querySelectorAll('[data-q]').forEach((b) => b.classList.toggle('on', b.dataset.q === gfx.mode));
       panel.querySelectorAll('[data-r]').forEach((b) => b.classList.toggle('on', Math.abs(+b.dataset.r - gfx.resolution) < 0.01));
       panel.querySelectorAll('[data-t]').forEach((b) => b.classList.toggle('on', b.dataset.t === gfx.timeName));
+      panel.querySelectorAll('[data-s]').forEach((b) => b.classList.toggle('on', b.dataset.s === gfx.styleName));
+      panel.querySelectorAll('[data-w]').forEach((b) => b.classList.toggle('on', b.dataset.w === gfx.warmth));
       this.$('set-auto-note').textContent = gfx.mode === 'auto' ? `Auto is using ${gfx.preset.label}` : '';
       this.$('set-fps').textContent = `${Math.round(gfx._fps.fps)} fps · rendering at ${Math.round(gfx.pixelRatio * 100)}% pixel density`;
     };
     gfx.onChange(sync);
-    gfx.timeName = gfx.timeName || 'golden';
+    gfx.timeName = gfx.timeName || 'midday';
     sync();
   }
 

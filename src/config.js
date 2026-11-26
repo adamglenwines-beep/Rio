@@ -124,7 +124,7 @@ export const CONFIG = {
     bloomRadius: 0.5,
     ssaoRadius: 1.6,         // metres (High only)
     ssaoIntensity: 0.7,
-    reflectionStrength: 0.65, // how strongly the harbour mirrors the town (Medium/High)
+    reflectionStrength: 0.5,  // how strongly the harbour mirrors the town (Medium/High)
     reflectionPlane: 0.05,   // height of the mirror (the mean sea surface)
     hazeNear: 90,            // distance haze starts here (m)…
     hazeFar: 800,            // …and reaches its full strength here
