@@ -25,5 +25,12 @@ when a design decision changes.
 - Plain ES modules, Three.js from a CDN via the import map in `index.html`. There is no
   build step. All paths must be relative (the site lives under `/Rio/`).
 - Every tunable number goes in `src/config.js`.
-- It must stay phone- and tablet-friendly: instanced or merged meshes, no per-object
-  draw calls, and watch growth-step and rebuild times.
+- **PC first:** develop and test for a desktop browser with mouse and keyboard. Don't
+  spend effort on phone/touch layouts or tablet performance for now, and don't test on
+  phone-sized viewports or with CPU throttling as a "tablet estimate". Don't deliberately
+  break touch either.
+- Keep **input handling separate from game logic** (input lives in `ui.js`/`camera.js`
+  and calls game APIs; game modules never read pointer or keyboard events), so a tablet
+  port later only needs new input code.
+- Stay efficient anyway: instanced or merged meshes, no per-object draw calls, and watch
+  growth-step and rebuild times on desktop.

@@ -1,6 +1,6 @@
 # Borgo — a cozy Ligurian village builder (prototype)
 
-**▶ Play it live: https://adamglenwines-beep.github.io/Rio/** (works on phones and tablets)
+**▶ Play it live: https://adamglenwines-beep.github.io/Rio/** (made for a desktop browser with mouse and keyboard; touch still works)
 
 ![Postcard view](docs/postcard.jpg)
 
@@ -38,7 +38,7 @@ The first load needs internet access, to fetch Three.js from the CDN.
 
 **No Python?** If you have Node.js, `npx serve .` works too.
 
-### Local version on your phone (same Wi-Fi)
+### Optional: open the local version on another device (same Wi-Fi)
 
 1. Start the server on your computer as above.
 2. On the phone, open the **"On your phone"** address it prints, e.g. `http://192.168.1.23:8000`.

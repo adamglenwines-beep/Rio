@@ -13,7 +13,10 @@ A **cozy 3D city builder** inspired by the Cinque Terre, and Riomaggiore in part
   You adapt to the hill; you don't flatten it.
 - **No roads.** Only pedestrian lanes and stairs. Connectivity is measured in walking
   effort (distance plus climbing), not tiles.
-- **Full 3D** with a freely rotatable camera, playable on desktop, tablet and phone.
+- **Full 3D** with a freely rotatable camera.
+- **Platform: PC first** — a desktop browser with mouse and keyboard. Phones and tablets
+  are a later port: touch input keeps working but isn't being designed or optimised for
+  now. Input handling stays separate from game logic so that port stays easy.
 - **The sea and the harbour** are the town's lifeline.
 
 ### Era
@@ -106,12 +109,16 @@ the colour palette, and the vegetation.
 
 - **Graphics are a major priority.** The current look (low-poly, pastel, flat-shaded) is
   a **placeholder**, and the final **art style is still undecided.**
-- **Target: browser and tablet**, so every effect needs quality settings.
+- **Target: desktop browser** (PC first). Every effect still has Low / Medium / High
+  quality settings, which will matter again for a later tablet port.
 - Reference mood: Riomaggiore, Manarola and Vernazza for form, and Burano and Lake Como
   for colour and mood. Expect saturated pastel facades, green shutters, grey slate roofs,
   dry-stone terraces, and blue-green water.
 - Visual decisions so far: nearly flat slate roofs; tall narrow houses; waterfront houses
   on rough stone bases with arched boat stores; stone stairs and paving.
+- **Openings have real depth**, never flat stickers: boat-store arches are recessed in a
+  thick stone frame, mostly closed by weathered timber double doors, a few open onto a
+  vaulted store with a boat or nets inside; lane archways are vaulted passages.
 
 **Strong yes:**
 - Interior mapping for windows (fake rooms, some lit warm at dusk).
