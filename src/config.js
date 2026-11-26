@@ -116,6 +116,9 @@ export const CONFIG = {
   graphics: {
     autoMinFps: 40,          // Auto steps down if the frame rate stays below this
     autoMinResolution: 0.6,  // …and on Low, lowers the resolution no further than this
+    bloomStrength: 0.22,     // keep it subtle
+    bloomRadius: 0.5,
+    bloomThreshold: 2.2,     // brightness (before tone mapping) above which things glow: the sun, glints, lit windows
   },
 
   // ---- Simulation -----------------------------------------------------------

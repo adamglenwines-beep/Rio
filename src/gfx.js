@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { CONFIG } from './config.js';
 
 // ---- quality presets ------------------------------------------------------------
@@ -149,6 +150,7 @@ export class Graphics {
    */
   _buildPipeline() {
     if (this.composer) { this.composer.dispose(); this.composer = null; }
+    this.bloom = null;
     const P = this.preset;
     if (!P.post) return;
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -161,8 +163,18 @@ export class Graphics {
     c.addPass(new OutputPass());
   }
 
-  /** Effects between the scene render and tone mapping (filled in by later steps). */
-  _addEffects(c) {}
+  /** Effects between the scene render and tone mapping. */
+  _addEffects(c) {
+    const P = this.preset, G = CONFIG.graphics;
+    if (P.bloom > 0) {
+      // only things brighter than a sunlit wall glow: the sun, its glints, lit windows
+      const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), G.bloomStrength, G.bloomRadius, G.bloomThreshold);
+      const setSize = bloom.setSize.bind(bloom);
+      bloom.setSize = (w, h) => setSize(Math.max(1, Math.round(w * P.bloom)), Math.max(1, Math.round(h * P.bloom)));
+      c.addPass(bloom);
+      this.bloom = bloom;
+    }
+  }
 
   _applySize() {
     const pr = Math.min(window.devicePixelRatio || 1, this.preset.pixelRatio) * this.resolution;
