@@ -120,6 +120,11 @@ the colour palette, and the vegetation.
   thick stone frame, mostly closed by weathered timber double doors, a few open onto a
   vaulted store with a boat or nets inside; lane archways are vaulted passages.
 
+**Style test (v0.7):** three candidate styles can be switched live in ⚙️ Settings —
+Clean low-poly, Soft stylised, Hand-painted — plus a Warmth control (cool / neutral /
+warm). Default: neutral midday with a blue sky and sea. Comparison grids are in
+`docs/progress/style-test/`. The final choice is still the user's to make.
+
 **Strong yes:**
 - Interior mapping for windows (fake rooms, some lit warm at dusk).
 - SSAO and contact shadows.
