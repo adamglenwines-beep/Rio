@@ -100,6 +100,17 @@ export const CONFIG = {
     minGround: 0.5,        // lowest ground (m above sea) a house may stand on
   },
 
+  // ---- Infill: life in the leftover spaces -----------------------------------
+  infill: {
+    townRadius: 6,         // free ground within this distance of a house gets decorated
+    plotSize: 5,           // big leftover patches are cut into plots about this wide
+    refreshSeconds: 1.0,   // while the town grows, re-plan infill at most this often
+    frameBudgetMs: 3,      // …spending at most about this long per frame on it
+    coverRadius: 0.8,      // an item counts as covering the ground this far around it
+    // per wall-side cell: chances of bougainvillea, a washing line, a cistern, a flower pot
+    bougainvillea: 0.06, washing: 0.05, cistern: 0.03, pots: 0.22,
+  },
+
   // ---- Simulation -----------------------------------------------------------
   sim: {
     stepsPerSecond: 3,     // growth steps per second at 1x speed

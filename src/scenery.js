@@ -91,10 +91,10 @@ export class Scenery {
   }
 
   /** Rebuild instances, skipping anything on a lane or inside a house. */
-  refresh(growth) {
+  refresh(growth, infill) {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), s = new THREE.Vector3();
     const up = new THREE.Vector3(0, 1, 0), c = new THREE.Color();
-    const free = (x, z) => !growth || growth.occAt(x, z) === -1;
+    const free = (x, z) => (!growth || growth.occAt(x, z) === -1) && !(infill && infill.claimedAt(x, z));
     const stone = new THREE.Color('#a8997f'), vineCol = new THREE.Color('#5d7d33');
 
     let nw = 0, nv = 0;

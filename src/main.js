@@ -12,6 +12,7 @@ import { computeAccess } from './access.js';
 import { Growth } from './growth.js';
 import { layDemo } from './demo.js';
 import { Scenery } from './scenery.js';
+import { Infill } from './infill.js';
 import { UI } from './ui.js';
 
 // ---- Renderer ---------------------------------------------------------------
@@ -65,6 +66,8 @@ scene.add(scenery.group);
 const game = { THREE, scene, camera, renderer, terrain, sea, rig, paths, zones, scenery, speed: 1, access: null };
 game.growth = new Growth(game);
 scene.add(game.growth.group);
+game.infill = new Infill(game);
+scene.add(game.infill.group);
 
 /** Recompute walking effort whenever paths or zones change. */
 let seenPaths = -1, seenZones = -1;
@@ -84,17 +87,22 @@ window.game = game; // handy for poking at things from the browser console
 
 // ---- Frame loop -------------------------------------------------------------
 const clock = new THREE.Clock();
-let elapsed = 0, seenRebuilds = -1, seenSceneryPaths = -1;
+let elapsed = 0, seenRebuilds = -1, seenSceneryPaths = -1, infillTimer = 0;
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   elapsed += dt;
   game.refreshAccess();
   game.growth.update(dt * game.speed);
-  // terraces & trees make way for new lanes and houses
-  if (seenRebuilds !== game.growth.rebuilds || seenSceneryPaths !== paths.version) {
+  // leftover spaces fill with life; terraces & trees make way for lanes, houses and infill
+  // (the infill re-plan is spread over frames, a few ms each, so it never stutters)
+  infillTimer -= dt;
+  if (!game.infill.busy && infillTimer <= 0 &&
+      (seenRebuilds !== game.growth.rebuilds || seenSceneryPaths !== paths.version)) {
     seenRebuilds = game.growth.rebuilds; seenSceneryPaths = paths.version;
-    scenery.refresh(game.growth);
+    infillTimer = CONFIG.infill.refreshSeconds;
+    game.infill.start();
   }
+  if (game.infill.busy && game.infill.work(CONFIG.infill.frameBudgetMs)) scenery.refresh(game.growth, game.infill);
   rig.update(dt);
   sea.update(elapsed);
   game.ui.update(dt);
