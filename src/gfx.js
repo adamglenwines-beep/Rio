@@ -13,6 +13,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { CONFIG } from './config.js';
 
 // ---- quality presets ------------------------------------------------------------
@@ -150,7 +151,7 @@ export class Graphics {
    */
   _buildPipeline() {
     if (this.composer) { this.composer.dispose(); this.composer = null; }
-    this.bloom = null;
+    this.bloom = null; this.ssao = null;
     const P = this.preset;
     if (!P.post) return;
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -166,6 +167,16 @@ export class Graphics {
   /** Effects between the scene render and tone mapping. */
   _addEffects(c) {
     const P = this.preset, G = CONFIG.graphics;
+    if (P.ssao) {
+      // screen-space ambient occlusion (High only: it re-renders depth and normals)
+      const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+      const ao = new GTAOPass(this.scene, this.camera, size.x, size.y);
+      ao.updateGtaoMaterial({ radius: G.ssaoRadius, distanceExponent: 1.5, thickness: 2, scale: 1, samples: 12 });
+      ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
+      ao.blendIntensity = G.ssaoIntensity;
+      c.addPass(ao);
+      this.ssao = ao;
+    }
     if (P.bloom > 0) {
       // only things brighter than a sunlit wall glow: the sun, its glints, lit windows
       const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), G.bloomStrength, G.bloomRadius, G.bloomThreshold);

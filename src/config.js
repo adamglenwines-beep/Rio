@@ -118,6 +118,8 @@ export const CONFIG = {
     autoMinResolution: 0.6,  // …and on Low, lowers the resolution no further than this
     bloomStrength: 0.22,     // keep it subtle
     bloomRadius: 0.5,
+    ssaoRadius: 1.6,         // metres (High only)
+    ssaoIntensity: 0.7,
     bloomThreshold: 2.2,     // brightness (before tone mapping) above which things glow: the sun, glints, lit windows
   },
 

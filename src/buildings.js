@@ -81,11 +81,29 @@ class GeoBuilder {
   }
 
   /** Typed arrays for this builder's triangles, plus per-vertex occlusion params (see step 4). */
-  arrays(b) {
-    const n = this.pos.length;
+  /**
+   * Typed arrays for this builder's triangles, plus baked occlusion params per
+   * vertex: aoParams = (ground height here, how enclosed it is 0..1, unused).
+   * The walls shader darkens walls near the ground, more so in narrow lanes.
+   * `probe(x, z, nx, nz)` returns the enclosure for a wall facing (nx, nz).
+   */
+  arrays(probe, terrain) {
+    const n = this.pos.length, P = this.pos, N = this.nor;
     const ao = new Float32Array(n);
-    for (let i = 0; i < n; i += 3) { ao[i] = b ? b.gMin : 0; ao[i + 1] = 0; ao[i + 2] = 0; }
-    return { pos: new Float32Array(this.pos), nor: new Float32Array(this.nor), col: new Float32Array(this.col), ao };
+    const memo = new Map();
+    for (let i = 0; i < n; i += 3) {
+      const x = P[i], z = P[i + 2], nx = N[i], nz = N[i + 2];
+      const key = Math.round(x * 2) + ',' + Math.round(z * 2) + ',' + Math.round(nx * 4) + ',' + Math.round(nz * 4);
+      let v = memo.get(key);
+      if (!v) {
+        const g = terrain.heightAt(x, z);
+        const enc = Math.abs(N[i + 1]) > 0.7 ? 0 : probe(x, z, nx, nz);   // roofs/terraces: open sky
+        v = [g, enc];
+        memo.set(key, v);
+      }
+      ao[i] = v[0]; ao[i + 1] = v[1]; ao[i + 2] = 0;
+    }
+    return { pos: new Float32Array(P), nor: new Float32Array(N), col: new Float32Array(this.col), ao };
   }
 
   toGeometry() {
@@ -144,6 +162,19 @@ export class BuildingRenderer {
     const lambert = (opts = {}) => new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0, flatShading: true, ...opts });
     const vc = lambert({ vertexColors: true });
     this.massMat = lambert({ vertexColors: true });
+    // Baked ambient occlusion: walls darken toward the ground, more in narrow lanes.
+    // (Cheap: two numbers per vertex, computed once when a house is built.)
+    this.aoUniforms = { uAO: { value: 1 } };
+    this.massMat.onBeforeCompile = (sh) => {
+      sh.uniforms.uAO = this.aoUniforms.uAO;
+      sh.vertexShader = 'attribute vec3 aoParams;\nvarying float vAO;\nuniform float uAO;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        float hAbove = max((modelMatrix * vec4(position, 1.0)).y - aoParams.x, 0.0);
+        float reach = mix(1.8, 7.0, aoParams.y);            // narrow lanes stay dark higher up
+        float k = 1.0 - smoothstep(0.0, reach, hAbove);
+        vAO = 1.0 - uAO * k * mix(0.22, 0.5, aoParams.y);`);
+      sh.fragmentShader = 'varying float vAO;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        diffuseColor.rgb *= vAO;`);
+    };
     this.mass = null;   // the merged walls + roofs mesh
     this.cache = new Map();   // house id → its generated geometry and instances
 
@@ -179,6 +210,22 @@ export class BuildingRenderer {
     p.mesh = m;
     this.group.add(m);
     return m;
+  }
+
+  /**
+   * How enclosed a wall is: walk out from it and see how soon another house's
+   * wall is met (a narrow lane is dark at the bottom, an open piazza isn't).
+   */
+  _enclosure(b, x, z, nx, nz) {
+    const l = Math.hypot(nx, nz);
+    if (l < 1e-3) return 0;
+    nx /= l; nz /= l;
+    const G = this.growth;
+    for (let d = 0.6; d <= 6; d += 0.6) {
+      const o = G.occAt(x + nx * d, z + nz * d);
+      if (o >= 0 && o !== b.id) return 1 - (d - 0.6) / 6;
+    }
+    return 0;
   }
 
   /** Corners of part of an archway house's rectangle, in its local frame. */
@@ -449,7 +496,7 @@ export class BuildingRenderer {
       }
       parts[k] = { n, m: M, c: C };
     }
-    const g = gb.arrays(b);
+    const g = gb.arrays((x, z, nx, nz) => this._enclosure(b, x, z, nx, nz), t);
     return { ver: b.ver, pos: g.pos, nor: g.nor, col: g.col, ao: g.ao, parts };
   }
 
