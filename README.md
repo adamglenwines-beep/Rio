@@ -1,5 +1,7 @@
 # Borgo — a cozy Ligurian village builder (prototype)
 
+**▶ Play it live: https://adamglenwines-beep.github.io/Rio/** (works on phones and tablets)
+
 ![Postcard view](docs/postcard.jpg)
 
 A browser prototype of a city-builder inspired by Riomaggiore and the Cinque Terre.
@@ -13,6 +15,12 @@ and no build step.
 ---
 
 ## Running it
+
+The easiest way is the live link above: nothing to install. The site is published from the
+`main` branch with GitHub Pages, so it always shows the latest approved version. Work in
+progress happens on a separate development branch.
+
+### Running it locally
 
 You need **Python 3** (already on macOS and Linux; on Windows install it from
 python.org or the Microsoft Store). A local server is needed because browsers block
@@ -28,7 +36,7 @@ The first load needs internet access, to fetch Three.js from the CDN.
 
 **No Python?** If you have Node.js, `npx serve .` works too.
 
-### On your phone (same Wi-Fi)
+### Local version on your phone (same Wi-Fi)
 
 1. Start the server on your computer as above.
 2. On the phone, open the **"On your phone"** address it prints, e.g. `http://192.168.1.23:8000`.
