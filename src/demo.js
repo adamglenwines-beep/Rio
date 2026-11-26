@@ -1,0 +1,38 @@
+// ---------------------------------------------------------------------------
+// demo.js — lays out a sample village (paths + zones) so you can see growth
+// without drawing anything yourself. Positions are relative to the ravine,
+// so it adapts if you change the terrain seed.
+// ---------------------------------------------------------------------------
+import { ZONE } from './zones.js';
+
+export function layDemo(game) {
+  const t = game.terrain, h = t.harbour;
+  // a point `dz` metres inland of the harbour, `dx` metres off the ravine line
+  const P = (dz, dx = 0) => { const z = h.z + dz; return { x: t.ravineX(z) + dx, z }; };
+
+  game.reset();
+  const paths = game.paths;
+  // The main street climbing the ravine floor.
+  paths.addPath([{ x: h.x, z: h.z }, P(-14), P(-30), P(-48), P(-66), P(-84), P(-98)]);
+  for (const side of [-1, 1]) {
+    // Stairs climbing each flank from the main street (they zig-zag where steep)…
+    paths.addPath([P(-10), P(-8, side * 16), P(-4, side * 34)]);
+    paths.addPath([P(-40), P(-38, side * 16), P(-34, side * 36)]);
+    paths.addPath([P(-72), P(-70, side * 16), P(-66, side * 34)]);
+    // …and lanes running along the hillside, linking them.
+    paths.addPath([P(-8, side * 16), P(-38, side * 16), P(-70, side * 16), P(-92, side * 14)]);
+    paths.addPath([P(-4, side * 34), P(-34, side * 36), P(-66, side * 34)]);
+  }
+
+  // Homes on both flanks, shops on the harbour floor.
+  const zones = game.zones;
+  for (let dz = -2; dz >= -96; dz -= 3) {
+    for (const side of [-1, 1]) {
+      for (let dx = 5; dx <= 44; dx += 3) {
+        const p = P(dz, side * dx);
+        zones.paint(p.x, p.z, 3.2, ZONE.RES);
+      }
+    }
+  }
+  for (const dz of [0, -5, -10, -16]) { const p = P(dz); zones.paint(p.x, p.z, 7, ZONE.COM); }
+}
