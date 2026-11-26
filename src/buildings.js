@@ -181,6 +181,8 @@ export class BuildingRenderer {
     // Instanced details: geometry + material + whether it casts shadows.
     this.parts = {
       window:  { geo: mergeColoured([[box(1.0, 1.5, 0.08, 0, 0, 0.0), '#f1e9d6'], [box(0.74, 1.24, 0.06, 0, 0, 0.04), '#3a3d44']]), mat: vc, shadow: false },
+      // the glass: an interior-mapped fake room behind every window (see _glassMaterial)
+      glass:   { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, 0.072), mat: this._glassMaterial(), shadow: false },
       shutterOpen:   { geo: mergeColoured([[box(0.42, 1.3, 0.05, -0.68, 0, 0.03), '#ffffff'], [box(0.42, 1.3, 0.05, 0.68, 0, 0.03), '#ffffff']]), mat: lambert(), shadow: false },
       shutterClosed: { geo: mergeColoured([[box(0.8, 1.3, 0.06, 0, 0, 0.07), '#ffffff'], [box(0.8, 0.05, 0.02, 0, 0, 0.11), '#c8c8c8']]), mat: lambert({ vertexColors: true }), shadow: false },
       balcony: { geo: mergeColoured([[box(1.45, 0.14, 0.8, 0, -0.75, 0.4), '#e5dccb'], [box(1.45, 0.08, 0.05, 0, -0.05, 0.78), '#2d2d2d'],
@@ -298,6 +300,81 @@ export class BuildingRenderer {
       gb.face([p[2], p[3], r1], col, side(2));
     }
     gb.face(p, col, [0, -1, 0]);   // the eaves seen from below
+  }
+
+  /**
+   * Interior mapping: a ray from the eye through the glass is traced into a
+   * box-shaped room (back wall, side walls, floor, ceiling) in the window's own
+   * space, so every window shows a little room with depth. By day the rooms are
+   * dim; as evening falls, a growing share light up warm (uLit), bright enough
+   * to bloom. Unlit (MeshBasic) so it costs only the window pixels.
+   */
+  _glassMaterial() {
+    this._gc = new THREE.Color();
+    this.glassUniforms = {
+      uLit: { value: 0 }, uDay: { value: 1 }, uSky: { value: new THREE.Color('#bcd6ea') }, uWarm: { value: new THREE.Color('#ffc07a') },
+    };
+    const m = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+    m.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.glassUniforms);
+      sh.vertexShader = 'varying vec3 vPosL;\nvarying vec3 vCamL;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        mat4 mI = modelMatrix;
+        #ifdef USE_INSTANCING
+          mI = modelMatrix * instanceMatrix;
+        #endif
+        vCamL = (inverse(mI) * vec4(cameraPosition, 1.0)).xyz;
+        vPosL = position;`);
+      sh.fragmentShader = `uniform float uLit, uDay; uniform vec3 uSky, uWarm;
+        varying vec3 vPosL; varying vec3 vCamL;
+        ` + sh.fragmentShader.replace('#include <color_fragment>', `
+        vec3 rnd = vec3(1.0);
+        #if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )
+          rnd = vColor.rgb;
+        #endif
+        // the room, in window space: glass at z = 0.072, room behind it
+        vec3 o = vPosL - vec3(0.0, 0.0, 0.072);
+        vec3 d = normalize(vPosL - vCamL);
+        const vec3 R = vec3(1.3, 1.45, 3.0);       // half-width, half-height (around the window), depth
+        float floorY = -1.55, ceilY = 1.45;
+        float tx = ((d.x > 0.0 ? R.x : -R.x) - o.x) / d.x;
+        float ty = ((d.y > 0.0 ? ceilY : floorY) - o.y) / d.y;
+        float tz = (-R.z - o.z) / min(d.z, -1e-4);
+        float t = min(tx, min(ty, tz));
+        vec3 p = o + d * t;
+        vec3 wall = mix(vec3(0.85, 0.78, 0.64), vec3(0.62, 0.72, 0.70), rnd.g);   // plaster tint
+        vec3 col;
+        float shade;
+        if (t == tz) {            // back wall, with a dark wainscot and a picture
+          col = wall; shade = 0.8;
+          if (p.y < -0.75) col *= 0.6;
+          if (abs(p.x - (rnd.b - 0.5)) < 0.3 && abs(p.y - 0.35) < 0.22) col = vec3(0.35, 0.25, 0.2);
+        } else if (t == tx) {     // side walls
+          col = wall * 0.85; shade = 0.65 + 0.2 * (p.z / R.z + 1.0);
+        } else if (d.y < 0.0) {   // floor: terracotta tiles
+          col = vec3(0.55, 0.32, 0.22) * (0.85 + 0.15 * step(0.5, fract(p.x * 2.0) + fract(p.z * 2.0) - 0.5)); shade = 0.6;
+        } else {                  // ceiling, with dark beams
+          col = vec3(0.9, 0.86, 0.78) * (fract(p.z * 1.4) < 0.2 ? 0.55 : 1.0); shade = 0.9;
+        }
+        col *= shade;
+        // curtain drawn part way across
+        float cur = rnd.b * 0.7;
+        bool curtain = (o.x < -0.37 + cur * 0.74) && rnd.b > 0.35;
+        if (curtain) col = mix(vec3(0.9, 0.86, 0.8), vec3(0.75, 0.3, 0.25), step(0.7, rnd.g)) * 0.9;
+        // light: dim daylight inside, or a warm lamp once this room's light is on
+        float lit = smoothstep(rnd.r, rnd.r + 0.04, uLit);
+        float depthFall = 1.0 - 0.5 * clamp(-p.z / R.z, 0.0, 1.0);
+        vec3 dayL = col * (0.07 + 0.11 * uDay) * depthFall;   // rooms are dim by day (glass reads dark)
+        // lamplight falls off from a ceiling lamp; the lamp itself is bright enough to bloom
+        vec3 lampPos = vec3((rnd.g - 0.5) * 0.8, ceilY - 0.25, -1.4);
+        float near = 1.0 / (1.0 + 0.35 * dot(p - lampPos, p - lampPos));
+        vec3 lampL = col * uWarm * (curtain ? 0.9 : 1.3) * (0.35 + 0.9 * near);
+        if (!curtain && t == ty && d.y > 0.0) lampL += uWarm * 4.0 * smoothstep(0.32, 0.18, length(p.xz - lampPos.xz));
+        vec3 inside = mix(dayL, lampL, lit);
+        // the glass: a faint sky sheen, stronger at grazing angles
+        float fres = pow(1.0 - abs(d.z), 3.0);
+        diffuseColor.rgb = mix(inside, uSky * (0.15 + 0.35 * uDay), (0.08 + 0.45 * fres) * (1.0 - lit * 0.8));`);
+    };
+    return m;
   }
 
   /** Detail meshes too small to matter in a ripply reflection. */
@@ -508,6 +585,10 @@ export class BuildingRenderer {
 
   _window(put, x, y, z, rot, b, rng, closedChance, balcony) {
     put('window', x, y, z, rot, 1, 1, 1, WHITE);
+    // per-window randoms (packed in the instance colour): when its light comes on,
+    // the room's wall colour, and how far its curtain is drawn
+    this._gc.setRGB(rng(), rng(), rng());
+    put('glass', x, y, z, rot, 1, 1, 1, this._gc);
     // a few slightly different shades per house, made once (not per window)
     if (!b.shutterShades) b.shutterShades = [-0.025, 0, 0.025].map((k) => b.shutter.clone().offsetHSL(0, 0, k));
     const shut = b.shutterShades[(rng() * 3) | 0];

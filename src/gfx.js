@@ -259,6 +259,13 @@ export class Graphics {
     this.skyU.uSunDir.value.copy(this.sunDir).setY(this.sunDir.y * 0.45).normalize();
     this.scene.fog.color.copy(C('fog'));
     // the zone overlay is unlit: dim it with the light, so it doesn't glow at dusk
+    // interior-mapped windows: how many rooms are lit, how bright the day is
+    const gu = this.game.growth && this.game.growth.renderer.glassUniforms;
+    if (gu) {
+      gu.uLit.value = L('lit');
+      gu.uDay.value = THREE.MathUtils.clamp(L('sunI') / 3.2, 0, 1);
+      gu.uSky.value.copy(C('hor'));
+    }
     const zm = this.game.zones && this.game.zones.material;
     if (zm) zm.color.setScalar(THREE.MathUtils.clamp(L('sunI') / 3.2 * 0.75 + L('hemiI') / 1.5 * 0.25, 0.12, 1));
     this.renderer.toneMappingExposure = L('exp');

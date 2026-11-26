@@ -133,6 +133,11 @@ the colour palette, and the vegetation.
 - DLSS/FSR. Use lower-resolution rendering on weak devices instead.
 - Subsurface scattering, and hair and fur shaders.
 
+**Status:** the first graphics pass below is in (quality presets with Auto and resolution
+scaling; time of day; antialiasing; bloom; soft shadows with baked AO on all presets and
+SSAO on High; harbour reflections on Medium/High; distance haze; interior-mapped windows
+that light up at dusk). The houses' shapes and colours are unchanged.
+
 **Suggested first graphics pass, in order:**
 1. antialiasing;
 2. bloom;

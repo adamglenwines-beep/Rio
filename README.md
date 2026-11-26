@@ -60,6 +60,7 @@ The first load needs internet access, to fetch Three.js from the CDN.
 | ▶ ▶▶ ▶▶▶ | Growth speed (❚❚ pauses). |
 | 📷 **Postcard** | Glide to the classic view from the water. |
 | ⛰️ **Slopes** | Shows the slope bands: green flat, yellow moderate, orange steep, red cliff (nothing grows there). |
+| ⚙️ **Settings** | Quality (Auto / Low / Medium / High), render resolution, and time of day (Midday, Golden hour, Dusk, Night). Remembered between visits. |
 | ✨ **Demo** | Lays out a sample village (paths + zones). Press ▶▶▶ and watch it grow. |
 | ↺ **Reset** | Clears everything. |
 
@@ -86,7 +87,8 @@ The first load needs internet access, to fetch Three.js from the CDN.
 | `src/buildings.js` | Low-poly houses from footprint polygons: walls, roofs, stone bases, windows, shutters… |
 | `src/scenery.js` | Dry-stone terraces, vines and trees |
 | `src/demo.js` | The sample village layout |
-| `src/ui.js` | Tools, touch/mouse handling, hints |
+| `src/gfx.js` | Lights, sky, time of day, quality presets, effects (antialiasing, bloom, AO, reflections, haze) |
+| `src/ui.js` | Tools, touch/mouse handling, hints, settings panel |
 
 ### How the town grows
 
@@ -133,7 +135,8 @@ The look is tuned mainly through `src/config.js`:
 - `harbour`: quay, piazza, slipway, the waterfront's slim tall houses and stone bases;
 - `path`: lane width, setback, the band reserved along lanes, archways;
 - `building`: sizes, storeys, roof pitch;
-- `infill`: how far from houses to decorate, plot size, wall-side extras, per-frame time budget.
+- `infill`: how far from houses to decorate, plot size, wall-side extras, per-frame time budget;
+- `graphics`: Auto's frame-rate floor, bloom, ambient occlusion, reflection and haze strengths.
 
 `docs/progress/` holds before/after screenshots for each tuning step.
 
