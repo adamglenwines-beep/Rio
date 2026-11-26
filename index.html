@@ -25,8 +25,9 @@
     #topbar { position: fixed; top: max(10px, env(safe-area-inset-top)); left: 10px; right: 10px;
       display: flex; gap: 8px; align-items: center; justify-content: space-between; pointer-events: none; }
     #topbar > * { pointer-events: auto; }
-    #title { padding: 8px 14px; font-weight: 800; letter-spacing: .5px; }
+    #title { padding: 8px 14px; font-weight: 800; letter-spacing: .5px; white-space: nowrap; }
     #title small { font-weight: 600; opacity: .65; margin-left: 6px; }
+    #version { white-space: nowrap; font-size: 11px; font-weight: 700; margin-left: 8px; padding: 2px 6px; border-radius: 8px; background: var(--paper-2); }
     #speed { display: flex; padding: 4px; gap: 2px; }
 
     #hint { position: fixed; left: 50%; transform: translateX(-50%);
@@ -77,6 +78,8 @@
 
     @media (max-width: 520px) {
       #title small { display: none; }
+      #title { padding: 8px 10px; }
+      #speed button { min-width: 32px; padding: 4px 4px; }
       button { min-width: 50px; }
       button .l { font-size: 10px; }
       #stats { font-size: 12px; bottom: auto; top: calc(max(10px, env(safe-area-inset-top)) + 54px); }
@@ -104,7 +107,7 @@
   <div id="loading">Building the cove…</div>
 
   <div id="topbar">
-    <div id="title" class="panel">Borgo<small>a Ligurian village</small></div>
+    <div id="title" class="panel">Borgo<small>a Ligurian village</small><span id="version"></span></div>
     <div id="speed" class="panel">
       <button data-speed="0" title="Pause">❚❚</button>
       <button data-speed="1" title="Play">▶</button>

@@ -4,10 +4,17 @@
 when a design decision changes.
 
 ## Workflow
-- Work on a **dev branch**. Merge into `main` only when the user explicitly approves a
-  round. `main` is published live at https://adamglenwines-beep.github.io/Rio/
-  (GitHub Pages, repo root), so it must always be an approved version.
-- Commit and push after each step of a round, so any step can be rolled back.
+- Work on a **dev branch** during a round. Commit and push after each step, so any step
+  can be rolled back.
+- **At the end of every round, publish it — don't wait for approval:**
+  1. Bump the label in `src/version.js` (e.g. `v0.6 · Quarry`). It shows in the title
+     pill, top left of the game.
+  2. Merge the dev branch into `main` and push `main`.
+  3. Wait for the GitHub Pages deployment ("pages build and deployment" run) for that
+     commit to finish successfully.
+  4. Give the user the live link https://adamglenwines-beep.github.io/Rio/ and the
+     version label they should see (a hard refresh may be needed if they see the old one).
+- If the user dislikes a round, they can ask to roll `main` back to an earlier version.
 - For visual changes, take before/after screenshots (postcard, aerial, and close-ups
   relevant to the change) and keep comparison images in `docs/progress/`.
 - At the end of a round, report what got worse and what you'd tune next.

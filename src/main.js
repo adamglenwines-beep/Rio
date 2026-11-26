@@ -15,6 +15,7 @@ import { Scenery } from './scenery.js';
 import { Infill } from './infill.js';
 import { UI } from './ui.js';
 import { Graphics } from './gfx.js';
+import { VERSION } from './version.js';
 
 // ---- Renderer ---------------------------------------------------------------
 const app = document.getElementById('app');
@@ -112,3 +113,5 @@ function fitCamera() {
 }
 addEventListener('resize', fitCamera);
 document.getElementById('loading').remove();
+document.getElementById('version').textContent = VERSION;
+console.log('Borgo', VERSION);
