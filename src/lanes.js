@@ -56,6 +56,7 @@ export class Lanes {
     this._addCapsule([lay.slipX, lay.slipZ0], [lay.slipX, lay.slipZ1], lay.slipW / 2 + 0.4, -1);
     this._findCrossings();
     this._findForks();
+    this.reserved = this.forkReserved();
     const maxRank = Math.max(1, ...this.lanes.filter((l) => l.kind !== 'quay').map((l) => l.rank));
     for (const l of this.lanes) l.rankNorm = l.kind === 'quay' ? 1.2 : l.rank / maxRank;
   }
@@ -124,24 +125,31 @@ export class Lanes {
             const angle = Math.acos(Math.max(-1, Math.min(1, dot(mul(ta, da), mul(tb, db)))));
             if (angle > maxA || angle < 0.15) continue;
             if (this.forks.some((f) => dist(f.p, p) < 2)) continue;
-            this.forks.push({
+            const f = {
               p, angle,
               a: { lane: L[i], side: sa, s: la.S[a] + t * dist(A0, A1), dir: da },
               b: { lane: L[j], side: sb, s: lb.S[b] + u * dist(B0, B1), dir: db },
-            });
+            };
+            // the tip: a triangle reaching forkReserve metres along both frontage lines
+            const R = CONFIG.path.forkReserve;
+            f.tip = [p, this.at(la, f.a.s + da * R).p, this.at(lb, f.b.s + db * R).p];
+            this.forks.push(f);
           }
         }
       }
     }
   }
 
-  /** Stretches of frontage kept for fork-tip buildings, as { key: [[s0, s1], …] }. */
+  /** A stable name for a fork (its tip position), so growth can remember which are built. */
+  static forkKey(f) { return f.p[0].toFixed(1) + ',' + f.p[1].toFixed(1); }
+
+  /** Stretches of frontage kept for fork-tip buildings, as { key: [[s0, s1, forkKey], …] }. */
   forkReserved() {
     const out = {}, R = CONFIG.path.forkReserve;
     for (const f of this.forks) for (const e of [f.a, f.b]) {
       const key = e.lane.name + ':' + e.side;
       const s0 = e.dir > 0 ? e.s : e.s - R, s1 = e.dir > 0 ? e.s + R : e.s;
-      (out[key] = out[key] || []).push([s0, s1]);
+      (out[key] = out[key] || []).push([s0, s1, Lanes.forkKey(f)]);
     }
     return out;
   }

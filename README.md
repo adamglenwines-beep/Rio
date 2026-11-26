@@ -14,6 +14,8 @@ and no build step.
 
 ---
 
+See **`DESIGN.md`** for the game's overall vision.
+
 ## Running it
 
 The easiest way is the live link above: nothing to install. The site is published from the
@@ -80,6 +82,7 @@ The first load needs internet access, to fetch Three.js from the CDN.
 | `src/lanes.js` | Lanes as the town's skeleton: frontage lines, lane ranking, the no-overlap rule |
 | `src/geom.js` | Small 2D polygon helpers |
 | `src/growth.js` | **The growth simulation** (placement, scoring, storeys) |
+| `src/infill.js` | Decorates leftover spaces: gardens, piazzette, rocks, pots, washing lines… |
 | `src/buildings.js` | Low-poly houses from footprint polygons: walls, roofs, stone bases, windows, shutters… |
 | `src/scenery.js` | Dry-stone terraces, vines and trees |
 | `src/demo.js` | The sample village layout |
@@ -106,6 +109,16 @@ laid out from the lanes inward, the way real hill towns are:
   built across a lane, always with full headroom.
 - Only houses with no lane nearby fall back to facing downhill.
 
+- **Sharp forks** get a narrow **pointed building** fronting both lanes. If even that won't
+  fit, the fork tip is left for a little piazzetta or a shrine.
+- **Leftover spaces are never bare** (`src/infill.js`). Gaps are measured by size, width,
+  slope and position, and filled with small life:
+  - planters and short dry-stone walls in slivers;
+  - orti, lemon and fig trees, patios with pergolas, and sheds in patches;
+  - piazzette with a fountain or shrine at forks;
+  - rocks, agave and prickly pear on rocky ground;
+  - pots, bougainvillea, cisterns and washing lines against walls.
+
 Floors are counted from the **uphill** ground and walls go down to the lowest ground, so
 downhill facades are taller. Along the harbour front, footprints are slimmer, houses reach
 up to 8 storeys, and they stand on **rough stone bases**, many with an arched boat store
@@ -119,7 +132,8 @@ The look is tuned mainly through `src/config.js`:
 - `slope`: the slope bands (moderate < 33°, steep < 42°, cliff above);
 - `harbour`: quay, piazza, slipway, the waterfront's slim tall houses and stone bases;
 - `path`: lane width, setback, the band reserved along lanes, archways;
-- `building`: sizes, storeys, roof pitch.
+- `building`: sizes, storeys, roof pitch;
+- `infill`: how far from houses to decorate, plot size, wall-side extras, per-frame time budget.
 
 `docs/progress/` holds before/after screenshots for each tuning step.
 

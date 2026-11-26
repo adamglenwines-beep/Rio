@@ -239,6 +239,55 @@ export class Growth {
     return this._sizeFor(this.terrain.bandAt(p[0], p[1]), kind, p[0], p[1]);
   }
 
+  /** Stretches of a frontage line already taken by houses, or kept for a fork-tip building. */
+  _frontList(key) {
+    const list = this.front.get(key) || [];
+    const res = (this.lanes.reserved || {})[key];
+    if (!res) return list;
+    // once a fork's pointed building stands, the rest of its reservation is released
+    const built = new Set(this.live.map((id) => this.buildings[id].forkKey).filter(Boolean));
+    return list.concat(res.filter((r) => !built.has(r[2])).map(([s0, s1]) => ({ s0, s1, id: -1 })));
+  }
+
+  /**
+   * FORK TIP: where two lanes meet at a sharp angle, a narrow pointed (flatiron)
+   * building fronting both lanes. Its two front walls run along both frontage
+   * lines from the tip; its side walls run straight into the block and meet in a
+   * back corner. It fronts the busier lane.
+   */
+  _forkVariants() {
+    const r = this.rng, L = this.lanes;
+    const forks = (L.forks || []).filter((f) => f.a.lane.kind !== 'quay' && f.b.lane.kind !== 'quay');
+    if (!forks.length) return [];
+    const f = r.pick(forks);
+    // A = the busier lane (the main front), B = the other
+    const [A, Bf] = f.a.lane.rank >= f.b.lane.rank ? [f.a, f.b] : [f.b, f.a];
+    const la = A.lane.lines[A.side], lb = Bf.lane.lines[Bf.side];
+    const out = [];
+    const R = CONFIG.path.forkReserve;
+    for (const [lA, lB] of [[R, R], [R * 0.8, R], [R, R * 0.8], [R * 0.65, R * 0.65]]) {
+      const sa1 = A.s + A.dir * lA, sb1 = Bf.s + Bf.dir * lB;
+      if (sa1 < 0 || sa1 > la.total || sb1 < 0 || sb1 > lb.total) continue;
+      const a = L.at(la, sa1), b = L.at(lb, sb1);
+      // side walls square to each lane, meeting at the back corner
+      const den = a.n[0] * b.n[1] - a.n[1] * b.n[0];
+      if (Math.abs(den) < 1e-6) continue;
+      const w = sub(b.p, a.p);
+      const t = (w[0] * b.n[1] - w[1] * b.n[0]) / den, u = (w[0] * a.n[1] - w[1] * a.n[0]) / den;
+      if (t < 1.5 || u < 1.5 || t > 10 || u > 10) continue;
+      const m = add(a.p, mul(a.n, t));
+      const tipP = f.p;
+      const corners = [tipP, a.p, m, b.p];
+      const keyA = A.lane.name + ':' + A.side, keyB = Bf.lane.name + ':' + Bf.side;
+      out.push({
+        corners, type: 'front', flatiron: true, forkKey: Lanes.forkKey(f), rankNorm: A.lane.rankNorm,
+        frontage: { name: A.lane.name, side: A.side, s0: Math.min(A.s, sa1), s1: Math.max(A.s, sa1), key: keyA },
+        frontage2: { name: Bf.lane.name, side: Bf.side, s0: Math.min(Bf.s, sb1), s1: Math.max(Bf.s, sb1), key: keyB },
+      });
+    }
+    return out;
+  }
+
   /**
    * FRONTAGE: a house along a lane. Either extends an existing row along the
    * same frontage line (sharing its side wall), or starts a new one.
@@ -263,7 +312,7 @@ export class Growth {
     }
     const line = lane.lines[side];
     const key = lane.name + ':' + side;
-    const list = this.front.get(key) || [];
+    const list = this._frontList(key);
     if (list.some((iv) => start > iv.s0 + 0.01 && start < iv.s1 - 0.01)) return [];
     // a new row snaps onto the end of a row just behind it, so no sliver is left
     for (const iv of list) if (dir > 0 && start - iv.s1 > 0 && start - iv.s1 < 2.6) start = iv.s1;
@@ -434,7 +483,7 @@ export class Growth {
     for (const shift of [0, 0.6, -0.6]) {                 // the stair may sit a little off-centre
       const s0 = x.s + shift - span / 2, s1 = s0 + span;
       if (s0 < 0 || s1 > line.total) continue;
-      if ((this.front.get(key) || []).some((iv) => iv.s1 > s0 + 0.01 && iv.s0 < s1 - 0.01)) continue;
+      if (this._frontList(key).some((iv) => iv.s1 > s0 + 0.01 && iv.s0 < s1 - 0.01)) continue;
       const A = L.at(line, s0), Bp = L.at(line, s1), M = L.at(line, (s0 + s1) / 2);
       const theta = Math.atan2(-M.n[0], -M.n[1]);         // facing the lane
       const fx = Math.sin(theta), fz = Math.cos(theta);
@@ -466,7 +515,7 @@ export class Growth {
     if (s0 < 0 || s1 > l1.total) return [];
     const k2 = l2.total / l1.total, t0 = s0 * k2, t1 = s1 * k2;       // the matching stretch opposite
     const k1 = lane.name + ':1', km = lane.name + ':-1';
-    const busy = (key, a, b) => (this.front.get(key) || []).some((iv) => iv.s1 > a + 0.01 && iv.s0 < b - 0.01);
+    const busy = (key, a, b) => this._frontList(key).some((iv) => iv.s1 > a + 0.01 && iv.s0 < b - 0.01);
     if (busy(k1, s0, s1) || busy(km, t0, t1)) return [];
     const A = L.at(l1, s0), Bp = L.at(l1, s1), M = L.at(l1, s);
     const across = 2 * laneRadius() + 2 * (CONFIG.path.archMinPier + 0.9);
@@ -505,6 +554,10 @@ export class Growth {
       return (c.why = 'occupied', false);
     });
     if (!free) return (c.why = 'occupied', false);
+    // sharp fork tips are kept for pointed buildings (or for infill)
+    if (!c.flatiron) for (const f of this.lanes.forks || []) {
+      if (convexOverlap(q, f.tip) > 0.05) return (c.why = 'fork tip', false);
+    }
     // exact check against nearby houses (the grid can miss thin slivers)
     for (const id of this.live) {
       const o = this.buildings[id];
@@ -552,7 +605,7 @@ export class Growth {
       if (c.minFloors > 6) return (c.why = 'archway too tall', false);
     }
     // only small houses on steep ground (wedges are gap-fillers, so exempt)
-    if (c.band === BAND.STEEP && c.type !== 'wedge' && (c.w > B.width.steep[1] + 0.8 || c.d > B.depth.steep[1] + 0.8)) return (c.why = 'too big for steep ground', false);
+    if (c.band === BAND.STEEP && c.type !== 'wedge' && !c.flatiron && (c.w > B.width.steep[1] + 0.8 || c.d > B.depth.steep[1] + 0.8)) return (c.why = 'too big for steep ground', false);
     c.gMin = gMin; c.gMax = gMax;
     c.effort = effSum / effN;
     return true;
@@ -635,6 +688,7 @@ export class Growth {
     if (c.type === 'front') s += 1.0 + 0.6 * c.rankNorm;   // lanes first; main lanes before side lanes
     else s += 0.6 * touch.lane;
     if (c.type === 'wedge') s += 0.8;             // close gaps
+    if (c.flatiron) s += 3;                       // fork tips first
     if (c.filled) s += 0.5;                       // lots that reach the back of the block
     if (c.type === 'arch') s += c.frontage ? 1.4 + 0.6 * c.rankNorm : 0.4;   // archway houses front their lane too
     if (c.kind === ZONE.COM && c.band === BAND.FLAT) s += 1.0;
@@ -662,6 +716,7 @@ export class Growth {
       fails: 0,
     });
     if (b.arch) b.floors = Math.max(b.floors, b.minFloors);
+    if (b.flatiron) b.roof = r() < 0.5 ? 'hip' : 'flat';   // a ridge along a wedge looks odd
     this.buildings.push(b);
     this.live.push(id);
     for (const F of [b.frontage, b.frontage2]) {
@@ -714,7 +769,9 @@ export class Growth {
     for (let k = 0; k < tries; k++) {
       let variants, parent = null;
       const roll = r();
-      if (!this.live.length || roll < 0.4) {
+      if (roll < 0.04) {
+        variants = this._forkVariants();
+      } else if (!this.live.length || roll < 0.4) {
         variants = this._frontageVariants();
       } else {
         // pick a building that still has free sides (the growth "frontier")
