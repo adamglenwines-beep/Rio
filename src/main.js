@@ -14,11 +14,11 @@ import { layDemo } from './demo.js';
 import { Scenery } from './scenery.js';
 import { Infill } from './infill.js';
 import { UI } from './ui.js';
+import { Graphics } from './gfx.js';
 
 // ---- Renderer ---------------------------------------------------------------
 const app = document.getElementById('app');
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // cap for phones
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -26,25 +26,10 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.12;
 app.appendChild(renderer.domElement);
 
-// ---- Scene, sky and light ---------------------------------------------------
+// ---- Scene, lights, sky, quality settings and time of day (see gfx.js) --------
 const scene = new THREE.Scene();
-const skyTop = new THREE.Color('#3f97d6'), skyHorizon = new THREE.Color('#cfe7f2');
-scene.background = makeSkyTexture(skyTop, skyHorizon);
-scene.fog = new THREE.Fog(skyHorizon, 260, 720);
-
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 2000);
-
-scene.add(new THREE.HemisphereLight('#e6f4ff', '#9a8466', 1.55));
-// Warm afternoon sun from the sea side, so the facades facing the water glow.
-const sun = new THREE.DirectionalLight('#fff0d4', 2.9);
-sun.position.set(110, 140, 120);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-const sc = sun.shadow.camera;
-sc.left = -130; sc.right = 130; sc.top = 130; sc.bottom = -130; sc.near = 10; sc.far = 450;
-sun.shadow.bias = -0.0006;
-sun.shadow.normalBias = 0.4;
-scene.add(sun, sun.target);
+camera.layers.enableAll();
 
 // ---- World ------------------------------------------------------------------
 const terrain = new Terrain(CONFIG.seed);
@@ -64,6 +49,7 @@ const scenery = new Scenery(terrain);
 scene.add(scenery.group);
 
 const game = { THREE, scene, camera, renderer, terrain, sea, rig, paths, zones, scenery, speed: 1, access: null };
+game.gfx = new Graphics(game, renderer, scene, camera);
 game.growth = new Growth(game);
 scene.add(game.growth.group);
 game.infill = new Infill(game);
@@ -90,6 +76,10 @@ const clock = new THREE.Clock();
 let elapsed = 0, seenRebuilds = -1, seenSceneryPaths = -1, infillTimer = 0;
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
+  game.renderFrame(dt);
+}
+/** One frame: simulate, update, draw (also used by tests to time frames). */
+game.renderFrame = (dt) => {
   elapsed += dt;
   game.refreshAccess();
   game.growth.update(dt * game.speed);
@@ -106,8 +96,9 @@ function frame() {
   rig.update(dt);
   sea.update(elapsed);
   game.ui.update(dt);
-  renderer.render(scene, camera);
-}
+  game.gfx.update(dt);
+  game.gfx.render();
+};
 renderer.setAnimationLoop(frame);
 
 /** Tall phone screens get a wider lens so the cove still fits side to side. */
@@ -117,22 +108,7 @@ function fitCamera() {
   const vfov = 2 * Math.atan(Math.tan(minHFov / 2) / camera.aspect) * 180 / Math.PI;
   camera.fov = THREE.MathUtils.clamp(vfov, 45, 62);
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  if (window.game && window.game.gfx) window.game.gfx.resize(); else renderer.setSize(innerWidth, innerHeight);
 }
 addEventListener('resize', fitCamera);
 document.getElementById('loading').remove();
-
-// A vertical gradient for the sky.
-function makeSkyTexture(top, horizon) {
-  const c = document.createElement('canvas');
-  c.width = 2; c.height = 256;
-  const g = c.getContext('2d');
-  const grad = g.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, '#' + top.getHexString());
-  grad.addColorStop(0.75, '#' + horizon.getHexString());
-  grad.addColorStop(1, '#' + horizon.getHexString());
-  g.fillStyle = grad; g.fillRect(0, 0, 2, 256);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}

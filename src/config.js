@@ -111,6 +111,13 @@ export const CONFIG = {
     bougainvillea: 0.06, washing: 0.05, cistern: 0.03, pots: 0.22,
   },
 
+  // ---- Graphics ---------------------------------------------------------------
+  // (presets and time-of-day keyframes live in gfx.js)
+  graphics: {
+    autoMinFps: 40,          // Auto steps down if the frame rate stays below this
+    autoMinResolution: 0.6,  // …and on Low, lowers the resolution no further than this
+  },
+
   // ---- Simulation -----------------------------------------------------------
   sim: {
     stepsPerSecond: 3,     // growth steps per second at 1x speed

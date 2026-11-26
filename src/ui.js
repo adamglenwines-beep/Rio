@@ -43,6 +43,7 @@ export class UI {
     this.$('btn-demo').onclick = () => { game.demo(); this.toast('Demo village laid out — press ▶▶ and watch it grow'); };
     this.$('btn-reset').onclick = () => { game.reset(); this.cancelDraft(); this.toast('Cleared'); };
     this.$('btn-path-done').onclick = () => this.finishPath();
+    this._initSettings();
     this.$('btn-path-undo').onclick = () => { this.draft.pop(); this.updateDraft(); };
 
     // ---- 3D helpers: brush ring and path waypoint pins ----
@@ -69,6 +70,29 @@ export class UI {
 
     this.setTool('view');
     this.setSpeed(1);
+  }
+
+  // ---- graphics settings panel ---------------------------------------------
+
+  _initSettings() {
+    const gfx = this.game.gfx, panel = this.$('settings');
+    this.$('btn-settings').onclick = () => {
+      panel.hidden = !panel.hidden;
+      this.$('btn-settings').classList.toggle('on', !panel.hidden);
+    };
+    panel.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => gfx.setPreset(b.dataset.q)));
+    panel.querySelectorAll('[data-r]').forEach((b) => (b.onclick = () => gfx.setResolution(+b.dataset.r)));
+    panel.querySelectorAll('[data-t]').forEach((b) => (b.onclick = () => gfx.setTimeOfDay(b.dataset.t)));
+    const sync = () => {
+      panel.querySelectorAll('[data-q]').forEach((b) => b.classList.toggle('on', b.dataset.q === gfx.mode));
+      panel.querySelectorAll('[data-r]').forEach((b) => b.classList.toggle('on', Math.abs(+b.dataset.r - gfx.resolution) < 0.01));
+      panel.querySelectorAll('[data-t]').forEach((b) => b.classList.toggle('on', b.dataset.t === gfx.timeName));
+      this.$('set-auto-note').textContent = gfx.mode === 'auto' ? `Auto is using ${gfx.preset.label}` : '';
+      this.$('set-fps').textContent = `${Math.round(gfx._fps.fps)} fps · rendering at ${Math.round(gfx.pixelRatio * 100)}% pixel density`;
+    };
+    gfx.onChange(sync);
+    gfx.timeName = gfx.timeName || 'golden';
+    sync();
   }
 
   // ---- tools ----------------------------------------------------------------
