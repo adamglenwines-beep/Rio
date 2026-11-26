@@ -16,6 +16,33 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { CONFIG } from './config.js';
 
+// ---- distance haze ---------------------------------------------------------------
+// Three's fog, reshaped for an atmosphere: it thickens smoothly with distance and
+// is densest near sea level, thinning up the hillsides. The colour follows the
+// time of day (scene.fog.color). Patched once, before any material compiles.
+{
+  const H = CONFIG.graphics;
+  THREE.ShaderChunk.fog_pars_vertex = '#ifdef USE_FOG\n varying float vFogDepth;\n varying float vFogY;\n#endif';
+  THREE.ShaderChunk.fog_vertex = `#ifdef USE_FOG
+    vFogDepth = - mvPosition.z;
+    vFogY = (vec4(mvPosition.xyz - viewMatrix[3].xyz, 0.0) * viewMatrix).y;   // world height
+  #endif`;
+  THREE.ShaderChunk.fog_pars_fragment = `#ifdef USE_FOG
+    uniform vec3 fogColor; varying float vFogDepth; varying float vFogY;
+    #ifdef FOG_EXP2
+      uniform float fogDensity;
+    #else
+      uniform float fogNear; uniform float fogFar;
+    #endif
+  #endif`;
+  THREE.ShaderChunk.fog_fragment = `#ifdef USE_FOG
+    float fogT = clamp((vFogDepth - fogNear) / (fogFar - fogNear), 0.0, 1.0);
+    float fogFactor = 1.0 - exp(-${H.hazeDensity.toFixed(2)} * fogT * fogT);
+    fogFactor *= mix(${H.hazeHighFactor.toFixed(2)}, 1.0, exp(-max(vFogY, 0.0) / ${H.hazeFalloff.toFixed(1)}));
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, clamp(fogFactor, 0.0, 1.0));
+  #endif`;
+}
+
 // ---- quality presets ------------------------------------------------------------
 export const PRESETS = {
   low:    { label: 'Low',    pixelRatio: 1.0, post: false, msaa: 0, bloom: 0,   shadowSize: 1024, shadowSoft: false, ssao: false, reflection: 0,    haze: true },
@@ -83,7 +110,7 @@ export class Graphics {
     this.sky.renderOrder = -1;
     scene.add(this.sky);
     scene.background = null;
-    scene.fog = new THREE.Fog('#cfe7f2', 260, 720);
+    scene.fog = new THREE.Fog('#cfe7f2', CONFIG.graphics.hazeNear, CONFIG.graphics.hazeFar);
 
     this._fps = { t: 0, frames: 0, slow: 0, cooldown: 3, fps: 60 };
     this._shadowTimer = 0;
@@ -231,6 +258,9 @@ export class Graphics {
     // the visible sun sits a little lower than the light (so golden-hour shadows stay readable)
     this.skyU.uSunDir.value.copy(this.sunDir).setY(this.sunDir.y * 0.45).normalize();
     this.scene.fog.color.copy(C('fog'));
+    // the zone overlay is unlit: dim it with the light, so it doesn't glow at dusk
+    const zm = this.game.zones && this.game.zones.material;
+    if (zm) zm.color.setScalar(THREE.MathUtils.clamp(L('sunI') / 3.2 * 0.75 + L('hemiI') / 1.5 * 0.25, 0.12, 1));
     this.renderer.toneMappingExposure = L('exp');
     this._fitShadow(true);
     for (const fn of this.listeners) if (fn.onTime) fn.onTime(this.tod);

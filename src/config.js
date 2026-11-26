@@ -122,6 +122,11 @@ export const CONFIG = {
     ssaoIntensity: 0.7,
     reflectionStrength: 0.65, // how strongly the harbour mirrors the town (Medium/High)
     reflectionPlane: 0.05,   // height of the mirror (the mean sea surface)
+    hazeNear: 90,            // distance haze starts here (m)…
+    hazeFar: 800,            // …and reaches its full strength here
+    hazeDensity: 1.7,        // how thick it gets at hazeFar
+    hazeFalloff: 45,         // it thins with height over this many metres…
+    hazeHighFactor: 0.35,    // …to this fraction on the hilltops
     bloomThreshold: 2.2,     // brightness (before tone mapping) above which things glow: the sun, glints, lit windows
   },
 
