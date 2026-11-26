@@ -55,6 +55,7 @@ export class Lanes {
     this._addCapsule([lay.x, lay.piazzaZ], [lay.x, lay.piazzaZ], lay.piazzaR, -1);
     this._addCapsule([lay.slipX, lay.slipZ0], [lay.slipX, lay.slipZ1], lay.slipW / 2 + 0.4, -1);
     this._findCrossings();
+    this._findForks();
     const maxRank = Math.max(1, ...this.lanes.filter((l) => l.kind !== 'quay').map((l) => l.rank));
     for (const l of this.lanes) l.rankNorm = l.kind === 'quay' ? 1.2 : l.rank / maxRank;
   }
@@ -93,6 +94,58 @@ export class Lanes {
    * archway house fronting this lane with the side lane tunnelling under it.
    * line.crossings = [{ s, lane, sin }] (sin = sine of the crossing angle).
    */
+  /**
+   * Sharp forks: places where the frontage lines of two lanes cross at a sharp
+   * angle. The wedge between them (on the away-from-lane side of both) is the
+   * fork tip. this.forks = [{ p, angle, a: {lane, side, s, dir}, b: {…} }],
+   * where `dir` is +1/-1 along that line's arclength, pointing into the wedge.
+   */
+  _findForks() {
+    this.forks = [];
+    const maxA = CONFIG.path.forkMaxAngle * Math.PI / 180;
+    const L = this.lanes.filter((l) => l.connected);
+    for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
+      for (const sa of [1, -1]) for (const sb of [1, -1]) {
+        const la = L[i].lines[sa], lb = L[j].lines[sb];
+        for (let a = 0; a + 1 < la.O.length; a++) {
+          const A0 = la.O[a], A1 = la.O[a + 1], ra = sub(A1, A0);
+          for (let b = 0; b + 1 < lb.O.length; b++) {
+            const B0 = lb.O[b], B1 = lb.O[b + 1], rb = sub(B1, B0);
+            const den = ra[0] * rb[1] - ra[1] * rb[0];
+            if (Math.abs(den) < 1e-9) continue;
+            const w = sub(B0, A0);
+            const t = (w[0] * rb[1] - w[1] * rb[0]) / den, u = (w[0] * ra[1] - w[1] * ra[0]) / den;
+            if (t < 0 || t > 1 || u < 0 || u > 1) continue;
+            const p = add(A0, mul(ra, t));
+            const ta = norm(ra), tb = norm(rb);
+            const na = norm(lerp2(la.N[a], la.N[a + 1], t)), nb = norm(lerp2(lb.N[b], lb.N[b + 1], u));
+            // walk into the wedge: along A away from lane B, along B away from lane A
+            const da = dot(ta, nb) > 0 ? 1 : -1, db = dot(tb, na) > 0 ? 1 : -1;
+            const angle = Math.acos(Math.max(-1, Math.min(1, dot(mul(ta, da), mul(tb, db)))));
+            if (angle > maxA || angle < 0.15) continue;
+            if (this.forks.some((f) => dist(f.p, p) < 2)) continue;
+            this.forks.push({
+              p, angle,
+              a: { lane: L[i], side: sa, s: la.S[a] + t * dist(A0, A1), dir: da },
+              b: { lane: L[j], side: sb, s: lb.S[b] + u * dist(B0, B1), dir: db },
+            });
+          }
+        }
+      }
+    }
+  }
+
+  /** Stretches of frontage kept for fork-tip buildings, as { key: [[s0, s1], …] }. */
+  forkReserved() {
+    const out = {}, R = CONFIG.path.forkReserve;
+    for (const f of this.forks) for (const e of [f.a, f.b]) {
+      const key = e.lane.name + ':' + e.side;
+      const s0 = e.dir > 0 ? e.s : e.s - R, s1 = e.dir > 0 ? e.s + R : e.s;
+      (out[key] = out[key] || []).push([s0, s1]);
+    }
+    return out;
+  }
+
   _findCrossings() {
     for (const A of this.lanes) for (const side of [1, -1]) {
       const line = A.lines[side];

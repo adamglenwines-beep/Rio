@@ -73,6 +73,10 @@ export const CONFIG = {
     archChance: 0.6,       // how often the town tries to build archways over side stairs and lanes
     archHeadroom: 2.4,     // clear height above the highest step under the arch
     archMinPier: 0.8,      // each pier must be at least this wide
+    // Sharp forks: where two lanes meet at less than this angle, the tip of the fork is
+    // kept for a pointed (flatiron) building fronting both lanes, or else for infill.
+    forkMaxAngle: 70,      // degrees
+    forkReserve: 7,        // metres along each lane from the tip that are kept for it
   },
 
   // ---- Walking effort -------------------------------------------------------

@@ -24,6 +24,11 @@ export function layDemo(game) {
     paths.addPath([P(-4, side * 34), P(-34, side * 36), P(-66, side * 34)]);
   }
 
+  // Two diagonal stairs forking off the main street at a sharp angle (pointed
+  // corner buildings grow in the forks).
+  paths.addPath([P(-22), P(-31, -9), P(-38, -16)]);
+  paths.addPath([P(-54), P(-62, 9), P(-68, 16)]);
+
   // Homes on both flanks, shops on the harbour floor.
   const zones = game.zones;
   for (let dz = -2; dz >= -96; dz -= 3) {
