@@ -55,10 +55,14 @@ export const CONFIG = {
     maxGrade: 0.62,        // rise/run a stair may climb before it switchbacks (~32°)
     switchbackWidth: 9,    // lateral width of a zig-zag leg
     stepLength: 0.9,       // length of one stone step / paving slab
-    width: 1.8,            // lane width
+    width: 1.6,            // lane width (the stone steps)
     snapRadius: 4.5,       // taps this close to an existing path join it
     nodeSpacing: 1.5,      // spacing of graph nodes along a path
-    clearance: 1.25,       // buildings keep this far from a path centreline
+    clearance: 0.95,       // buildings keep this far from a path centreline
+    // Archways / covered passages: a house may straddle a lane on two piers.
+    archChance: 0.3,       // share of new houses allowed to bridge a lane they land on
+    archHeadroom: 2.4,     // clear height above the highest step under the arch
+    archMinPier: 0.8,      // each pier must be at least this wide
   },
 
   // ---- Walking effort -------------------------------------------------------

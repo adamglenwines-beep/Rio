@@ -142,8 +142,30 @@ export class BuildingRenderer {
       const H = b.top - base;
       const rot = b.theta;
       // --- walls, stone plinth, cornice ---
-      put('body', b.x, base, b.z, rot, b.w, H, b.d, b.facade);
-      put('plinth', b.x, base, b.z, rot, b.w + 0.12, b.gMin - base + 0.45, b.d + 0.12, WHITE);
+      if (b.arch) {
+        // Archway / covered passage: the house sits on two piers over the lane.
+        const a = b.arch;
+        put('body', b.x, a.y, b.z, rot, b.w, b.top - a.y, b.d, b.facade);
+        const piers = a.axis === 'f'
+          ? [[-b.w / 2, a.lo, 'x'], [a.hi, b.w / 2, 'x']]
+          : [[-b.d / 2, a.lo, 'z'], [a.hi, b.d / 2, 'z']];
+        for (const [lo, hi, ax] of piers) {
+          const mid = (lo + hi) / 2, len = hi - lo;
+          if (len < 0.2) continue;
+          const px = b.x + (ax === 'x' ? b.rx : b.fx) * mid, pz = b.z + (ax === 'x' ? b.rz : b.fz) * mid;
+          if (ax === 'x') put('body', px, base, pz, rot, len, a.y - base + 0.05, b.d, b.facade);
+          else put('body', px, base, pz, rot, b.w, a.y - base + 0.05, len, b.facade);
+        }
+        // a stone lintel over each opening
+        const lintW = a.axis === 'f' ? a.hi - a.lo + 0.3 : b.w + 0.1;
+        const lintD = a.axis === 'f' ? b.d + 0.1 : a.hi - a.lo + 0.3;
+        const lm = (a.lo + a.hi) / 2;
+        const lx = b.x + (a.axis === 'f' ? b.rx * lm : b.fx * lm), lz = b.z + (a.axis === 'f' ? b.rz * lm : b.fz * lm);
+        put('plinth', lx, a.y - 0.25, lz, rot, lintW, 0.3, lintD, WHITE);
+      } else {
+        put('body', b.x, base, b.z, rot, b.w, H, b.d, b.facade);
+        put('plinth', b.x, base, b.z, rot, b.w + 0.12, b.gMin - base + 0.45, b.d + 0.12, WHITE);
+      }
       const corniceCol = rng() < 0.6 ? cream : b.facade.clone().offsetHSL(0, -0.1, 0.12);
       put('cornice', b.x, b.top - 0.32, b.z, rot, b.w + 0.22, 0.32, b.d + 0.22, corniceCol);
 
@@ -185,6 +207,7 @@ export class BuildingRenderer {
             const wx = b.x + s.nx * s.e + s.tx * u, wz = b.z + s.nz * s.e + s.tz * u;
             const ground = t.heightAt(wx, wz);
             if (floorBottom < ground - 0.4) continue;           // this storey is underground here
+            if (b.arch && floorBottom < b.arch.y - 0.2) continue; // below the rooms of an archway house
             // hidden behind a neighbour's wall?
             if (this.growth.blockerTop(wx + s.nx * 0.8, wz + s.nz * 0.8) > wy - 0.5) continue;
             const px = wx + s.nx * 0.02, pz = wz + s.nz * 0.02;

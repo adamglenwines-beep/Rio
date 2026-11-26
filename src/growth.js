@@ -37,7 +37,7 @@ import { BuildingRenderer } from './buildings.js';
 
 const B = CONFIG.building;
 const OCC = 0.5;            // occupancy grid resolution (m)
-const EMPTY = -1, PATH = -2;
+const EMPTY = -1, PATH = -2, HARBOUR = -3;   // HARBOUR: quay/piazza/slipway, never built over
 const RASTER_INSET = 0.25;  // a building claims cells this far inside its walls
 const FIT_INSET = 0.3;      // a new footprint is tested this far inside its walls
 
@@ -102,8 +102,8 @@ export class Growth {
   /** Mark the lanes so nothing is ever built on them. */
   _markPaths() {
     const net = this.game.paths;
-    for (let k = 0; k < this.occ.length; k++) if (this.occ[k] === PATH) this.occ[k] = EMPTY;
-    const stamp = (poly, r) => {
+    for (let k = 0; k < this.occ.length; k++) if (this.occ[k] === PATH || this.occ[k] === HARBOUR) this.occ[k] = EMPTY;
+    const stamp = (poly, r, value = PATH) => {
       for (const p of PathNetwork.resample(poly, 0.5)) {
         for (let dz = -r; dz <= r; dz += OCC) for (let dx = -r; dx <= r; dx += OCC) {
           if (dx * dx + dz * dz > r * r) continue;
@@ -111,15 +111,15 @@ export class Growth {
           if (k < 0) continue;
           const o = this.occ[k];
           if (o >= 0) this._remove(o);   // a new lane cuts through a house
-          this.occ[k] = PATH;
+          if (o !== HARBOUR) this.occ[k] = value;
         }
       }
     };
     const H = CONFIG.harbour, lay = net.layout;
-    stamp(net.quay.points, H.quayHalfWidth);
+    stamp(net.quay.points, H.quayHalfWidth, HARBOUR);
     // keep the piazza and slipway open
-    stamp([{ x: lay.x, z: lay.piazzaZ }, { x: lay.x, z: lay.piazzaZ + 0.01 }], lay.piazzaR);
-    stamp([{ x: lay.slipX, z: lay.slipZ0 }, { x: lay.slipX, z: lay.slipZ1 }], lay.slipW / 2 + 0.4);
+    stamp([{ x: lay.x, z: lay.piazzaZ }, { x: lay.x, z: lay.piazzaZ + 0.01 }], lay.piazzaR, HARBOUR);
+    stamp([{ x: lay.slipX, z: lay.slipZ0 }, { x: lay.slipX, z: lay.slipZ1 }], lay.slipW / 2 + 0.4, HARBOUR);
     for (const p of net.paths) stamp(p.points, CONFIG.path.clearance);
   }
 
@@ -258,9 +258,18 @@ export class Growth {
   _evaluate(c) {
     const t = this.terrain, g = this.game;
     if (!t.inside(c.x, c.z, 4)) return false;
-    // 1. occupancy
-    const free = this._forCells(c, FIT_INSET, (k) => k >= 0 && this.occ[k] === EMPTY);
+    // 1. occupancy. Lane cells are only OK if this house may bridge the lane.
+    const lane = [];
+    const free = this._forCells(c, FIT_INSET, (k) => {
+      if (k < 0) return false;
+      const o = this.occ[k];
+      if (o === EMPTY) return true;
+      if (o === PATH && c.allowArch) { lane.push(k); return true; }
+      return false;
+    });
     if (!free) return false;
+    c.arch = null;
+    if (lane.length && !this._fitArch(c, lane)) return false;
     // 2. land: zoned, reachable, not sea/cliff. Sample a 3x3 grid in the footprint.
     let zonedRes = 0, zonedCom = 0, bad = 0, steep = 0, flat = 0, effSum = 0, effN = 0;
     let gMin = Infinity, gMax = -Infinity;
@@ -288,7 +297,14 @@ export class Growth {
     c.kind = zonedCom > zonedRes ? ZONE.COM : ZONE.RES;
     c.band = steep >= 4 ? BAND.STEEP : flat >= 5 ? BAND.FLAT : BAND.MODERATE;
     if (c.kind === ZONE.COM && c.band === BAND.STEEP) return false; // no shops on steep land
+    if (c.arch) {
+      if (c.kind === ZONE.COM) return false;
+      // enough storeys to put rooms above the arch
+      c.minFloors = Math.ceil((c.arch.y + B.floorHeight * 1.5 - gMax) / B.floorHeight);
+      if (c.minFloors > 6) return false;
+    }
     if (c.band === BAND.STEEP && (c.w > B.width.steep[1] + 0.6 || c.d > B.depth.steep[1] + 0.6)) {
+      if (c.arch) return false;
       // only small houses on steep ground: shrink towards the front wall
       const nw = Math.min(c.w, B.width.steep[1]), nd = Math.min(c.d, B.depth.steep[1]);
       c.x += c.fx * (c.d - nd) / 2; c.z += c.fz * (c.d - nd) / 2;
@@ -296,6 +312,40 @@ export class Growth {
     }
     c.gMin = gMin; c.gMax = gMax;
     c.effort = effSum / effN;
+    return true;
+  }
+
+  /**
+   * Can this footprint straddle the lane cells it covers? The lane must cross
+   * cleanly (front-to-back or side-to-side) leaving a pier on each side. On
+   * success c.arch = { axis, lo, hi, y }: the lane occupies [lo, hi] along
+   * the house's local x ('f': lane runs front-to-back) or local z ('r': a
+   * covered passage running along the row), and the house starts at height y.
+   */
+  _fitArch(c, lane) {
+    const t = this.terrain, P = CONFIG.path;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, top = -Infinity;
+    for (const k of lane) {
+      const i = k % this.occN, j = (k / this.occN) | 0;
+      const wx = (i + 0.5) * OCC - t.half, wz = (j + 0.5) * OCC - t.half;
+      const dx = wx - c.x, dz = wz - c.z;
+      const lx = dx * c.rx + dz * c.rz, lz = dx * c.fx + dz * c.fz;
+      x0 = Math.min(x0, lx); x1 = Math.max(x1, lx); z0 = Math.min(z0, lz); z1 = Math.max(z1, lz);
+      top = Math.max(top, t.surfaceAt(wx, wz));
+    }
+    const laneMax = 2 * P.clearance + 0.8, pad = OCC / 2 + 0.05;
+    const hw = c.w / 2, hd = c.d / 2;
+    let arch = null;
+    if (x1 - x0 <= laneMax && z1 - z0 >= c.d * 0.6 &&
+        x0 - pad + hw >= P.archMinPier && hw - (x1 + pad) >= P.archMinPier) {
+      arch = { axis: 'f', lo: x0 - pad, hi: x1 + pad };
+    } else if (z1 - z0 <= laneMax && x1 - x0 >= c.w * 0.6 &&
+        z0 - pad + hd >= P.archMinPier && hd - (z1 + pad) >= P.archMinPier) {
+      arch = { axis: 'r', lo: z0 - pad, hi: z1 + pad };
+    }
+    if (!arch) return false;
+    arch.y = top + 0.2 + P.archHeadroom;
+    c.arch = arch;
     return true;
   }
 
@@ -309,7 +359,7 @@ export class Growth {
     for (const [nx, nz, e, tx, tz, L] of sides) {
       for (let u = -L / 2 + 0.5; u <= L / 2 - 0.5; u += 1) {
         const o = this.occAt(c.x + nx * (e + ring) + tx * u, c.z + nz * (e + ring) + tz * u);
-        if (o >= 0) ids.add(o); else if (o === PATH) lane = 1;
+        if (o >= 0) ids.add(o); else if (o === PATH || o === HARBOUR) lane = 1;
       }
     }
     return { n: ids.size, lane };
@@ -347,6 +397,7 @@ export class Growth {
       age: 0,
       fails: 0,
     });
+    if (b.arch) b.floors = Math.max(b.floors, b.minFloors);
     this.buildings.push(b);
     this.live.push(id);
     this._forCells(b, RASTER_INSET, (k) => { if (k >= 0 && this.occ[k] === EMPTY) this.occ[k] = id; });
@@ -399,7 +450,8 @@ export class Growth {
         let b = null;
         for (let a = 0; a < 6; a++) { b = this.buildings[r.pick(this.live)]; if (b.fails < 30) break; }
         attached = true;
-        c = this._attachVariants(b, r.pick(sides)).find((v) => this._evaluate(v));
+        const allowArch = r() < CONFIG.path.archChance;
+        c = this._attachVariants(b, r.pick(sides)).find((v) => { v.allowArch = allowArch; return this._evaluate(v); });
         if (!c) { b.fails++; continue; }
       } else {
         c = this._seed();
