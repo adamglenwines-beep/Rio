@@ -18,7 +18,7 @@ import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { makeRng, clamp } from './noise.js';
 import { ZONE } from './zones.js';
-import { sub, norm, dist, lerp2, centroid, edgeNormal, offsetPoly, chamferPoly, convexOverlap } from './geom.js';
+import { sub, norm, dist, lerp2, centroid, edgeNormal, offsetPoly, chamferPoly, convexOverlap, pointInPoly } from './geom.js';
 import { STYLES, registerStyled } from './style.js';
 import { LAYERS } from './materials.js';
 import { PALETTE, FACADES } from './data.js';
@@ -505,6 +505,35 @@ export class BuildingRenderer {
     };
   }
 
+  /**
+   * PARTY WALLS (v0.14): for each wall of b, the height up to which a neighbour stands right
+   * against it along its whole length (-Infinity if it doesn't). That part of the wall is never
+   * seen, so it isn't drawn at all: the wall starts there. (Its openings and wall-mounted parts
+   * are already left off by the cover test.)
+   */
+  _partyTops(b, q) {
+    const G = this.growth, near = [];
+    const [cx, cz] = centroid(q);
+    for (const id of G.live) {
+      const o = G.buildings[id];
+      if (!o || o === b || o.arch || Math.abs(o.x - cx) > 20 || Math.abs(o.z - cz) > 20) continue;
+      near.push(o);
+    }
+    return q.map((A, i) => {
+      const Bq = q[(i + 1) % q.length], e = norm(sub(Bq, A)), n = edgeNormal(q, i), L = dist(A, Bq);
+      if (!near.length || L < 0.8) return -Infinity;
+      let top = Infinity;
+      const k = Math.max(2, Math.ceil((L - 0.4) / 0.6));
+      for (let j = 0; j <= k && top > -Infinity; j++) {
+        const u = 0.2 + ((L - 0.4) * j) / k, p = [A[0] + e[0] * u + n[0] * 0.15, A[1] + e[1] * u + n[1] * 0.15];
+        let h = -Infinity;
+        for (const o of near) if (pointInPoly(p, o.corners)) h = Math.max(h, o.top);
+        top = Math.min(top, h);
+      }
+      return top;
+    });
+  }
+
   /** Corners of part of an archway house's rectangle, in its local frame. */
   _rectPart(b, u0, u1, v0, v1) {
     return [[u0, v1], [u1, v1], [u1, v0], [u0, v0]].map(([u, v]) => [b.x + b.rx * u + b.fx * v, b.z + b.rz * u + b.fz * v]);
@@ -874,8 +903,15 @@ export class BuildingRenderer {
    * style: corners cut off (chamfered) in the softer styles, or walls leaning in a touch
    * (q at the foot, qTop at the eaves). `holes[i]` = the openings in wall i (from corner i).
    */
-  _shell(gb, q, qTop, y0, y1, col, holes) {
+  _shell(gb, q, qTop, y0, y1, col, holes, from = null) {
     const S = this.style;
+    // where a neighbour hides the lower part of a wall (a party wall), the wall starts higher
+    const start = (i) => {
+      if (!from || !(from[i] > y0 + 0.3)) return y0;
+      let y = Math.min(from[i] - 0.05, y1);
+      for (const h of holes[i]) y = Math.min(y, h.y0 - 0.05);
+      return y > y0 + 0.3 ? y : y0;
+    };
     if (S.chamfer) {
       const ch = chamferPoly(q, S.chamfer), P = ch.poly, m = P.length;
       for (let k = 0; k < m; k++) {
@@ -885,21 +921,25 @@ export class BuildingRenderer {
           gb.face([[a[0], y0, a[1]], [c2[0], y0, c2[1]], [c2[0], y1, c2[1]], [a[0], y1, a[1]]], col, [nn[0], 0, nn[1]]);
           continue;
         }
-        const i = (k - 1) / 2, n = edgeNormal(q, i), uStart = dist(q[i], a), L = dist(a, c2);
+        const i = (k - 1) / 2, n = edgeNormal(q, i), uStart = dist(q[i], a), L = dist(a, c2), ys = start(i);
+        if (ys >= y1 - 0.01) continue;
         const hs = holes[i].map((h) => ({ ...h, u0: h.u0 - uStart, u1: h.u1 - uStart }));
-        gb.wallHoles([a[0], y0, a[1]], [c2[0], y0, c2[1]], [a[0], y1, a[1]], [c2[0], y1, c2[1]], L, y0, y1, hs, col, [n[0], 0, n[1]], uStart, dist(q[i], q[(i + 1) % 4]));
+        gb.wallHoles([a[0], ys, a[1]], [c2[0], ys, c2[1]], [a[0], y1, a[1]], [c2[0], y1, c2[1]], L, ys, y1, hs, col, [n[0], 0, n[1]], uStart, dist(q[i], q[(i + 1) % 4]));
       }
       return;
     }
     for (let i = 0; i < q.length; i++) {
-      const A = q[i], Bq = q[(i + 1) % q.length], At = qTop[i], Bt = qTop[(i + 1) % q.length], n = edgeNormal(q, i);
-      const P00 = [A[0], y0, A[1]], P10 = [Bq[0], y0, Bq[1]], P01 = [At[0], y1, At[1]], P11 = [Bt[0], y1, Bt[1]];
+      const A0 = q[i], B0 = q[(i + 1) % q.length], At = qTop[i], Bt = qTop[(i + 1) % q.length], n = edgeNormal(q, i);
+      const ys = start(i);
+      if (ys >= y1 - 0.01) continue;
+      const f = (ys - y0) / (y1 - y0), A = lerp2(A0, At, f), Bq = lerp2(B0, Bt, f);
+      const P00 = [A[0], ys, A[1]], P10 = [Bq[0], ys, Bq[1]], P01 = [At[0], y1, At[1]], P11 = [Bt[0], y1, Bt[1]];
       // the face's own normal (the wall leans in a touch), pointing out
       const ex = sub3(P10, P00), ey = sub3(P01, P00);
       let N = [ex[1] * ey[2] - ex[2] * ey[1], ex[2] * ey[0] - ex[0] * ey[2], ex[0] * ey[1] - ex[1] * ey[0]];
       const l = Math.hypot(...N); N = N.map((v) => v / l);
       if (N[0] * n[0] + N[2] * n[1] < 0) N = N.map((v) => -v);
-      gb.wallHoles(P00, P10, P01, P11, dist(A, Bq), y0, y1, holes[i], col, N);
+      gb.wallHoles(P00, P10, P01, P11, dist(A, Bq), ys, y1, holes[i], col, N);
     }
   }
 
@@ -1025,11 +1065,16 @@ export class BuildingRenderer {
    * band follows the lane (a dado, a low stone base, `h` high above the ground at each end):
    * an opening through it splits it, with stone jambs.
    */
-  _bands(gb, q, bands, holes) {
+  _bands(gb, q, bands, holes, from = null) {
     for (const B of bands) {
       gb.layer = B.layer;
       const oq = offsetPoly(q, B.out);
       for (let i = 0; i < 4; i++) {
+        // a band on a party wall is hidden inside the neighbour
+        if (from && from[i] > -Infinity) {
+          const bTop = B.kind === 'level' ? B.y1 : Math.max(B.walls[i].gA, B.walls[i].gB) + B.h;
+          if (bTop <= from[i] - 0.05) continue;
+        }
         const A = q[i], n = edgeNormal(q, i), e = norm(sub(q[(i + 1) % 4], A));
         const a = oq[i], c = oq[(i + 1) % 4], s = (a[0] - A[0]) * e[0] + (a[1] - A[1]) * e[1], Lb = dist(a, c), N = [n[0], 0, n[1]];
         const hs = holes[i].map((h) => ({ ...h, u0: h.u0 - s, u1: h.u1 - s, depth: B.out - (B.revealTo || 0), col: B.col.clone().multiplyScalar(0.9) }));
@@ -1712,8 +1757,10 @@ export class BuildingRenderer {
     gb.layer = LAYERS.plaster;
     const yb = b.arch ? b.arch.y : base;
     if (b.arch) gb.face(q.map((p2) => [p2[0], yb, p2[1]]), b.facade, [0, -1, 0]);
-    this._shell(gb, q, qTop, yb, b.top, paint, holes);
-    this._bands(gb, q, bands, holes);
+    const party = b.arch ? null : this._partyTops(b, q);
+    b.partyTops = party;
+    this._shell(gb, q, qTop, yb, b.top, paint, holes, party);
+    this._bands(gb, q, bands, holes, party);
 
     // --- pack the detail instances as ready-made matrices ---
     const parts = {};
