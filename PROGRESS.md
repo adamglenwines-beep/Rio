@@ -93,8 +93,16 @@ cross a door).
 - **Openings are real holes** in the merged wall mesh rather than a shader trick: they cast real
   shadow and cost about 20 triangles per window in a mesh that is built once.
 - **Slatted leaves near, painted far**: detail by distance per chunk of the town; a chunk switches
-  as a whole (no per-window popping), at 75 m on High (× 0.8 Medium, × 0.5 Low).
-- **Chunks of 48 m**: 36 m chunks gave finer culling but 420 draw calls; 48 m gives ~260.
+  as a whole (no per-window popping), at 55 m on High (× 0.8 Medium, × 0.5 Low). At 75 m the front
+  of the town counted as near even from the postcard view, drawing slats smaller than a pixel.
+- **Chunks of 48 m**: 36 m chunks gave finer culling but 420 draw calls; 48 m gave ~260, 64 m no
+  better (the calls came from the ~50 kinds of part, not the number of chunks).
+- **Static facade parts merged** (frames, leaves, jambs, door leaves, balconies, signs, chimneys,
+  surrounds) into two meshes per chunk, one always drawn and one near-only, using the walls'
+  material (textured per vertex): 135 draw calls instead of 263. In the software renderer this
+  barely changed the frame time (it is limited by pixels and vertices); on a real GPU each call
+  costs CPU time, so it is kept. Parts with their own shaders or a fade with distance (glass,
+  painted openings, awnings, plants, pots, washing, flower boxes) stay instanced.
 - **A dark plate at the back of every opening** casts the shadow, so sun never shines through a
   house at either detail level.
 - **Depth pre-pass not tried**: three.js already draws solid objects front to back (cheap early

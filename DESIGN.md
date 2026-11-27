@@ -127,7 +127,8 @@ A **Manor Lords-style hybrid**:
   shop, workshop). Later gameplay sets them (floor uses, household wealth); the renderer reads.
 - **Drawn in 48 m chunks** of the town (each with its walls mesh and instanced parts), so
   off-screen chunks are skipped; **detail by distance per chunk**: recessed openings with
-  frames, glass and louvred leaves near, flat painted openings far (75 m on High).
+  frames, glass and louvred leaves near, flat painted openings far (55 m on High). Static
+  facade parts are merged into two meshes per chunk (always / near only).
 
 ## Light (v0.12)
 
