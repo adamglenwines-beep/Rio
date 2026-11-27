@@ -67,16 +67,18 @@ function check(name, ok, detail = '') {
     try {
       const r = await page.evaluate(() => {
         const R = game.growth.renderer, I = game.infill, out = { parts: {}, reach: {}, infill: {} };
-        for (const k of Object.keys(R.parts)) out.parts[k] = R.parts[k].mesh ? R.parts[k].mesh.count : 0;
+        for (const k of Object.keys(R.parts)) out.parts[k] = R.partCount(k);
         for (const q of ['low', 'medium', 'high']) { R.setQuality(q); out.reach[q] = R.detailReach.value; }
         for (const k of Object.keys(I.kinds)) out.infill[k] = I.kinds[k].mesh ? I.kinds[k].mesh.count : 0;
-        const A = game.growth.renderer.mass.geometry.attributes;
-        out.wall = !!A.aWall && A.aWall.count === A.position.count;
+        out.wall = R.massMeshes().length > 0 && R.massMeshes().every((m) => !!m.geometry.attributes.aWall && m.geometry.attributes.aWall.count === m.geometry.attributes.position.count);
+        out.chunks = R.chunks.size;
         return out;
       });
-      const need = ['window', 'glass', 'shutterOpen', 'shutterClosed', 'shutterHalf', 'shutterTilt', 'balcony', 'doorFrame', 'door', 'chimney', 'surround', 'fake', 'bar', 'pot', 'blob', 'cloth', 'flowerbox'];
+      const need = ['frame_standard', 'frame_french', 'glass', 'leafL', 'leafR', 'paint_closed', 'paint_open', 'doorJambs', 'doorLeaf', 'shopFront', 'archSpandrel', 'awningCloth',
+        'balSlab_single', 'balRail_single', 'chimney', 'sur_standard', 'bar', 'pot', 'blob', 'cloth', 'flowerbox'];
       const missing = need.filter((k) => !(r.parts[k] > 0));
-      check('facade details are all present', missing.length === 0 && r.wall, missing.length ? 'missing: ' + missing.join(', ') : `${r.parts.window} windows, ${r.parts.fake} painted, ${r.parts.cloth} washing, ${r.parts.balcony + r.parts.balconySolid} balconies`);
+      const bal = Object.keys(r.parts).filter((k) => k.startsWith('balSlab_')).reduce((t, k) => t + r.parts[k], 0);
+      check('facade details are all present', missing.length === 0 && r.wall, missing.length ? 'missing: ' + missing.join(', ') : `${r.parts.glass} windows, ${r.parts.leafL + r.parts.leafR} shutter leaves, ${bal} balconies, ${r.parts.awningCloth} awnings, ${r.parts.shopFront} shopfronts, ${r.chunks} chunks`);
       check('detail by distance follows quality', r.reach.low < r.reach.medium && r.reach.medium < r.reach.high, JSON.stringify(r.reach));
       check('quarter clutter and café are placed', r.infill.boat >= 2 && r.infill.cone >= 3, `${r.infill.boat} boats hauled up, ${r.infill.cone} cones (parasols, pines)`);
     } catch (e) { check('facade checks', false, e.message); }

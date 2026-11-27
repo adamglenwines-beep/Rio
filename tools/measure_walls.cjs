@@ -64,12 +64,12 @@ function parseArgs() {
       // sun off
       const si = gfx.sun.intensity; gfx.sun.intensity = 0; gfx.render(); const amb = grab(); gfx.sun.intensity = si;
       // mask: only walls of the merged house mesh, white
-      const mass = g.growth.renderer.mass, swapped = [];
+      const swapped = [];
       const black = new T.MeshBasicMaterial({ color: 0x000000 }), white = new T.ShaderMaterial({
         vertexShader: 'varying float vUp; void main() { vUp = abs(normal.y); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
         fragmentShader: 'varying float vUp; void main() { gl_FragColor = vec4(vec3(vUp < 0.3 ? 1.0 : 0.0), 1.0); }',
       });
-      g.scene.traverse((m) => { if (m.isMesh || m.isPoints || m.isLine) { swapped.push([m, m.material, m.visible]); m.material = m === mass ? white : black; } });
+      g.scene.traverse((m) => { if (m.isMesh || m.isPoints || m.isLine) { swapped.push([m, m.material, m.visible]); m.material = m.userData.houseMass ? white : black; } });
       g.gfx.sky.visible = false;
       const bg = R.getClearColor(new T.Color()), tm = R.toneMapping;
       R.setClearColor(0x000000); R.toneMapping = T.NoToneMapping;

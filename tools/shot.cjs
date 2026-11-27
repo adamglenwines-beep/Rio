@@ -46,12 +46,13 @@ function parseArgs() {
   const [W, H] = (o.size || '1600x900').split('x').map(Number);
   const views = (o.views || 'postcard,aerial').split(',');
   const t0 = Date.now();
-  const h = await launch({ width: W, height: H, storage: { mode: preset, style: o.style || 'painted', warmth: o.warmth || 'neutral' }, log: !!o.log });
+  const h = await launch({ width: W, height: H, page: o.page, storage: { mode: preset, style: o.style || 'painted', warmth: o.warmth || 'neutral' }, log: !!o.log });
+  if (o.page) await h.page.waitForFunction(() => !!window.game && (location.search.indexOf('six') < 0 || !!window.game.six), null, { timeout: 600000 });
   const { page } = h;
   await page.evaluate(() => game.renderer.setAnimationLoop(null));
   const info = await page.evaluate(async ({ grow, time, noDemo }) => {
     await game.gfx.texturesReady;
-    if (!noDemo) { game.demo(); game.growth.grow(grow); }
+    if (!noDemo && !game.six) { game.demo(); game.growth.grow(grow); }
     game.gfx.setTimeOfDay(time, true);
     // let spread-out work (infill, scenery) finish
     for (let i = 0; i < 400; i++) { game.simulate ? game.simulate(0.05) : null; if (game.settle && game.settle()) break; }
@@ -66,8 +67,9 @@ function parseArgs() {
       const [p, t] = spec.split(':').map((s) => s.split('/').map(Number));
       v = [p, t]; label = n;
     }
-    if (!v) { console.log('unknown view ' + name); continue; }
-    await page.evaluate(async ({ v, frames, abs }) => {
+    if (name === 'six') { await page.evaluate(() => { game.rig.controls.enableDamping = false; for (let i = 0; i < 3; i++) game.renderFrame(0.05); }); }
+    else if (!v) { console.log('unknown view ' + name); continue; }
+    if (v) await page.evaluate(async ({ v, frames, abs }) => {
       const hb = abs ? { x: 0, y: 0, z: 0 } : game.terrain.harbour;
       game.rig.tween = null;
       game.camera.position.set(hb.x + v[0][0], v[0][1], hb.z + v[0][2]);

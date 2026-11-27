@@ -280,7 +280,7 @@ export class BuildingRenderer {
           diffuseColor.rgb *= ao;
         }`);
     };
-    this.mass = null;   // the merged walls + roofs mesh
+    this.chunks = new Map();   // chunk key → { mass, parts: { kind: InstancedMesh }, sphere } (see rebuild)
     this.cache = new Map();   // house id → its generated geometry and instances
     this.style = STYLES.clean;
 
@@ -400,31 +400,13 @@ export class BuildingRenderer {
           #endif`);
       };
     };
-    // detail by distance for whole openings: 'near' parts (recess frames, glass, louvred
-    // leaves) are drawn only within the LOD distance, 'far' parts (painted openings, plain
-    // leaves) only beyond it (× the quality's reach). Per instance, in the vertex shader.
+    // detail by distance for whole openings: 'near' parts (recess frames, glass, louvred leaves) show
+    // only in chunks within the LOD distance, 'far' parts (painted openings) only beyond it (updateLod)
     this.lodDist = { value: CONFIG.building.lodDistance };
-    const lodSwitch = (mat, mode) => {
-      const prev = mat.onBeforeCompile;
-      mat.onBeforeCompile = (sh, r) => {
-        if (prev) prev.call(mat, sh, r);
-        sh.uniforms.uLodDist = this.lodDist;
-        sh.vertexShader = 'uniform float uLodDist;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-          #ifdef USE_INSTANCING
-          {
-            float dL = distance(cameraPosition, (modelMatrix * vec4(instanceMatrix[3].xyz, 1.0)).xyz);
-            transformed *= ${mode === 'near' ? 'step(dL, uLodDist)' : 'step(uLodDist, dL)'};
-          }
-          #endif`);
-      };
-      const key = mat.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : () => '';
-      mat.customProgramCacheKey = () => key() + '|lod:' + mode;
-    };
     const seen = new Set([this.massMat]);
     for (const [k, p] of Object.entries(this.parts)) {
-      if (seen.has(p.mat)) { if (p.far || p.lod) { p.mat = p.mat.clone(); } else continue; }
+      if (seen.has(p.mat)) { if (p.far) { p.mat = p.mat.clone(); } else continue; }
       seen.add(p.mat);
-      if (p.lod) lodSwitch(p.mat, p.lod);
       if (p.far) fadeFar(p.mat, p.far);
       if (p.mat.isMeshBasicMaterial) continue;
       registerStyled(p.mat, p.kind || 'surface', surf[k] ? { mode: 'face', layer: surf[k], trueMean: true } : null);
@@ -433,23 +415,6 @@ export class BuildingRenderer {
 
   /** Quality preset: how far away small details are still drawn. */
   setQuality(name) { this.detailReach.value = CONFIG.building.detailReach[name] ?? 1; this.lodDist.value = CONFIG.building.lodDistance * this.detailReach.value; }
-
-  /** Make sure a part's InstancedMesh can hold n instances. */
-  _ensure(name, n) {
-    const p = this.parts[name];
-    if (p.mesh && p.cap >= n) return p.mesh;
-    if (p.mesh) { this.group.remove(p.mesh); p.mesh.dispose(); }
-    p.cap = Math.max(64, Math.ceil(n * 1.5));
-    const m = new THREE.InstancedMesh(p.geo, p.mat, p.cap);
-    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(p.cap * 3).fill(1), 3);
-    m.castShadow = p.shadow;
-    m.receiveShadow = true;
-    m.frustumCulled = false; // instances span the whole town
-    p.mesh = m;
-    this.group.add(m);
-    return m;
-  }
 
   /**
    * How enclosed a wall is: walk out from it and see how soon another house's
@@ -1116,12 +1081,12 @@ export class BuildingRenderer {
 
   /** Detail meshes too small to matter in a ripply reflection. */
   smallParts() {
-    return Object.keys(this.parts).filter((k) => !['window', 'glass', 'storeRoom'].includes(k) && !k.startsWith('frame_'))
-      .map((k) => this.parts[k].mesh).filter(Boolean);
+    const keep = (k) => ['window', 'glass', 'storeRoom'].includes(k) || k.startsWith('frame_');
+    return [...this.chunks.values()].flatMap((ch) => Object.entries(ch.parts).filter(([k]) => !keep(k)).map(([, m]) => m));
   }
 
   /** Flat overlays drawn on top of walls (not solid surfaces): left out of the ambient-occlusion pass. */
-  overlayParts() { return ['streak'].map((k) => this.parts[k].mesh).filter(Boolean); }
+  overlayParts() { return [...this.chunks.values()].map((ch) => ch.parts.streak).filter(Boolean); }
 
   /** Forget every cached house (the next rebuild redraws the whole town). */
   invalidateAll() { this.cache.clear(); }
@@ -1130,58 +1095,98 @@ export class BuildingRenderer {
    * Redraw the town. Only houses whose `ver` changed since they were last
    * built are regenerated (growth bumps `ver` on a house and its neighbours
    * when it is added, gains a floor or is removed); everything else is copied
-   * from the per-house cache into the shared buffers.
+   * from the per-house cache.
+   *
+   * v0.13: the town is split into square chunks (CONFIG.building.chunkSize), each with
+   * its own walls-and-roofs mesh and its own instanced batches, so whole chunks off
+   * screen are skipped (frustum culling), and only chunks whose houses changed are
+   * re-uploaded. Detail by distance is per chunk too (see updateLod).
    */
   rebuild(buildings) {
     // tops first, so neighbour checks use the current heights
     for (const b of buildings) { b.top = b.gMax + b.floors * FH; b.roofTop = this._roofTop(b); }
     const seen = new Set();
     let rebuilt = 0;
+    const touched = new Set();
+    const CH = CONFIG.building.chunkSize, keyOf = (b) => { const [cx, cz] = centroid(b.corners); return Math.floor(cx / CH) + ',' + Math.floor(cz / CH); };
+    const groups = new Map();
     for (const b of buildings) {
       seen.add(b.id);
-      const c = this.cache.get(b.id);
-      if (!c || c.ver !== b.ver) { this.cache.set(b.id, this._buildOne(b)); rebuilt++; }
+      const c = this.cache.get(b.id), key = keyOf(b);
+      if (!c || c.ver !== b.ver) { this.cache.set(b.id, this._buildOne(b)); rebuilt++; touched.add(key); }
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(b);
     }
     for (const id of [...this.cache.keys()]) if (!seen.has(id)) this.cache.delete(id);
     this.lastRebuilt = rebuilt;
+    // chunks that lost or gained a house, or are gone
+    for (const [key, ch] of this.chunks) {
+      const list = groups.get(key);
+      const ids = list ? list.map((b) => b.id).join(',') : '';
+      if (ids !== ch.ids) touched.add(key);
+      if (!list) { this._disposeChunk(ch); this.chunks.delete(key); }
+    }
+    for (const key of groups.keys()) if (!this.chunks.has(key)) touched.add(key);
+    for (const key of touched) if (groups.has(key)) this._fillChunk(key, groups.get(key));
+  }
 
-    // --- the merged walls + roofs mesh: concatenate the cached pieces ---
+  /** (Re)fill one chunk's meshes from its houses' cached pieces. */
+  _fillChunk(key, list) {
+    let ch = this.chunks.get(key);
+    if (!ch) { ch = { key, mass: null, massCap: 0, parts: {}, sphere: new THREE.Sphere(), ids: '' }; this.chunks.set(key, ch); }
+    ch.ids = list.map((b) => b.id).join(',');
+    // its bounding sphere: every house's footprint, from its lowest ground to its roof (plus balconies and awnings)
+    const box = new THREE.Box3(), v = new THREE.Vector3();
+    for (const b of list) for (const p of b.corners) { box.expandByPoint(v.set(p[0], b.gMin - 1.5, p[1])); box.expandByPoint(v.set(p[0], (b.roofTop ?? b.top) + 2, p[1])); }
+    box.expandByScalar(2.5);
+    box.getBoundingSphere(ch.sphere);
+    // --- the merged walls + roofs ---
     let nv = 0;
-    for (const b of buildings) nv += this.cache.get(b.id).pos.length;
-    if (!this.mass || this.massCap < nv) {
-      // (re)allocate with head-room, so most rebuilds just copy into existing buffers
-      this.massCap = Math.ceil((nv * 1.4 + 3000) / 9) * 9;   // whole triangles (3 vertices × 3 floats)
+    for (const b of list) nv += this.cache.get(b.id).pos.length;
+    if (!ch.mass || ch.massCap < nv) {
+      ch.massCap = Math.ceil((nv * 1.3 + 900) / 9) * 9;   // whole triangles (3 vertices × 3 floats), with head-room
       const geo = new THREE.BufferGeometry();
       for (const [name, size] of [['position', 3], ['normal', 3], ['color', 3], ['aoParams', 3], ['aWall', 3]]) {
-        geo.setAttribute(name, new THREE.BufferAttribute(new Float32Array(this.massCap), size).setUsage(THREE.DynamicDrawUsage));
+        geo.setAttribute(name, new THREE.BufferAttribute(new Float32Array(ch.massCap), size).setUsage(THREE.DynamicDrawUsage));
       }
-      if (this.mass) { this.mass.geometry.dispose(); this.mass.geometry = geo; }
+      if (ch.mass) { ch.mass.geometry.dispose(); ch.mass.geometry = geo; }
       else {
-        this.mass = new THREE.Mesh(geo, this.massMat);
-        this.mass.castShadow = true;
-        this.mass.receiveShadow = true;
-        this.mass.frustumCulled = false;
-        this.group.add(this.mass);
+        ch.mass = new THREE.Mesh(geo, this.massMat);
+        ch.mass.castShadow = true; ch.mass.receiveShadow = true;
+        ch.mass.userData.houseMass = true;
+        this.group.add(ch.mass);
       }
     }
-    const A = this.mass.geometry.attributes;
+    const A = ch.mass.geometry.attributes;
     let o = 0;
-    for (const b of buildings) {
+    for (const b of list) {
       const c = this.cache.get(b.id);
       A.position.array.set(c.pos, o); A.normal.array.set(c.nor, o); A.color.array.set(c.col, o); A.aoParams.array.set(c.ao, o); A.aWall.array.set(c.wall, o);
       o += c.pos.length;
     }
     for (const a of Object.values(A)) { a.clearUpdateRanges(); a.addUpdateRange(0, nv); a.needsUpdate = true; }
-    this.mass.geometry.setDrawRange(0, nv / 3);
-
-    // --- instance buffers: concatenate the cached matrices and colours ---
+    ch.mass.geometry.setDrawRange(0, nv / 3);
+    ch.mass.geometry.boundingSphere = ch.sphere.clone();
+    // --- instance batches ---
     for (const k of Object.keys(this.parts)) {
       let n = 0;
-      for (const b of buildings) n += this.cache.get(b.id).parts[k].n;
-      const mesh = this._ensure(k, n);
+      for (const b of list) n += this.cache.get(b.id).parts[k].n;
+      let mesh = ch.parts[k];
+      if (!n) { if (mesh) mesh.count = 0, mesh.visible = false; continue; }
+      if (!mesh || mesh.userData.cap < n) {
+        if (mesh) { this.group.remove(mesh); mesh.dispose(); }
+        const P = this.parts[k], cap = Math.max(8, Math.ceil(n * 1.3));
+        mesh = new THREE.InstancedMesh(P.geo, P.mat, cap);
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3);
+        mesh.castShadow = P.shadow; mesh.receiveShadow = true;
+        mesh.userData = { cap, kind: k, lod: P.lod || null };
+        ch.parts[k] = mesh;
+        this.group.add(mesh);
+      }
       const M = mesh.instanceMatrix.array, C = mesh.instanceColor.array;
       let i = 0;
-      for (const b of buildings) {
+      for (const b of list) {
         const p = this.cache.get(b.id).parts[k];
         if (!p.n) continue;
         M.set(p.m, i * 16); C.set(p.c, i * 3);
@@ -1190,8 +1195,40 @@ export class BuildingRenderer {
       mesh.count = n;
       mesh.instanceMatrix.needsUpdate = true;
       mesh.instanceColor.needsUpdate = true;
+      mesh.boundingSphere = ch.sphere.clone();   // whole-chunk culling (no per-instance bounds)
+    }
+    ch.lodNear = null;                           // re-apply detail by distance on the next frame
+  }
+
+  _disposeChunk(ch) {
+    if (ch.mass) { this.group.remove(ch.mass); ch.mass.geometry.dispose(); }
+    for (const m of Object.values(ch.parts)) { this.group.remove(m); m.dispose(); }
+  }
+
+  /**
+   * Detail by distance, per chunk (call once a frame with the camera): close chunks show
+   * recessed openings with frames, glass and louvred leaves; far ones (beyond the LOD
+   * distance × the quality's reach) show only the flat painted openings. Hidden meshes
+   * cost nothing to draw.
+   */
+  updateLod(camera) {
+    const D = this.lodDist.value, p = camera.position;
+    for (const ch of this.chunks.values()) {
+      const near = p.distanceTo(ch.sphere.center) - ch.sphere.radius * 0.55 < D;
+      if (near === ch.lodNear) continue;
+      ch.lodNear = near;
+      for (const m of Object.values(ch.parts)) {
+        const lod = m.userData.lod;
+        m.visible = m.count > 0 && (!lod || (lod === 'near') === near);
+      }
     }
   }
+
+  /** How many instances of a part kind the town has (all chunks). */
+  partCount(k) { let n = 0; for (const ch of this.chunks.values()) if (ch.parts[k]) n += ch.parts[k].count; return n; }
+
+  /** Every walls-and-roofs mesh (one per chunk). */
+  massMeshes() { return [...this.chunks.values()].map((ch) => ch.mass).filter(Boolean); }
 
   /**
    * A window painted on the plaster (Ligurian trompe-l'oeil): a painted frame,

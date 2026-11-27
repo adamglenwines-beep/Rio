@@ -6,6 +6,7 @@
 //
 // Open it with  index.html?scene=six
 // Options:      &colours=F3C17B,E5CE91,...   paint the six houses these colours
+//               &condition=0.1,0.9,...       each house's condition (0 crumbling … 1 fresh)
 //               &time=midday|golden          &quality=low|medium|high
 // The houses are the six closest to a point on the harbour front; the camera
 // framing is in VIEW below.
@@ -24,8 +25,10 @@ export function setupSixHouses(game, params) {
   const pick = G.live.map((id) => G.buildings[id]).filter((b) => !b.arch)
     .sort((a, b) => Math.hypot(a.x - centre[0], a.z - centre[1]) - Math.hypot(b.x - centre[0], b.z - centre[1])).slice(0, 6);
   const colours = (params.get('colours') || '').split(',').filter(Boolean);
+  const conds = (params.get('condition') || '').split(',').filter(Boolean).map(Number);
   pick.forEach((b, i) => {
     if (colours[i % colours.length]) { b.facade = new THREE.Color('#' + colours[i % colours.length].replace('#', '')); b.ver = (b.ver || 0) + 1; }
+    if (conds.length && b.plan) { b.plan.condition = conds[i % conds.length]; b.ver = (b.ver || 0) + 1; }
   });
   game.growth.renderer.rebuild(pick);
   game.growth.update = () => {};            // nothing grows or re-meshes in the test scene
