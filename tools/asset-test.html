@@ -1,0 +1,41 @@
+<!doctype html>
+<!-- Asset test page: every packed texture layer the game loads, tiled 3×2 so seams and
+     repetition show, next to its normal/roughness data. Open it through the local server:
+     http://localhost:8000/tools/asset-test.html -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Borgo texture layers</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; background: #f4efe6; color: #3a332b; margin: 16px; }
+  h1 { font-size: 18px; }
+  .layer { display: flex; gap: 12px; align-items: flex-start; margin: 0 0 18px; }
+  .tile { width: 540px; height: 360px; background-size: 180px 180px; border: 1px solid #c9bfae; }
+  .data { width: 180px; height: 180px; background-size: cover; border: 1px solid #c9bfae; }
+  .meta { max-width: 320px; }
+  .swatch { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; border: 1px solid #0003; }
+  code { background: #0001; padding: 0 3px; }
+</style>
+</head>
+<body>
+<h1>Borgo texture layers (assets/textures/web/manifest.json)</h1>
+<p>Left: colour, tiled 3×2. Middle: packed data (red/green = normal, blue = roughness). Check for visible seams and obvious repetition.</p>
+<div id="list">loading…</div>
+<script type="module">
+  const base = '../assets/textures/web/';
+  const m = await (await fetch(base + 'manifest.json')).json();
+  const el = document.getElementById('list');
+  el.textContent = '';
+  m.layers.forEach((L, i) => {
+    const f = L.files[1024], mean = L.mean.map((v) => Math.round(v * 255));
+    const div = document.createElement('div');
+    div.className = 'layer';
+    div.innerHTML = `<div class="tile" style="background-image:url(${base + f.albedo})"></div>
+      <div class="data" style="background-image:url(${base + f.data})"></div>
+      <div class="meta"><b>${i}. ${L.key}</b><br>set <code>${L.set}</code><br>tone: ${L.tone}, one repeat = ${L.scale} m<br>
+      mean colour <span class="swatch" style="background:rgb(${mean})"></span> rgb(${mean})<br>${Math.round(f.bytes / 1024)} KB at 1024 px<br><i>${L.use}</i></div>`;
+    el.appendChild(div);
+  });
+</script>
+</body>
+</html>

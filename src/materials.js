@@ -28,6 +28,7 @@
 // extra large-scale sample is skipped on Low.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
+import { CONFIG, TERRAIN_COLOURS } from './config.js';
 
 const BASE = './assets/textures/web/';
 
@@ -133,6 +134,10 @@ export function textureBytes(size) {
 
 // ---- the shader ------------------------------------------------------------------
 
+/** A colour from config as a GLSL vec3 (linear). */
+const g3 = (hex) => { const c = new THREE.Color(hex); return `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`; };
+const f1 = (v) => Number(v).toFixed(4);
+
 const GLSL_COMMON = /* glsl */`
   uniform highp sampler2DArray uAlbedoArr, uDataArr;
   uniform float uTexOn, uDetail, uNormalK, uMipBias, uMacro, uWeather;
@@ -148,6 +153,7 @@ const GLSL_COMMON = /* glsl */`
   struct MSample { vec3 col; vec3 tn; float rough; };
   MSample mSample(vec2 uv, int layer) {
     MSample s;
+    if (uTexOn < 0.5) { s.col = uLayerMean[layer]; s.tn = vec3(0.0, 0.0, 1.0); s.rough = 0.9; return s; }   // textures off (mirror pass)
     vec4 a = texture(uAlbedoArr, vec3(uv, float(layer)), uMipBias);
     vec4 d = texture(uDataArr, vec3(uv, float(layer)), uMipBias);
     s.col = a.rgb;
@@ -171,7 +177,15 @@ const GLSL_COMMON = /* glsl */`
     vec3 hue = tex / max(uLayerMean[layer], vec3(0.03));                  // the texture's own colour shifts
     return base * mix(vec3(k), mix(vec3(1.0), hue, uDetail), P.y);
   }
-`;
+  // One rock bed: its colour, and (alpha) how proud it stands: 1 thick rib … 0 recessed shale.
+  vec4 mBed(float id) {
+    float h = mHash(vec2(id, 1.7));
+    vec3 c = h < 0.32 ? BED_PALE : h < 0.70 ? BED_MID : h < 0.86 ? BED_DARK : BED_OCHRE;
+    float proud = h < 0.32 ? 1.0 : h < 0.70 ? 0.6 : h < 0.86 ? 0.0 : 0.7;
+    return vec4(c * (0.9 + 0.2 * mHash(vec2(id, 4.4))), proud);
+  }
+`.replace('BED_PALE', g3(TERRAIN_COLOURS.bedPale)).replace('BED_MID', g3(TERRAIN_COLOURS.bedMid))
+  .replace('BED_DARK', g3(TERRAIN_COLOURS.bedDark)).replace('BED_OCHRE', g3(TERRAIN_COLOURS.bedOchre));
 
 /**
  * Patch a compiled material's shaders. Called from style.registerStyled's
@@ -193,18 +207,21 @@ export function injectSurface(sh, cfg) {
            #ifdef USE_INSTANCING
              vMRand = fract(sin(dot(instanceMatrix[3].xz, vec2(12.9898, 78.233))) * 43758.5453);
            #endif`}
+      ${cfg.masks ? 'vMask = aMask;' : 'vMask = vec4(0.0);'}
     }`);
+  sh.vertexShader = (cfg.masks ? 'attribute vec4 aMask;\n' : '') + 'varying vec4 vMask;\n' + sh.vertexShader;
   if (cfg.layer === 'attr' && !/attribute vec3 aoParams/.test(sh.vertexShader)) sh.vertexShader = 'attribute vec3 aoParams;\n' + sh.vertexShader;
 
-  const terrain = cfg.mode === 'terrain';
-  sh.fragmentShader = 'varying float vMLayer;\nvarying float vMRand;\nvarying float vMGround;\nvec3 mNormalW = vec3(0.0); float mRough = -1.0;\n' + GLSL_COMMON + sh.fragmentShader
-    .replace('#include <color_fragment>', `#include <color_fragment>
-    if (uTexOn > 0.5 && vMLayer > -0.5) {
+  const body = cfg.mode === 'terrain' ? `{ vec3 wp = vSW; ${terrainGLSL()} }`
+    : cfg.mode === 'rock' ? `{ vec3 wp = vSW; ${rockGLSL(cfg)} }`
+    : `if (uTexOn > 0.5 && vMLayer > -0.5) {
       vec3 wp = vSW;
       vec3 nG = normalize(cross(dFdx(wp), dFdy(wp)));               // the true flat face
       if (dot(nG, vSN) < 0.0) nG = -nG;
-      ${terrain ? terrainGLSL() : FACE_GLSL(cfg)}
-    }`)
+      ${FACE_GLSL(cfg)}
+    }`;
+  sh.fragmentShader = 'varying float vMLayer;\nvarying float vMRand;\nvarying float vMGround;\nvarying vec4 vMask;\nvec3 mNormalW = vec3(0.0); float mRough = -1.0;\n' + GLSL_COMMON + sh.fragmentShader
+    .replace('#include <color_fragment>', '#include <color_fragment>\n' + body)
     .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
       if (mRough >= 0.0) roughnessFactor = clamp(mix(roughnessFactor, mRough, 0.85), 0.25, 1.0);`)
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -251,43 +268,141 @@ const WEATHER_GLSL = `
         c *= 1.0 - 0.07 * uWeather * smoothstep(0.55, 0.9, streak);
       }`;
 
-const TERRAIN_GLSL = `
-      // triplanar: weights from the surface normal (smooth one if the style has it)
+
+/**
+ * The ground. Three families of surface, blended by steepness with a noisy edge:
+ *   ground — dry earth, straw grass and scrub floor (by the cover mask), terrace
+ *            soil, and pebbles / sea bed along the shore; one top-down projection;
+ *   scree  — stony earth where soil gives way to rock;
+ *   rock   — layered cliffs: beds along the tilted bedding plane (see terrain.js),
+ *            each bed its own colour, thick pale beds standing proud as ribs, thin
+ *            dark packets recessed, cut by joints; the cliff texture is projected
+ *            from three sides and turned so its own layering runs along the beds.
+ * Near sea level rock goes wet and near-black. Everything works without textures
+ * too (the mirror pass), from the same colours.
+ */
+export function terrainGLSL() {
+  const C = TERRAIN_COLOURS, K = CONFIG.terrain.rock;
+  const d = K.dipDegrees * Math.PI / 180;
+  const nb = new THREE.Vector3(K.strikeSkew, Math.cos(d), -Math.sin(d)).normalize();
+  const L = (k) => String(LAYERS[k] ?? 0);
+  return /* glsl */`
+      vec3 n = normalize(vSN);
+      float steep = 1.0 - n.y;                                  // 0 flat … 1 vertical
+      float y = wp.y;
+      float nA = mFbm(wp.xz * 0.07);
+      float nB = mFbm(wp.xz * 0.33 + 7.1);
+      float edge = (nA - 0.5) * 0.14 + (nB - 0.5) * 0.07;
+      float wRock = smoothstep(0.29 + edge, 0.385 + edge, steep);
+      float wScree = smoothstep(0.17 + edge, 0.29 + edge, steep) * (1.0 - wRock) * (1.0 - 0.7 * smoothstep(0.3, 0.7, vMask.x));
+      vec3 col = vec3(0.0), nrm = vec3(0.0); float rough = 0.0;
+
+      if (wRock < 0.99) {
+        // ---- ground: one top-down projection ----
+        MSample e = mSample(wp.xz / uLayerP[${L('ground')}].x, ${L('ground')});
+        MSample g = mSample(wp.xz / uLayerP[${L('scrub')}].x + 0.37, ${L('scrub')});
+        float cover = vMask.x;
+        float grassy = max(smoothstep(0.40, 0.64, nA + (nB - 0.5) * 0.5), smoothstep(0.12, 0.55, cover));
+        vec3 cE = mTint(${g3(C.earth)}, e.col, ${L('ground')});
+        vec3 cG = mTint(mix(${g3(C.straw)}, ${g3(C.scrub)}, smoothstep(0.22, 0.72, cover + (nB - 0.5) * 0.45)), g.col, ${L('scrub')});
+        vec3 cg = mix(cE, cG, grassy);
+        vec3 tn = mix(e.tn, g.tn, grassy);
+        float rg = mix(e.rough, g.rough, grassy);
+        cg = mix(cg, cE * 1.03, vMask.z);                        // trodden, bare ground
+        if (vMask.y > 0.01) {                                    // terrace soil
+          MSample so = mSample(wp.xz / uLayerP[${L('soil')}].x, ${L('soil')});
+          cg = mix(cg, mTint(${g3(C.soil)}, so.col, ${L('soil')}), vMask.y);
+          tn = mix(tn, so.tn, vMask.y);
+        }
+        cg = mix(cg, mTint(${g3(C.scree)}, e.col, ${L('ground')}), wScree * 0.85);
+        float shore = 1.0 - smoothstep(1.2 + nB * 0.9, 2.0 + nB * 0.9, y);
+        if (shore > 0.01) {                                      // pebble beach, then the sea bed
+          MSample pb = mSample(wp.xz / uLayerP[${L('pebbles')}].x, ${L('pebbles')});
+          vec3 cp = mTint(mix(${g3(C.pebble)}, ${g3(C.sand)}, smoothstep(0.38, 0.66, nA)), pb.col, ${L('pebbles')});
+          if (vMask.w > 0.01) {                                 // rocky shore: a pale rock shelf instead of pebbles
+            MSample rs = mSample(wp.xz / uLayerP[${L('rockPale')}].x, ${L('rockPale')});
+            cp = mix(cp, mTint(${g3(C.shelf)}, rs.col, ${L('rockPale')}), vMask.w);
+            pb.tn = mix(pb.tn, rs.tn, vMask.w);
+          }
+          cp *= mix(1.0, 0.5, 1.0 - smoothstep(-0.1, 0.45, y)); // wet at the waterline
+          cp = mix(cp, ${g3(C.seabed)}, smoothstep(-1.0, -8.0, y) * 0.75);
+          cg = mix(cg, cp, shore); tn = mix(tn, pb.tn, shore); rg = mix(rg, pb.rough * 0.8, shore);
+        }
+        tn = normalize(tn);
+        col += (1.0 - wRock) * cg;
+        nrm += (1.0 - wRock) * normalize(vec3(tn.x + n.x, abs(tn.z) * n.y, tn.y + n.z));
+        rough += (1.0 - wRock) * rg;
+      }
+
+      if (wRock > 0.01) {
+        // ---- layered rock ----
+        const vec3 nb = vec3(${f1(nb.x)}, ${f1(nb.y)}, ${f1(nb.z)});     // the bedding plane's normal
+        float s = dot(wp, nb) + (mFbm(wp.xz * 0.045 + wp.y * 0.03) - 0.5) * 3.2;   // across the beds (m), gently warped
+        float sp = s / 1.15;
+        float aa = clamp(fwidth(sp) * 1.3, 0.04, 0.5);
+        float id = floor(sp), bt = smoothstep(1.0 - aa, 1.0, fract(sp));
+        vec4 b0 = mBed(id), b1 = mBed(id + 1.0);
+        vec4 bed = mix(b0, b1, bt);                             // rgb + how proud the bed stands
+        vec3 base = bed.rgb * mix(0.9, 1.07, mHash(vec2(floor(s / 5.3), 8.3)));   // packets of beds, a tone apart
+        // thin laminations in the recessed beds (fade out with distance)
+        float lam = 0.5 + 0.5 * sin(s * 34.0 + mNoise(wp.xz * 0.8) * 3.0);
+        base *= 1.0 - (1.0 - bed.a) * 0.22 * lam * (1.0 - smoothstep(0.4, 1.6, fwidth(s) * 34.0));
+        // joints: cracks across the proud beds, every metre or two along the strike
+        float u1 = dot(wp, normalize(cross(nb, vec3(0.0, 1.0, 0.0))));
+        float jw = mix(0.8, 2.6, mHash(vec2(id, 5.1)));
+        float jd = abs(fract(u1 / jw + mHash(vec2(id, 2.2))) - 0.5) * jw;
+        base *= 1.0 - 0.42 * bed.a * (1.0 - smoothstep(0.02, 0.07 + fwidth(u1), jd));
+        base *= mix(0.85, 1.0, bed.a);                          // recesses sit in shade
+        // the cliff texture from three sides, turned to run along the beds
+        vec3 w = pow(abs(n), vec3(4.0)); w /= (w.x + w.y + w.z);
+        float sc = 1.0 / uLayerP[${L('cliff')}].x;
+        vec2 aX = normalize(vec2(nb.y, -nb.z)), cX = vec2(-aX.y, aX.x);       // in the (z, y) plane
+        vec2 aZ = normalize(vec2(nb.y, -nb.x)), cZ = vec2(-aZ.y, aZ.x);       // in the (x, y) plane
+        vec2 cY = normalize(nb.xz), aY = vec2(-cY.y, cY.x);                   // in the (x, z) plane
+        MSample sx = mSample(vec2(dot(wp.zy, aX), -dot(wp.zy, cX) * 1.3) * sc, ${L('cliff')});
+        MSample sy = mSample(vec2(dot(wp.xz, aY), -dot(wp.xz, cY)) * sc, ${L('cliff')});
+        MSample sz = mSample(vec2(dot(wp.xy, aZ), -dot(wp.xy, cZ) * 1.3) * sc, ${L('cliff')});
+        vec3 tc = sx.col * w.x + sy.col * w.y + sz.col * w.z;
+        vec3 cr = mTint(base, tc, ${L('cliff')});
+        vec3 nX = vec3(abs(sx.tn.z) * n.x, n.y, n.z) + vec3(0.0, aX.y, aX.x) * sx.tn.x + vec3(0.0, cX.y, cX.x) * sx.tn.y;
+        vec3 nY = vec3(n.x, abs(sy.tn.z) * n.y, n.z) + vec3(aY.x, 0.0, aY.y) * sy.tn.x + vec3(cY.x, 0.0, cY.y) * sy.tn.y;
+        vec3 nZ = vec3(n.x, n.y, abs(sz.tn.z) * n.z) + vec3(aZ.x, aZ.y, 0.0) * sz.tn.x + vec3(cZ.x, cZ.y, 0.0) * sz.tn.y;
+        vec3 nr = normalize(nX * w.x + nY * w.y + nZ * w.z);
+        // relief: where a proud bed meets a recessed one, tip the surface so ribs catch the light
+        float dP = (b1.a - b0.a) * 6.0 * bt * (1.0 - bt) / max(aa, 0.1);
+        nr = normalize(nr - 0.11 * dP * (nb - n * dot(nb, n)));
+        float rr = sx.rough * w.x + sy.rough * w.y + sz.rough * w.z;
+        // the splash zone: wet and near-black at the waterline, olive just under it
+        float wet = 1.0 - smoothstep(0.15, 1.0 + nB * 1.3, y);
+        cr = mix(cr, cr * ${g3(C.wet)} * 1.6, wet);
+        cr = mix(cr, ${g3(C.algae)} * 0.8, smoothstep(0.05, -1.5, y) * 0.55);
+        rr *= 1.0 - 0.55 * wet;
+        col += wRock * cr; nrm += wRock * nr; rough += wRock * rr;
+      }
+      diffuseColor.rgb *= col;
+      mNormalW = normalize(nrm);
+      mRough = rough;`;
+}
+
+/** Loose rock (boulders, breakwater blocks): the pale rock texture from three sides, wet near the sea. */
+function rockGLSL(cfg) {
+  const C = TERRAIN_COLOURS, layer = String(LAYERS[cfg.layer] ?? 0);
+  return /* glsl */`
       vec3 n = normalize(vSN);
       vec3 w = pow(abs(n), vec3(4.0)); w /= (w.x + w.y + w.z);
-      float steep = 1.0 - n.y;                                  // 0 flat … 1 vertical
-      float edge = mFbm(wp.xz * 0.08) * 0.18;
-      // layer weights: ground on gentle slopes, broken rock between, cliff when steep
-      float wCliff = smoothstep(0.24 + edge, 0.34 + edge, steep);
-      float wRock = smoothstep(0.12 + edge, 0.2 + edge, steep) * (1.0 - wCliff);
-      float wGround = 1.0 - wCliff - wRock;
-      vec3 col = vec3(0.0), tnSum = vec3(0.0); float rough = 0.0;
-      vec3 base = diffuseColor.rgb;
-      for (int li = 0; li < 3; li++) {
-        float lw = li == 0 ? wGround : li == 1 ? wRock : wCliff;
-        if (lw < 0.01) continue;
-        int layer = li == 0 ? ${'${GROUND}'} : li == 1 ? ${'${ROCK}'} : ${'${CLIFF}'};
-        float sc = 1.0 / uLayerP[layer].x;
-        // cliffs: squash the strata slightly so layers read as horizontal bands
-        vec2 sy = li == 2 ? vec2(1.0, 1.6) : vec2(1.0);
-        MSample sx = mSample(vec2(wp.z * sign(n.x), -wp.y) * sc * sy, layer);
-        MSample sy2 = mSample(wp.xz * sc, layer);
-        MSample sz = mSample(vec2(-wp.x * sign(n.z), -wp.y) * sc * sy, layer);
-        vec3 tc = sx.col * w.x + sy2.col * w.y + sz.col * w.z;
-        // whiteout-blended normals (Golus)
-        vec3 tX = vec3(sx.tn.xy + n.zy, abs(sx.tn.z) * n.x);
-        vec3 tY = vec3(sy2.tn.xy + n.xz, abs(sy2.tn.z) * n.y);
-        vec3 tZ = vec3(sz.tn.xy + n.xy, abs(sz.tn.z) * n.z);
-        vec3 nw = normalize(tX.zyx * w.x + tY.xzy * w.y + tZ.xyz * w.z);
-        col += lw * mTint(base, tc, layer);
-        tnSum += lw * nw;
-        rough += lw * (sx.rough * w.x + sy2.rough * w.y + sz.rough * w.z);
-      }
-      diffuseColor.rgb = col;
-      mNormalW = normalize(tnSum);
-      mRough = rough;`;
-
-/** Fill the terrain layer indices into the terrain GLSL (after the manifest loads). */
-export function terrainGLSL() {
-  return TERRAIN_GLSL.replace('${GROUND}', String(LAYERS.ground ?? 0)).replace('${ROCK}', String(LAYERS.rock ?? 0)).replace('${CLIFF}', String(LAYERS.cliff ?? 0));
+      float sc = 1.0 / uLayerP[${layer}].x;
+      vec3 o = vec3(vMRand * 13.0, vMRand * 7.0, vMRand * 29.0);
+      MSample sx = mSample((wp.zy + o.zy) * sc, ${layer});
+      MSample sy = mSample((wp.xz + o.xz) * sc, ${layer});
+      MSample sz = mSample((wp.xy + o.xy) * sc, ${layer});
+      vec3 c = mTint(diffuseColor.rgb, sx.col * w.x + sy.col * w.y + sz.col * w.z, ${layer});
+      vec3 tX = vec3(sx.tn.xy + n.zy, abs(sx.tn.z) * n.x);
+      vec3 tY = vec3(sy.tn.xy + n.xz, abs(sy.tn.z) * n.y);
+      vec3 tZ = vec3(sz.tn.xy + n.xy, abs(sz.tn.z) * n.z);
+      float wet = 1.0 - smoothstep(0.1, 0.75 + vMRand * 0.7, wp.y);
+      c = mix(c, c * ${g3(C.wet)} * 1.6, wet);
+      c = mix(c, ${g3(C.algae)} * 0.8, smoothstep(0.05, -1.5, wp.y) * 0.55);
+      diffuseColor.rgb = c;
+      mNormalW = normalize(tX.zyx * w.x + tY.xzy * w.y + tZ.xyz * w.z);
+      mRough = (sx.rough * w.x + sy.rough * w.y + sz.rough * w.z) * (1.0 - 0.55 * wet);`;
 }

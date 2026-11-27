@@ -13,7 +13,7 @@ const { launch, ROOT } = require('./harness.cjs');
 
 const VIEWS = {
   // [camera offset from harbour], [target offset from harbour]
-  postcard: [[66, 40, 40], [-12, 16, -35]],
+  postcard: [[16, 50, 90], [-2, 15, -28]],
   aerial: [[85, 120, 95], [-5, 10, -40]],
   harbour: [[18, 9, 30], [-4, 5, -8]],
   cliff: [[70, 22, 62], [58, 10, 10]],          // the eastern headland cliffs from the water
@@ -75,7 +75,7 @@ function parseArgs() {
       for (let i = 0; i < frames; i++) { game.renderFrame(0.05); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
     }, { v, frames: +(o.frames || 3), abs: !!o.abs });
     const file = path.join(out, `${tag}${label}.jpg`);
-    if (o.clean) await page.addStyleTag({ content: '#toolbar,#speed,#side,#stats,#hint,#title,.pill,.panel{display:none !important}' }).catch(() => {});
+    if (o.clean) await page.addStyleTag({ content: '#topbar,#speed,#hint,#stats,#side,#pathbar,#toolbar,#settings,#toast{display:none !important}' }).catch(() => {});
     await page.screenshot({ path: file, type: 'jpeg', quality: 88 });
     console.log('saved ' + path.relative(ROOT, file));
   }

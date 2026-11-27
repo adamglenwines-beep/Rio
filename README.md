@@ -74,7 +74,7 @@ The first load needs internet access, to fetch Three.js from the CDN.
 |---|---|
 | `index.html` | Page, styles, toolbar, import map for Three.js |
 | `src/config.js` | **All tunable numbers** (slope bands, sizes, effort weights, speeds, colours) |
-| `src/terrain.js` | Procedural cove (heightfield), slope bands, smoothed "downhill" field |
+| `src/terrain.js` | Procedural cove: 1 m ground mesh, rock ledges along tilted strata, shore shelves, slope bands, the distant hills |
 | `src/water.js` | Animated low-poly sea and boats |
 | `src/camera.js` | Orbit camera, ground-collision clamp, postcard view |
 | `src/paths.js` | Stairs/lanes: switchback routing, the path graph, stone-step rendering |
@@ -85,7 +85,9 @@ The first load needs internet access, to fetch Three.js from the CDN.
 | `src/growth.js` | **The growth simulation** (placement, scoring, storeys) |
 | `src/infill.js` | Decorates leftover spaces: gardens, piazzette, rocks, pots, washing lines… |
 | `src/buildings.js` | Low-poly houses from footprint polygons: walls, roofs, stone bases, windows, shutters… |
-| `src/scenery.js` | Dry-stone terraces, vines and trees |
+| `src/terraces.js` | Vine terraces: level treads and dry-stone walls that can be laid on any slope |
+| `src/scenery.js` | The wild hillside: scrub, pines, olives, agave, bougainvillea, boulders (with budgets and distance fade) |
+| `src/autoquality.js` | The patient watchdog behind the Auto quality setting |
 | `src/demo.js` | The sample village layout |
 | `src/gfx.js` | Lights, sky, time of day, quality presets, effects (antialiasing, bloom, AO, reflections, haze) |
 | `src/ui.js` | Tools, touch/mouse handling, hints, settings panel |
@@ -131,6 +133,8 @@ harbour, local density and the slope band.
 
 The look is tuned mainly through `src/config.js`:
 - `terrain.ravine`: shape of the ravine (floor width, flank slopes, where the cliffs start);
+- `terrain.rock`, `terrain.shore`, `terrain.outer`, `terrain.cover`: strata and ledges, the rocky shoreline, the distant hills, wild scrub;
+- `terraces`, `flora`: terrace walls and vines; bushes, trees, boulders and their per-quality budgets;
 - `slope`: the slope bands (moderate < 33°, steep < 42°, cliff above);
 - `harbour`: quay, piazza, slipway, the waterfront's slim tall houses and stone bases;
 - `path`: lane width, setback, the band reserved along lanes, archways;
@@ -154,6 +158,8 @@ npm install              # three + three-mesh-bvh, for running the tests in Node
 npm run test:unit        # fast logic tests (~2 s)
 npm run test:browser     # opens the game in a headless browser (needs Playwright)
 npm run textures         # re-pack the textures listed in assets/textures/web/sets.json
+node tools/shot.cjs --views postcard,aerial --out docs/progress/tmp   # screenshots of the demo town
+node tools/measure_moves.cjs                                           # frame times during camera moves
 ```
 
 The browser test checks for errors, missing textures and frame-time regressions against

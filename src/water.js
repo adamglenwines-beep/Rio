@@ -57,6 +57,12 @@ export class Sea {
     this.water.receiveShadow = true;
     this.water.renderOrder = 1;
     this.group.add(this.water);
+    // the open sea beyond the animated patch, out to the horizon (calm and flat)
+    const far = new THREE.Mesh(new THREE.RingGeometry(430, 2400, 48, 1).rotateX(-Math.PI / 2).translate(0, -0.12, 200),
+      new THREE.MeshStandardMaterial({ color: '#1d7aa6', roughness: 0.3, metalness: 0.05 }));
+    far.receiveShadow = false;
+    this.farSea = far;
+    this.group.add(far);
 
     this._buildBoats();
   }

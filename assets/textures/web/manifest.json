@@ -387,6 +387,102 @@
      "bytes": 131502
     }
    }
+  },
+  {
+   "key": "scrub",
+   "set": "Ground063",
+   "tone": "keep",
+   "scale": 6,
+   "use": "wild hillside: dry grass and scrub floor",
+   "mean": [
+    0.528,
+    0.465,
+    0.327
+   ],
+   "files": {
+    "1024": {
+     "albedo": "scrub_albedo_1024.webp",
+     "data": "scrub_data_1024.webp",
+     "bytes": 939086
+    },
+    "512": {
+     "albedo": "scrub_albedo_512.webp",
+     "data": "scrub_data_512.webp",
+     "bytes": 240206
+    }
+   }
+  },
+  {
+   "key": "soil",
+   "set": "Ground085",
+   "tone": "keep",
+   "scale": 5,
+   "use": "terrace treads and garden soil",
+   "mean": [
+    0.409,
+    0.329,
+    0.236
+   ],
+   "files": {
+    "1024": {
+     "albedo": "soil_albedo_1024.webp",
+     "data": "soil_data_1024.webp",
+     "bytes": 992094
+    },
+    "512": {
+     "albedo": "soil_albedo_512.webp",
+     "data": "soil_data_512.webp",
+     "bytes": 236018
+    }
+   }
+  },
+  {
+   "key": "pebbles",
+   "set": "ganges_river_pebbles",
+   "tone": "greyish",
+   "scale": 3.5,
+   "use": "pebble beach and shallow sea bed",
+   "mean": [
+    0.419,
+    0.407,
+    0.392
+   ],
+   "files": {
+    "1024": {
+     "albedo": "pebbles_albedo_1024.webp",
+     "data": "pebbles_data_1024.webp",
+     "bytes": 687964
+    },
+    "512": {
+     "albedo": "pebbles_albedo_512.webp",
+     "data": "pebbles_data_512.webp",
+     "bytes": 209260
+    }
+   }
+  },
+  {
+   "key": "rockPale",
+   "set": "rocks_ground_06",
+   "tone": "greyish",
+   "scale": 6,
+   "use": "boulders, rock shelves and skerries",
+   "mean": [
+    0.463,
+    0.446,
+    0.427
+   ],
+   "files": {
+    "1024": {
+     "albedo": "rockPale_albedo_1024.webp",
+     "data": "rockPale_data_1024.webp",
+     "bytes": 917168
+    },
+    "512": {
+     "albedo": "rockPale_albedo_512.webp",
+     "data": "rockPale_data_512.webp",
+     "bytes": 214222
+    }
+   }
   }
  ]
 }

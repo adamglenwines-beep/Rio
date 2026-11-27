@@ -17,6 +17,10 @@
     { "key": "terraA",       "set": "RoofingTiles012B",      "tone": "keep", "scale": 2.2, "use": "terracotta roofs" },
     { "key": "terraB",       "set": "RoofingTiles014C",      "tone": "keep", "scale": 2.2, "use": "terracotta roofs (variant)" },
     { "key": "woodPaint",    "set": "PaintedWood009B",       "tone": "grey", "scale": 1.4, "use": "shutters and doors (tinted)" },
-    { "key": "planks",       "set": "Planks012",             "tone": "keep", "scale": 1.8, "use": "weathered timber boat-store doors" }
+    { "key": "planks",       "set": "Planks012",             "tone": "keep", "scale": 1.8, "use": "weathered timber boat-store doors" },
+    { "key": "scrub",        "set": "Ground063",             "tone": "keep", "scale": 6, "use": "wild hillside: dry grass and scrub floor" },
+    { "key": "soil",         "set": "Ground085",             "tone": "keep", "scale": 5, "use": "terrace treads and garden soil" },
+    { "key": "pebbles",      "set": "ganges_river_pebbles",  "tone": "greyish", "scale": 3.5, "use": "pebble beach and shallow sea bed" },
+    { "key": "rockPale",     "set": "rocks_ground_06",       "tone": "greyish", "scale": 6, "use": "boulders, rock shelves and skerries" }
   ]
 }

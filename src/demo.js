@@ -45,4 +45,17 @@ export function layDemo(game) {
     zones.paint(x, z, 4, ZONE.RES);
   }
   for (const dz of [-2, -8, -14]) { const p = P(dz); zones.paint(p.x, p.z, 6, ZONE.COM); }
+
+  // A few vine and olive terraces around the town (the rest of the hillside stays wild).
+  if (game.terraces) {
+    const T = game.terraces;
+    T.clear();
+    T.addArea({ ...P(-52, 66), r: 26, crop: 'vine' });
+    T.addArea({ ...P(-84, 58), r: 22, crop: 'vine' });
+    T.addArea({ ...P(-18, -62), r: 22, crop: 'vine' });
+    T.addArea({ ...P(-60, -64), r: 26, crop: 'vine' });
+    T.addArea({ ...P(-104, -40), r: 20, crop: 'olive' });
+    T.addArea({ ...P(-108, 30), r: 18, crop: 'olive' });
+    game.rebuildLandscape();
+  }
 }

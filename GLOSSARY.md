@@ -14,9 +14,17 @@ Game-development terms used in this project, one plain-English line each.
 | **Draw call** | One instruction to the graphics card to draw a batch of triangles; fewer is faster. |
 | **Face-aligned projection** | Our way of putting a texture on a flat face: it's laid flat along that face's own direction, so walls at any angle and wedge houses get an undistorted texture. |
 | **Frame time** | How long one picture takes to make, in milliseconds (16.7 ms = 60 frames per second). |
+| **Bedding plane / strata** | The flat layers rock was laid down in. Ours are tilted (they "dip" about 55°), which is why the cliffs are striped diagonally. |
+| **Budget (instance budget)** | A cap on how many copies of something (bushes, say) are drawn; lower quality settings get a smaller budget. |
+| **Contour line** | A line joining points of equal height. Terrace walls follow contour lines. |
+| **Dead band / hysteresis** | A deliberate gap between the "too slow" and "fast enough" thresholds, so a setting doesn't flip back and forth. |
+| **Heightfield** | Terrain stored as a grid of heights (one number per grid point) rather than as a 3D model. |
+| **Hitch** | One unusually long frame (a pause), e.g. while a shader compiles. |
 | **Instancing** | Drawing many copies of the same small object (windows, shutters) in one draw call. |
 | **Interior mapping** | A shader trick that makes a flat window look like it has a room behind it. |
 | **LOD bias (mip bias)** | Asks the GPU for a blurrier version of a texture on purpose (used for the soft style). |
+| **LOD (level of detail)** | Showing a simpler version of something when it is far away (or not at all when it would be a few pixels). |
+| **Marching squares** | A simple method for tracing contour lines through a grid of heights. |
 | **Mipmaps** | Smaller pre-shrunk copies of a texture, used for distant surfaces so they don't shimmer. |
 | **Normal map** | A texture that stores tiny surface bumps as directions, so flat walls catch light like rough stone. |
 | **PBR (physically based rendering)** | Lighting that follows real-world rules (roughness, metalness) so materials look consistent. |
@@ -24,6 +32,7 @@ Game-development terms used in this project, one plain-English line each.
 | **Raycast / ray test** | Shooting an invisible line into the scene to see what it hits (used for clicking and camera collision). |
 | **Roughness map** | A texture saying how shiny (smooth) or matte (rough) each spot of a surface is. |
 | **Shader** | A small program that runs on the graphics card and decides each pixel's colour. |
+| **Render pass** | One drawing of the scene (or of a full-screen effect). A frame is several passes: mirror, scene, effects. |
 | **Shadow map** | A picture of the scene from the sun's point of view, used to work out what's in shadow. |
 | **sRGB / linear** | Two ways to store colour values; colour textures are sRGB, data textures (normals, roughness) are linear. |
 | **SSAO** | Screen-space ambient occlusion: AO worked out from the finished image each frame (costly; High only). |
@@ -32,6 +41,7 @@ Game-development terms used in this project, one plain-English line each.
 | **Tiling / repetition** | A texture repeated across a big surface; visible repetition looks fake, so we vary it. |
 | **Tint** | Multiplying a (often greyscale) texture by a colour, so one texture serves many colours. |
 | **Triplanar mapping** | Projects a texture from three directions (x, y, z) and blends them by the surface angle, so terrain and cliffs never stretch. |
+| **Watchdog** | Code that keeps an eye on something (here: frame times) and acts only if it stays bad for a while. |
 | **Uniform** | A value passed from JavaScript to a shader for every pixel (e.g. the time of day). |
 | **Vertex colour** | A colour stored on each corner of a triangle, blended across it. |
 | **WebP** | A compact image format browsers understand; our packed textures use it. |

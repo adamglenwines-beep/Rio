@@ -12,6 +12,7 @@ import { computeAccess } from './access.js';
 import { Growth } from './growth.js';
 import { layDemo } from './demo.js';
 import { Scenery } from './scenery.js';
+import { Terraces } from './terraces.js';
 import { Infill } from './infill.js';
 import { UI } from './ui.js';
 import { Graphics } from './gfx.js';
@@ -39,7 +40,7 @@ camera.layers.enableAll();
 
 // ---- World ------------------------------------------------------------------
 const terrain = new Terrain(CONFIG.seed);
-scene.add(terrain.mesh);
+scene.add(terrain.mesh, terrain.outer);
 const sea = new Sea(terrain);
 scene.add(sea.group);
 const paths = new PathNetwork(terrain);
@@ -51,10 +52,12 @@ const rig = new CameraRig(camera, renderer.domElement, terrain);
 fitCamera();
 rig.postcard(true);
 
-const scenery = new Scenery(terrain);
+const terraces = new Terraces(terrain);
+scene.add(terraces.group);
+const scenery = new Scenery(terrain, terraces);
 scene.add(scenery.group);
 
-const game = { THREE, scene, camera, renderer, terrain, sea, rig, paths, zones, scenery, speed: 1, access: null };
+const game = { THREE, scene, camera, renderer, terrain, sea, rig, paths, zones, scenery, terraces, speed: 1, access: null };
 game.gfx = new Graphics(game, renderer, scene, camera);
 game.growth = new Growth(game);
 scene.add(game.growth.group);
@@ -71,7 +74,9 @@ game.refreshAccess = (force = false) => {
   zones.refresh(game.access);
   game.growth.onAccessChanged();
 };
-game.reset = () => { paths.clear(); zones.clear(); game.growth.clear(); game.refreshAccess(true); };
+/** Re-cut the terraces and re-seed the wild plants (after terrace areas change). */
+game.rebuildLandscape = () => { terraces.rebuild(game); scenery.regenerate(); };
+game.reset = () => { paths.clear(); zones.clear(); game.growth.clear(); terraces.clear(); game.rebuildLandscape(); game.refreshAccess(true); };
 game.demo = () => { layDemo(game); game.refreshAccess(true); };
 game.refreshAccess(true);
 /** Switch the whole scene to an art style ('clean' | 'soft' | 'painted'). */
@@ -109,7 +114,7 @@ game.renderFrame = (dt, rawDt = dt) => {
     infillTimer = CONFIG.infill.refreshSeconds;
     game.infill.start();
   }
-  if (game.infill.busy && game.infill.work(CONFIG.infill.frameBudgetMs)) scenery.refresh(game.growth, game.infill);
+  if (game.infill.busy && game.infill.work(CONFIG.infill.frameBudgetMs)) { terraces.refresh(game.growth, game.infill); scenery.refresh(game.growth, game.infill); }
   rig.update(dt);
   camera.updateMatrixWorld();   // everything drawn this frame uses this frame's camera
   sea.update(elapsed);

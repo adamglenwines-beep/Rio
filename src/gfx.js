@@ -224,6 +224,7 @@ export class Graphics {
     }
     this._applySize();
     this._buildPipeline();
+    if (this.game.scenery) this.game.scenery.setQuality(name);
     this.shadowsDirty();
     this._emit();
   }
@@ -491,7 +492,7 @@ export class Graphics {
     clip.multiplyScalar(2 / clip.dot(q));
     pm[2] = clip.x; pm[6] = clip.y; pm[10] = clip.z + 1; pm[14] = clip.w;
     // skip what barely shows in a ripply reflection (and the sea itself)
-    const hide = [g.sea.water, g.infill.group, g.scenery.group, g.zones.mesh, ...g.growth.renderer.smallParts()];
+    const hide = [g.sea.water, g.infill.group, g.scenery.group, g.terraces.group, g.zones.mesh, ...g.growth.renderer.smallParts()];
     const was = hide.map((o) => o.visible);
     hide.forEach((o) => (o.visible = false));
     const prevTarget = r.getRenderTarget(), dirty = r.shadowMap.needsUpdate;

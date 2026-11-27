@@ -21,8 +21,8 @@ A **cozy 3D city builder** inspired by the Cinque Terre, and Riomaggiore in part
 
 ### Era
 
-Not modern day: **the 1960s at the latest**. No cars, no motor roads, no modern tech.
-The exact era, or whether the game progresses through eras, is **still undecided**.
+**Medieval to the 1960s. Nothing later.** No cars, no motor roads, no modern tech.
+Whether the game progresses through eras within that span is **still undecided**.
 
 ### Control model (leaning)
 
@@ -55,6 +55,23 @@ A **Manor Lords-style hybrid**:
   - dry-stone walls and steps;
   - rocks with agave and prickly pear;
   - sheds, cisterns, washing lines and bougainvillea.
+
+## Landscape (v0.9)
+
+- **The hillside starts wild**: dark macchia scrub, dry grass, bare rock, a few umbrella
+  pines. **Terraces appear only where the player builds or farms.** They are a system
+  (`src/terraces.js`) that can be laid on any slope: the ground is re-cut into level treads
+  held by dry-stone walls that follow the contours. The demo lays a few around the town.
+- **Rock** is layered sandstone and shale dipping about 55° inland, as at Riomaggiore: on
+  the cliffs either side of the harbour the strata run diagonally. Rock shows where the
+  ground is too steep to build on; soil and scrub cover gentler ground, blended by slope.
+- **Shore**: wave-cut rock shelves and skerries under the headlands, loose boulders, a
+  boulder breakwater piled against the jetty, a pebble beach only at the harbour.
+- **Beyond the playable square** a scenery-only ring carries the coast and hills to the
+  horizon (headlands receding in haze, a ridge behind the town). The valley head is closed
+  by the ridge, as in reality; the targets' glimpse of sea behind the town is not copied.
+- **Postcard view** = from out on the water, looking up the cove (as in the art targets).
+- Vegetation is a **light first pass** (lumpy instanced bushes); a fuller pass comes later.
 
 ## Resources and industry
 
@@ -128,6 +145,11 @@ the colour palette, and the vegetation.
 - Reference mood: Riomaggiore, Manarola and Vernazza for form, and Burano and Lake Como
   for colour and mood. Expect saturated pastel facades, green shutters, grey slate roofs,
   dry-stone terraces, and blue-green water.
+- **Rendering rules (v0.9):** one render path per frame; the shadow map is redrawn only
+  when something that casts a shadow changes; **Auto quality is patient** (it judges
+  2.5-second windows, needs several slow windows to step down, half a minute of smooth
+  running to step up, and never changes while the camera moves); plants have a per-quality
+  budget and shrink away with distance.
 - Visual decisions so far: nearly flat slate roofs; tall narrow houses; waterfront houses
   on rough stone bases with arched boat stores; stone stairs and paving.
 - **Openings have real depth**, never flat stickers: boat-store arches are recessed in a
