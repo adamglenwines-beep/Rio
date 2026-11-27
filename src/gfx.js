@@ -125,9 +125,9 @@ const LADDER = [
 // (brightest) instead of 38 / 68 / 88; sky fill and exposure, and so the shade, are unchanged.
 export const TIMES = { midday: 12, golden: 18.6, dusk: 20.4, night: 23 };
 export const KEYS = [
-  { h: 12, elev: 42, az: -50, sun: '#fff4e2', sunI: 4.4, sky: '#dceaff', ground: '#9a8a70', hemiI: 2.0,
+  { h: 12, elev: 42, az: -50, sun: '#ffecd0', sunI: 5.3, sky: '#dceaff', ground: '#9a8a70', hemiI: 2.0,
     top: '#2a7fd0', hor: '#bcdcf4', glow: '#fff6e6', glowI: 0.6, fog: '#bcd6ec', exp: 1.2, lit: 0 },
-  { h: 18.6, elev: 14, az: -42, sun: '#ffd4a6', sunI: 4.4, sky: '#d6e0f0', ground: '#94806a', hemiI: 2.15,
+  { h: 18.6, elev: 14, az: -42, sun: '#ffd4a6', sunI: 5.0, sky: '#d6e0f0', ground: '#94806a', hemiI: 2.15,
     top: '#4f8fd6', hor: '#f6dcc6', glow: '#ffc79c', glowI: 2.0, fog: '#e4dad2', exp: 1.12, lit: 0.06 },
   { h: 20.4, elev: 7, az: -75, sun: '#ff9a7a', sunI: 0.35, sky: '#8a7fb8', ground: '#3d3550', hemiI: 0.95,
     top: '#1e2f5e', hor: '#e48a6f', glow: '#ff8a60', glowI: 1.4, fog: '#8f6f86', exp: 1.3, lit: 0.35 },

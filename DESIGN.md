@@ -167,7 +167,8 @@ A **Manor Lords-style hybrid**:
   and lanes are in shade. Midday is an early-afternoon sun.
 - **Target spread**: sunlit warm walls ~72% lightness, shaded ~46% (the art target's yellow
   wall #F3C17B / #9E794D); checked with `tools/measure_walls.cjs` on the six-house scene
-  (`index.html?scene=six`), and the same on Low, Medium and High.
+  (`index.html?scene=six`), and the same on Low, Medium and High. v0.22 measures #DDB17A 68% /
+  #987751 45% there, and 33 / 60 / 77.5 across the town.
 - **Tone curve (v0.16): the game's own**, exposure ~1.2. It bends earlier than Khronos Neutral
   (which it replaces) and keeps a colour's hue and saturation as it brightens, so sunlit walls
   don't wash out to cream; only the sun, glints and lit windows burn to white. Numbers:

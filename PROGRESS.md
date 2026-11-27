@@ -24,10 +24,11 @@ once at the very end. After each stage: commit, merge to `main`, publish, screen
 | 4. Windows, shutters and doors | `v0.19 · Windows` | **done, published** |
 | 5. Plaster weathering | `v0.20 · Weathering` | **done, published** |
 | 6. Break the procedural rhythm | `v0.21 · Rhythm` | **done, published** |
-| Wrap-up: browser suite, final sheets in `docs/progress/final/`, summary | | to do |
+| Revisit: sunlit colour, and the stipple bug | `v0.22 · Sunlit` | **done, published** |
+| Wrap-up: browser suite, final sheets in `docs/progress/final/`, summary | | **done** (see "End of the run") |
 
-**To resume:** read this section, look at the table, and carry on with the first stage that is
-not "done". Each stage's notes below say what was changed and what was measured.
+**The run is complete.** To carry on, read "End of the run: where it stands" below (it lists
+what I'd tune next). Each stage's notes say what was changed and what was measured.
 
 ### How things are measured in this run
 - `python3 tools/measure_image.py <picture> x0,y0,x1,y1` (new): lightness of warm-coloured pixels
@@ -405,6 +406,129 @@ floors): out of scope here (no new decorative objects). Blank walls are plain pl
 often show a bricked-up opening or a drainpipe.
 
 Pictures: `docs/progress/v0.21/`.
+
+### Revisit · Sunlit colour (v0.22) — done
+
+With the six stages done in about two hours, I compared v0.21 with the paint-overs from matched
+cameras and picked the biggest gap that was in scope: **sunlit walls were duller and less
+saturated than the paint-overs'** (mean saturation of warm pixels 0.41 against their 0.47–0.55;
+the single ochre test wall 67.5% against 72%), a leftover of Stages 1–2 being tuned one after
+the other. Also a leftover of Stage 5: **pale "crumbs"** peppered over houses in poor repair.
+
+What changed:
+- **Sun a little stronger and warmer**, now that the palette no longer blows out: midday 4.4 →
+  5.3 and `#fff4e2` → `#ffecd0`; golden hour 4.4 → 5.0. The tone curve bends a touch later and
+  its ceiling is higher (`knee` 0.38 → 0.40, `top` 0.93 → 0.97), so sunlit walls are more
+  luminous while still keeping their colour. Sky fill and exposure unchanged again.
+- **Faded paint is paler, not greyer**: a house in poor condition keeps 84% of its saturation at
+  worst (was 74%); sun-faded patches keep 82% (was 70%).
+- **The stipple of pale and dark dots is gone. It was a bug, there since v0.10.** Houses with
+  painted corner stones carry "wear + 1" in one number, and the shader took its fraction to get
+  the wear back. For a house with no wear that number is exactly 1.0, which comes out a hair
+  under or over 1 from one pixel to the next, so the wear flipped between none and total, pixel
+  by pixel, wherever plaster can wear (corners, wall feet). One line in `materials.js`. (Found
+  by drawing the shader's inputs as colours; I first blamed the noise, the worn-plaster photo,
+  shiny plaster and the texture projection, and tightened all four on the way: wear edges now
+  have nothing finer than about 20 cm, the worn-plaster photo's contrast is 0.45, plaster is
+  matt (`weather.minRoughness`), and walls are textured along their exact face direction
+  instead of one worked out per pixel.)
+- Pale and cool houses a little rarer (weights: cream 6 → 5, limewash 3 → 2, stone render 4 → 3,
+  pale mint 2 → 1.5, grey blue 1 → 0.8).
+- Balcony slab undersides and consoles darker (they glowed white from below).
+
+**Final measurements** (JSON in `docs/progress/v0.22/`):
+
+| Warm walls: shade / typical / brightest | v0.15 | v0.22 (final) | target |
+|---|---|---|---|
+| Wall pixels only, High, Neutral, midday | 38 / 68 / 88 | **33 / 60 / 77.5** | 37–46 / ~60 / ~76 (brief) |
+| …Medium | (sun 73, shade 41) | 33 / 60 / 77.5 | |
+| …Low | (sun 73, shade 41) | 33 / 59 / 77 | |
+| …High, Warm | 39 / 66 / 83 | 33.5 / 57.5 / 74.5 | |
+| …High, golden hour | (sun 70, shade 38) | 31 / 57.5 / 74.5 | |
+| Sunlit walls only (10th / 50th / 90th) | 60 / 73 / 88 | 49 / 64 / 77 | |
+| Postcard picture, measured like the paint-overs | 36.5 / 67.5 / 87.6 | **32.0 / 58.4 / 78.8** | paint-overs 29–31 / 56–61 / 77–80 |
+| …mean saturation of warm pixels | 0.53 | 0.46 | paint-overs 0.47–0.55 |
+| Single ochre wall (#E2BC78): sun / shade | #EDC99D 75.5% / #9A7B5B 47% | **#DDB17A 67.8% / #987751 45%** | #F3C17B 72% / #9E794D 46% |
+| Shutter greens, lightness 10th / 50th / 90th | 17 / 31 / 41 | 12 / 17 / 27 | paint-overs 14 / 20 / 29 |
+
+Read honestly:
+- **Typical and brightest are on target** by both ways of measuring.
+- **Shade is darker than the brief's 37–46%** when only wall pixels are counted (33%). Stage 1
+  left it where it was (38); the deeper pigments of Stage 2 took it to 35.5 and the baked shade
+  of Stage 3 to 33. Measured the way the paint-overs measure (32.0) it sits just above their own
+  29–31, so I left it. To lift it: raise `hemiI` in `KEYS` (`src/gfx.js`) from 2.0 to about 2.2.
+- **The single test wall's shade matches its target; its sunlit side is still 4 points under**
+  (67.8% against 72%) and less saturated than the paint-over's. Pushing it further made the
+  pale houses wash out again.
+
+**Frame rate, final (software renderer, Postcard, midday; v0.15 and v0.22 run back to back, twice):**
+
+| | v0.15 | v0.22 | |
+|---|---|---|---|
+| High, seconds a frame | 4.12, 4.32 (mean 4.22) | 4.43, 4.53 (mean 4.48) | **+6%** |
+| Medium | 3.85 | 4.19 | +9% (one run each) |
+| Low | 2.61 | 2.75 | +5% (one run each) |
+| Draw calls | 122 | **95** | −22% |
+| Triangles | 0.61 M | 0.69 M | +12% |
+
+So **expect about the same fps as v0.15 on High, perhaps a frame or two lower**; fewer draw
+calls help a real graphics card more than this software renderer shows. Please read the real
+figure in ⚙️ Settings. The browser test suite's own frame-time checks: Low ×0.75, Medium ×0.72,
+High ×0.50 of its (old) baseline.
+
+**Tests at the end:** unit 61/61; browser suite 27/27 (run once, at the very end, as asked).
+
+Pictures: `docs/progress/v0.22/`; the three final sheets (v0.15 | v0.22 | closest target) and
+an enlarged town crop are in **`docs/progress/final/`**.
+
+### End of the run: where it stands (v0.22)
+
+**Live:** https://adamglenwines-beep.github.io/Rio/ — the title pill should read
+`v0.22 · Sunlit`. Every stage is its own commit on `main` (v0.16 … v0.22), so any of them can
+be rolled back to.
+
+**How close to the targets, honestly.**
+- *Close:* the light on the walls (typical and brightest lightness, shade of a single wall),
+  shutter colour and darkness, windows as dark holes with real shutters, the soft shade under
+  things. Side by side with the single-building target the facade is now the same kind of
+  object, which it was not at v0.15.
+- *Part-way:* wall colour is richer than v0.21 but still less saturated and less luminous in
+  full sun than the paint-overs (0.46 against 0.47–0.55; the test wall 68% against 72%). The
+  plaster is cleaner and flatter than the paint-overs' hand-painted walls. Shade between
+  buildings is a little lighter than theirs when you look at the whole picture, a little darker
+  than the brief's figure when you count wall pixels only.
+- *Far, and out of scope here:* the paint-overs' roofs are mostly terracotta with visible
+  tiles, their slopes are thick with trees, vines and flowers, their houses carry awnings,
+  plants and washing on nearly every floor, and their town climbs the hill along stairs. From
+  the Postcard and Overview cameras those are now the biggest differences by far. The
+  Overview picture in particular is mostly roofs, so it changed least in this run.
+
+**What got worse.**
+- About 20% fewer windows (1,990 against 2,490) and 16% fewer balconies (112 against 134):
+  blank and one-column side walls and wider spacing. Two big blank side walls face the
+  Postcard camera in the demo town.
+- Frame time about +6% on High in this sandbox; triangles +12%.
+- The whole scene is lit by a slightly weaker sun than v0.15 (5.4 → 5.3 at midday, with the new
+  tone curve holding highlights back), so ground, rock and sea are a little less bright.
+- Close up, shutter wood is streaky; "ajar" leaves pass through the corner of the reveal by a
+  centimetre or two.
+
+**Noticed, not touched** (out of scope; flagged for a later run):
+- **Dusk is very dark** (the same in v0.15: the Postcard picture averages about 8% brightness).
+  Lit windows do now show from the Postcard view, because far windows are real glass.
+- Hillsides are bare (trees still switched off) and bright green.
+- Roofs: most are pale slate; cornices now vary but eaves and roof shapes are untouched.
+- `tests/browser/baseline.json` frame times are from an older, slower build; the suite passes
+  at ×0.5–0.75 of them. Re-create the baseline when convenient (`--update-baseline`).
+
+**What I'd tune next** (in this order):
+1. Roofs (terracotta share, tile relief, ridge and eaves detail): the biggest gap from above.
+2. Wall richness: a painted wash (warmer and cooler areas) on the plaster, and a second, finer
+   plaster photo up close.
+3. `rhythm.blankWall` / `sparseWall` down a little if the town reads too closed; and a rule
+   that the wall facing the harbour camera is never the blank one.
+4. Shade: decide between the brief's 37% and the paint-overs' ~30% and set `hemiI` to match.
+5. Tilted lower shutter panels (*gelosie*), and curtains in open windows.
 
 ### Decisions that hold for the whole run
 - **CC0 models (windows, shutters, doors, railings): looked, not used.** Poly Haven is reachable

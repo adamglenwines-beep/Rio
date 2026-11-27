@@ -160,6 +160,9 @@ npm run test:unit        # fast logic tests (~2 s)
 npm run test:browser     # opens the game in a headless browser (needs Playwright)
 npm run textures         # re-pack the textures listed in assets/textures/web/sets.json
 node tools/shot.cjs --views postcard,aerial --out docs/progress/tmp   # screenshots of the demo town
+node tools/measure_walls.cjs --scene town                              # light on the house walls: shade / typical / brightest
+python3 tools/measure_image.py picture.jpg 0.22,0.22,0.8,0.74          # the same for any picture (a screenshot or an art target)
+tools/stage_shots.sh v0.23 v0.22 docs/progress/v0.22/after_            # a stage's three screenshots and before/after sheets
 node tools/measure_moves.cjs                                           # frame times during camera moves
 ```
 

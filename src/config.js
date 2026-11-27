@@ -198,7 +198,7 @@ export const CONFIG = {
       slabFrom: 0.45, slabReach: 0.5,         // on the wall just above a balcony slab, where the two meet
       cornerFrom: 0.1, cornerReach: 1.6,      // in the corner where a neighbour's wall stands out in front
       // …and baked into the parts' own colours: undersides (balcony slabs, sills), consoles under a slab, frames in a recess
-      parts: { under: 0.6, console: 0.82, recess: 0.84 },
+      parts: { under: 0.5, console: 0.74, recess: 0.84 },
     },
     // Plaster weathering (v0.20; the wall shader in materials.js). Kept subtle: every strength is
     // the most a wall changes (0–1).
@@ -216,6 +216,7 @@ export const CONFIG = {
       wear: 0.7,               // how readily that scuffed plaster falls away to the undercoat and stone
       grime: 0.04,             // faint vertical grime everywhere
       mottle: 0.04,            // gentle mottling of the limewash
+      minRoughness: 0.9,       // plaster never shines: below this the sun made pin-point glints on the walls
     },
   },
 
@@ -358,7 +359,7 @@ export const CONFIG = {
     // (linear light; 0.38 shows as 65% grey) nothing changes; above it the brightest colour
     // channel eases toward `top` and the colour keeps its hue. Things brighter than `whiteFrom`
     // start to burn out to white, fully by `whiteFull` (the sun, glints, lit windows).
-    tone: { knee: 0.38, top: 0.93, whiteFrom: 1.6, whiteFull: 6.0 },
+    tone: { knee: 0.4, top: 0.97, whiteFrom: 1.6, whiteFull: 6.0 },
     bloomThreshold: 2.2,     // brightness (before tone mapping) above which things glow: the sun, glints, lit windows
   },
 
@@ -373,6 +374,8 @@ export const CONFIG = {
     detailMin: 0.3, detailMax: 2.4,
     layers: {
       plaster: { contrast: 0.7, mipBias: 0.4 },   // (v0.20) the pits in the plaster photo read as speckle from the Postcard view
+      plasterWorn: { contrast: 0.45, mipBias: 0.9 },   // (v0.22) the damaged-plaster photo, shown where plaster has worn away, stippled worst of all
+      rubble: { contrast: 0.7, mipBias: 0.4 },
       slateA: { contrast: 0.5, mipBias: 0.75 },
       terraA: { contrast: 0.75, mipBias: 0.5 },   // ridge tiles and terracotta roofs speckled too (roof-shimmer-v0.11)
       terraB: { contrast: 0.75, mipBias: 0.5 },

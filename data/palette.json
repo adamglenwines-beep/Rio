@@ -15,12 +15,12 @@
   ["#d58d81", 7, "pink", "rose"],
   ["#c37c71", 6, "pink", "dusty rose"],
   ["#e0ac97", 6, "pink", "shell pink"],
-  ["#e2cea3", 6, "pale", "cream"],
-  ["#dfd4bd", 3, "pale", "limewash"],
-  ["#caba99", 4, "pale", "stone render"],
+  ["#e2cea3", 5, "pale", "cream"],
+  ["#dfd4bd", 2, "pale", "limewash"],
+  ["#caba99", 3, "pale", "stone render"],
   ["#adb795", 3, "cool", "sage"],
-  ["#beceae", 2, "cool", "pale mint"],
-  ["#b0bab8", 1, "cool", "grey blue"]
+  ["#beceae", 1.5, "cool", "pale mint"],
+  ["#b0bab8", 0.8, "cool", "grey blue"]
  ],
  "_shutter": "Shutters: the deep bottle green of Ligurian persiane (dark in shade, emerald only where the sun hits the slats), a few lighter or sun-faded, the odd bare brown or slate-blue pair. Hue between the photos' yellower green and the paint-overs' teal. v0.13-v0.16 were lighter and brighter (#2f7656 ... #4a8a63) and read as flat poster green.",
  "shutter": [

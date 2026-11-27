@@ -20,7 +20,16 @@ Game-development terms used in this project, one plain-English line each.
 | **Wedge / gap lot** | A lot shaped to fill an odd corner where lanes meet at an angle, so no triangle of bare ground is left. |
 | **Colour grading** | A final adjustment of the whole image's colours (warmth, saturation, contrast). |
 | **Dado** | The lower band of a wall finished differently from the rest (here: rough grey render a metre or so high). |
-| **Decal** | A flat patch drawn on top of a surface to add a mark (our grime streaks under window sills). |
+| **Decal** | A flat patch drawn on top of a surface to add a mark. (Our grime streaks under window sills were decals until v0.20; they are baked into the wall now.) |
+| **Baked** | Worked out once, when a house is built, and stored with it, instead of being recalculated every frame. Our small-scale shade and weathering masks are baked into the wall mesh. |
+| **Contact shadow / crease shade** | The soft darkening right where two surfaces meet: under a sill or a balcony, inside a window reveal, in the corner between two houses. Baked since v0.18. |
+| **Reveal** | The inner sides of a window or door opening: the thickness of the wall you see round the frame. Ours are 26 cm deep. |
+| **Persiana (louvred shutter)** | The Ligurian slatted shutter. Two leaves hinged on the corners of the reveal: shut, they lie inside the opening; open, flat against the wall. |
+| **Tone curve (tone mapping)** | How the brightness the scene works out becomes brightness on your screen. Ours (v0.16) eases bright colours toward a ceiling while keeping their hue, so sunlit walls don't wash out. |
+| **Hue-preserving** | Brightening or darkening a colour without changing which colour it is or how strong it is. |
+| **String course** | A thin horizontal band of trim along a facade at a floor line. |
+| **Cornice** | The moulding along the top of a wall, under the eaves. |
+| **Trompe-l'oeil (painted window)** | A window painted on a blank wall, a Ligurian habit. |
 | **Draw call** | One instruction to the graphics card to draw a batch of triangles; fewer is faster. |
 | **Face-aligned projection** | Our way of putting a texture on a flat face: it's laid flat along that face's own direction, so walls at any angle and wedge houses get an undistorted texture. |
 | **Foam fringe / surf line** | White water drawn where the sea is very shallow: a fringe at the edge, and thin lines running in. |

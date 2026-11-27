@@ -486,7 +486,7 @@ export class BuildingRenderer {
     this.parts.doorLeaf = { geo: dg.leaf, mat: lambert({ vertexColors: true }), shadow: true };
     this.parts.doorTrim = { geo: dg.trim, mat: lambert({ vertexColors: true }), shadow: false, lod: 'near' };
     for (const p of Object.values(this.parts)) { p.mesh = null; p.cap = 0; }
-    registerStyled(this.massMat, 'surface', { mode: 'face', layer: 'attr', weather: true, trueMean: true });
+    registerStyled(this.massMat, 'surface', { mode: 'face', layer: 'attr', weather: true, trueMean: true, flatNormals: true });
     const surf = { door: 'woodPaint', chimney: 'plaster', doorFrame: 'stoneDressed', doorLeaf: 'planks', doorTrim: 'planks', doorJambs: 'stoneDressed', wsLeaf: 'planks', wsTrim: 'planks', wsJambs: 'stoneDressed',
       archLeaf: 'planks', archTrim: 'planks', archJambs: 'stoneDressed', archRing: 'stoneDressed', archSpandrel: 'plaster' };
     for (const k of Object.keys(this.parts)) {
@@ -1634,7 +1634,7 @@ export class BuildingRenderer {
     const F = this._look(b, rng);
     // condition: paint fades and greys, plaster crumbles only on houses in poor repair, fewer flowers
     const cond = plan.condition, paint = b.facade.clone(), hslP = {};
-    paint.getHSL(hslP); paint.setHSL(hslP.h, hslP.s * (0.74 + 0.26 * cond), Math.min(0.92, hslP.l + (1 - cond) * 0.05));
+    paint.getHSL(hslP); paint.setHSL(hslP.h, hslP.s * (0.84 + 0.16 * cond), Math.min(0.92, hslP.l + (1 - cond) * 0.05));
     F.wear = cond < CONFIG.building.condition.wearBelow ? (CONFIG.building.condition.wearBelow - cond) / CONFIG.building.condition.wearBelow * 0.85 : 0;
     F.flowers *= 0.4 + cond; F.pots = F.pots && rng() < 0.45 + cond;
     const base = b.gMin - 1.2;

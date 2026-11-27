@@ -235,8 +235,14 @@ export function injectSurface(sh, cfg) {
     : cfg.mode === 'rock' ? `{ vec3 wp = vSW; ${rockGLSL(cfg)} }`
     : `if (uTexOn > 0.5 && vMLayer > -0.5) {
       vec3 wp = vSW;
-      vec3 nG = normalize(cross(dFdx(wp), dFdy(wp)));               // the true flat face
-      if (dot(nG, vSN) < 0.0) nG = -nG;
+      ${cfg.flatNormals
+        // (v0.22) house walls carry exact per-face normals. Working the face out from screen-space
+        // derivatives instead is noisy from one pixel to the next (world positions are tens of metres,
+        // a pixel a few centimetres), and that noise jittered everything laid out along the wall:
+        // the plaster texture, and worst the edges of worn patches, which broke up into pin-point dots.
+        ? 'vec3 nG = normalize(vSN);'
+        : `vec3 nG = normalize(cross(dFdx(wp), dFdy(wp)));               // the true flat face
+      if (dot(nG, vSN) < 0.0) nG = -nG;`}
       ${FACE_GLSL(cfg)}
     }`;
   sh.fragmentShader = 'varying float vMLayer;\nvarying float vMRand;\nvarying float vMGround;\nvarying vec4 vMask;\nvec3 mNormalW = vec3(0.0); float mRough = -1.0;\n'
@@ -278,7 +284,11 @@ const FACE_GLSL = (cfg) => `
 const WEATHER_GLSL = (() => { const W = CONFIG.building.weather; return `
       if (layer == PLASTER_LAYER && abs(nG.y) < 0.5) {
         vec2 q = vec2(dot(wp, t), wp.y);
-        float amt = fract(vWall.z), flags = floor(vWall.z + 0.001);
+        // (v0.22) aWall.z = wear (0–0.95) + 1 on houses with painted corner stones. fract() of it was
+        // wrong for exactly 1.0: interpolated, that comes out a hair under or over from pixel to pixel,
+        // so the wear flipped between none and total. That was the stipple of pale and dark dots on
+        // every house with corner stones, since v0.10.
+        float flags = floor(vWall.z + 0.001), amt = clamp(vWall.z - flags, 0.0, 0.95);
         float h = wp.y - vMGround;
         float dCorner = vWall.x >= 0.0 ? min(vWall.x, vWall.y - vWall.x) : 9.0;
         const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
@@ -289,7 +299,7 @@ const WEATHER_GLSL = (() => { const W = CONFIG.building.weather; return `
         // sun-faded patches: paler and a little greyer, a few metres across; more on the sunny side and higher up
         float sunny = mix(${f1(W.sunFadeShade)}, 1.0, smoothstep(-0.2, 0.7, dot(normalize(nG.xz + 1e-5), vec2(${f1(W.sunnySide[0])}, ${f1(W.sunnySide[1])}))));
         float fadeP = smoothstep(0.38, 0.74, mFbm(vec2(q.x * 0.3, q.y * 0.2) + 9.1 + vMRand * 3.0)) * ${f1(CONFIG.building.sunFade)} * sunny * mix(0.55, 1.15, smoothstep(1.5, 9.0, h)) * uWeather;
-        c = mix(c, mix(vec3(dot(c, LUM)), c, 0.7) * 1.1, fadeP);
+        c = mix(c, mix(vec3(dot(c, LUM)), c, 0.82) * 1.08, fadeP);
         // painted corner stones: long and short blocks alternating up both corners
         if (flags > 0.5 && dCorner < (mod(floor(wp.y / 0.34), 2.0) < 0.5 ? 0.58 : 0.34) && fract(wp.y / 0.34) > 0.07)
           c = mix(c, vec3(0.80, 0.77, 0.69) * mix(1.0, c.g / max(base.g, 0.05), 0.5), 0.6);   // (painted, so low in contrast: at 0.9 they read as a dotted line from the Postcard)
@@ -302,16 +312,16 @@ const WEATHER_GLSL = (() => { const W = CONFIG.building.weather; return `
         }
         // ---- plaster loss ----
         float n1 = mFbm(q * 0.55 + vMRand * 17.0);                       // blotches a couple of metres across
-        float n2 = mFbm(q * 2.3 + vMRand * 41.0);                        // jagged edges
+        float n2 = mNoise(q * 1.7 + vMRand * 41.0) * 0.75 + mNoise(q * 4.6 + vMRand * 7.0) * 0.25;   // ragged edges (v0.22: nothing finer than ~20 cm, or worn corners turn to pepper)
         float n3 = mNoise(q * 9.0 + 3.0);                                // crumbs
         float low = 1.0 - smoothstep(0.0, 0.5 + 2.6 * amt, h);
         float corner = 1.0 - smoothstep(0.0, 0.2 + 0.9 * amt, dCorner);
-        float w = ((n1 - 0.5) * 1.1 + (n2 - 0.5) * 0.55 + (n3 - 0.5) * 0.06 + low * 0.42 + corner * (0.1 + 0.3 * n1) * step(0.12, amt) + amt * 0.5 - 0.64) * uWeather;
+        float w = ((n1 - 0.5) * 1.3 + (n2 - 0.5) * 0.35 + low * 0.42 + corner * (0.1 + 0.3 * n1) * step(0.12, amt) + amt * 0.5 - 0.64) * uWeather;
         w = amt > 0.02 ? w : -1.0;                                                  // houses in fair repair keep their plaster (v0.13)…
         // …except where it gets knocked: the low corners of the house, and round its doors
         float scuff = max(vBake.z, (1.0 - smoothstep(0.0, ${f1(W.cornerWear)}, dCorner)) * (1.0 - smoothstep(0.4, ${f1(W.cornerHeight)}, h)) * 0.85);
-        if (scuff > 0.01) w = max(w, (scuff * ${f1(W.wear)} + (n1 - 0.5) * 0.5 + (n2 - 0.5) * 0.6 - 0.5) * uWeather);
-        if (w > 0.0) {
+        if (scuff > 0.01) w = max(w, (scuff * ${f1(W.wear)} + (n1 - 0.5) * 0.6 + (n2 - 0.5) * 0.45 - 0.5) * uWeather);
+        if (w > 0.02) {
           MSample wr = mSample(uv * 0.9 + 0.31, WORN_LAYER);
           vec3 under = mix(c, vec3(0.80, 0.76, 0.66), 0.55) * (0.94 + 0.12 * n3);   // old limewash / undercoat
           vec3 render = mTint(vec3(0.56, 0.52, 0.46), wr.col, WORN_LAYER);   // warm grey-beige base render
@@ -326,9 +336,9 @@ const WEATHER_GLSL = (() => { const W = CONFIG.building.weather; return `
             s.rough = mix(s.rough, st.rough, e2);
           }
           cc *= 1.0 - 0.12 * (1.0 - smoothstep(0.0, 0.03, abs(w - 0.205)));   // the broken edge casts a thin shadow
-          float e0 = smoothstep(0.0, 0.012, w);                          // a crisp, jagged edge
+          float e0 = smoothstep(0.02, 0.035, w);                         // a crisp edge; (v0.22) a patch must be a hand across to show at all: no pale crumbs
           c = mix(c, cc, e0);
-          s.tn = normalize(mix(s.tn, tnn, e0));
+          s.tn = normalize(mix(s.tn, tnn, e0 * 0.6));
         }
         // rising damp: darker, greyer and a touch green near the ground; its top wanders along the wall
         float dampTop = mix(${f1(W.dampHeight[0])}, ${f1(W.dampHeight[1])}, mFbm(vec2(q.x * 0.45, vMRand * 9.0))) + (mNoise(vec2(q.x * 2.3, vMRand * 5.0)) - 0.5) * 0.3;
@@ -338,6 +348,9 @@ const WEATHER_GLSL = (() => { const W = CONFIG.building.weather; return `
         // faint vertical grime everywhere
         float grime = mNoise(vec2(q.x * 2.6, q.y * 0.16 + vMRand * 31.0));
         c *= 1.0 - ${f1(W.grime)} * uWeather * smoothstep(0.5, 0.9, grime);
+        // (v0.22) limewashed plaster is matt. The photos' roughness maps have smooth spots, which
+        // caught the sun as pin-point glints: the white stipple on sunlit walls.
+        s.rough = max(s.rough, ${f1(W.minRoughness)});
       }`; })();
 
 /**
