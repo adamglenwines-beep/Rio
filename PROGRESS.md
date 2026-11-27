@@ -22,7 +22,7 @@ once at the very end. After each stage: commit, merge to `main`, publish, screen
 | 2. Palette and shutter colour | `v0.17 · Palette` | **done, published** |
 | 3. Small-scale shading | `v0.18 · Shading` | **done, published** |
 | 4. Windows, shutters and doors | `v0.19 · Windows` | **done, published** |
-| 5. Plaster weathering | `v0.20` | to do |
+| 5. Plaster weathering | `v0.20 · Weathering` | **done, published** |
 | 6. Break the procedural rhythm | `v0.21` | to do |
 | Wrap-up: browser suite, final sheets in `docs/progress/final/`, summary | | to do |
 
@@ -314,6 +314,49 @@ please check ⚙️ Settings.
   and bluer.
 
 Pictures: `docs/progress/v0.19/`.
+
+### Stage 5 · Plaster weathering (v0.20) — done
+
+The wall shader (`WEATHER_GLSL` in `src/materials.js`) was rewritten so weathering is **placed
+by what is on the wall** (sills, balconies, doors, corners, the ground) rather than scattered
+by noise. All numbers: `CONFIG.building.weather`.
+
+| What | How |
+|---|---|
+| **Drip streaks below sills** | 70% of sills: a patch baked into the wall under the sill (the second `aBake` number) running 0.7–1.15 m down, at most to the head of the window below; the shader breaks it into soft runs a hand or two wide, darker and slightly greyer |
+| **…and below balconies** | every slab: 2 m down, strongest under its two ends, where water leaves a slab |
+| **Rising damp** | at every wall foot, 0.7–1.9 m high with a wandering top edge, darker, greyer and faintly green; also where a wall rises from a neighbour's roof (Stage 3 made that its "ground") |
+| **Sun-faded patches** | paler, greyer patches a few metres across (strength 0.45 → 0.55), now stronger on the side the afternoon sun bleaches (south-west, toward the sea), at 45% strength on walls facing away, and stronger higher up the wall |
+| **Plaster worn back at corners and doors** | on *every* house a little (it used to be only the ~1 house in 10 in poor repair): within 45 cm of a corner up to 2.4 m, and within 55 cm of a door (the third `aBake` number). It breaks first to the pale undercoat, then the grey render, and only in the deepest spots to the rubble stone |
+| **Speckle removed** | (1) the plaster photo's pits: its detail contrast is now 0.7 with a softer mip level; (2) the Hand-painted style's brush strokes on walls fade out once they are finer than a few pixels (they were ±10% brightness at a 45 cm pitch: pure speckle from the Postcard); (3) the "crumbs" noise on worn plaster edges halved; (4) painted corner stones no longer amplify the plaster's pits |
+| **Gone** | the sill streak *decals* (transparent multiply-blended rectangles in front of the wall, drawn only within 140 m, so never from the Postcard): replaced by the baked drips, which show at every distance |
+
+**Kept subtle on purpose** (the brief): a streak darkens the wall by at most 40%, damp by 50% at
+the very foot, grime 4%, mottling 4%.
+
+**Measured.** Postcard, like the paint-overs: 29.6 / 57.8 / 79.0 (v0.19) → 30.4 / 58.8 / 79.4;
+unchanged within a point, as it should be for weathering.
+
+**Frame rate (High, Postcard, midday, software renderer):** 5.24 s a frame (v0.19 4.83 s, v0.15
+4.33 s; single runs, noise ±10–20%). Draw calls 107 → **101** (the streak decals are gone);
+triangles **0.76 M** (same as v0.19: the drip and scuff patches cut the walls into more pieces,
++24,000 triangles in the walls, the decals' removal gives it back). The wall shader does a
+little more per pixel (three more noise lookups).
+*First try:* drips 1–2.4 m long with a line across the wall per window: 0.84 M triangles. Now a
+storey's windows share one drip length, and a drip stops at the window below.
+
+**Decisions.**
+- Drips stop at the head of the window below. Real streaks are often longer, but the windows
+  stack in columns, so a longer one would only run into the next opening.
+- Wear at corners and doors is on every house, but thin: at most a patch or two per corner.
+  Houses in poor repair still lose plaster in blotches up the wall as before.
+- The sun-bleached side is fixed (south-west), not tied to the time-of-day slider: paint does
+  not un-fade at dusk.
+
+**Still differs.** The paint-overs' walls have more hand-painted variation (brush texture,
+warmer and cooler washes) than ours; close up our plaster is clean between the streaks.
+
+Pictures: `docs/progress/v0.20/`.
 
 ### Decisions that hold for the whole run
 - **CC0 models (windows, shutters, doors, railings): looked, not used.** Poly Haven is reachable

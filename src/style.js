@@ -112,6 +112,9 @@ export function registerStyled(material, kind = 'surface', surface = null) {
           }
           float stroke = sFbm(uv), big = sFbm(wp.xz * 0.06 + wp.y * 0.05);
           float amp = ${kind === 'foliage' ? '0.42' : kind === 'water' ? '0.2' : kind === 'ground' ? '0.2' : '0.28'};
+          ${kind === 'surface' ? `// (v0.20) on walls the strokes fade out once they are finer than a few pixels: far away they
+          // only read as speckle
+          if (upness < 0.6) amp *= 1.0 - smoothstep(0.1, 0.4, fwidth(uv.x) + fwidth(uv.y));` : ''}
           diffuseColor.rgb *= mix(1.0 - amp * uPaint, 1.0 + amp * 0.7 * uPaint, smoothstep(0.25, 0.75, stroke));
           // painterly hue drift: warm lights, cool shades in the colour itself
           diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * mix(vec3(0.9, 0.95, 1.1), vec3(1.1, 1.02, 0.9), big), 0.45 * uPaint);

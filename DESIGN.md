@@ -104,9 +104,12 @@ A **Manor Lords-style hybrid**:
   (dark in shade), a few lighter or sun-faded, the odd brown or slate-blue pair. The hex codes
   and the reasons are in PROGRESS.md (Stage 2 of the v0.16–v0.21 run).
 - **Walls**: rough stone ground floors (the cellar) or a rough render dado, plaster above,
-  walls leaning in a touch. Plaster wears in layers (colour coat, pale undercoat, grey
-  render, rubble stone), mostly low down and at corners; about one house in eight is badly
-  worn.
+  walls leaning in a touch. **Weathering is placed, not scattered (v0.20):** drip streaks under
+  sills and balconies, rising damp at the foot, sun-faded patches (more on the south-west side
+  and higher up), and plaster worn back at low corners and round doors on every house, in layers
+  (colour coat, pale undercoat, grey render, rubble stone); about one house in ten in poor
+  repair is worn in blotches up the wall. Subtle: from the Postcard view it should read as tone,
+  never as speckle.
 - **Painted trim**: string courses, window surrounds and cornice strips on some houses,
   painted corner stones on a few, and now and then a window painted on a blank bay
   (sometimes with a cat).

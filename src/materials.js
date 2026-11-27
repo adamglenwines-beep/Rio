@@ -23,8 +23,8 @@
 // Against visible repetition: each house gets its own texture offset; a second,
 // much larger-scale sample and low-frequency noise vary every big surface.
 // Weathering (walls): rising damp near the ground, faint vertical grime, and
-// worn-plaster patches blended in; streaks under windows are decals
-// (buildings.js). Quality: 1024 px layers on Medium/High, 512 px on Low, and the
+// worn-plaster patches blended in; streaks under sills and balconies from masks baked
+// into the wall mesh (buildings.js). Quality: 1024 px layers on Medium/High, 512 px on Low, and the
 // extra large-scale sample is skipped on Low.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
@@ -263,38 +263,57 @@ const FACE_GLSL = (cfg) => `
       mNormalW = normalize(t * s.tn.x + b * s.tn.y + nG * s.tn.z);
       mRough = s.rough;`;
 
-// House walls only. Plaster wears away in layers, as on the real facades: first the
-// colour coat (a pale undercoat shows as a thin halo), then the grey render, and in the
-// deepest part the rubble stone of the wall itself. It goes first low on the wall, at the
-// corners, and in blotches; each house has its own amount of wear (aWall.z). Also here:
-// painted corner stones (quoins), sun-faded colour variation, rising damp, vertical grime.
-const WEATHER_GLSL = `
+// House walls only (v0.20: subtle, and laid out by what is on the wall, not by noise alone).
+//   - soft colour variation and sun-faded patches, stronger on the side the afternoon sun
+//     bleaches and higher up the wall;
+//   - drip streaks under sills and balconies (vBake.y, baked per house: buildings.js);
+//   - rising damp at the foot of the wall (and where a wall rises from a neighbour's roof);
+//   - plaster worn back, in layers as on the real facades: first the colour coat (a pale
+//     undercoat shows), then the grey render, and in the deepest part the rubble stone of the
+//     wall. On every house a little at the low corners and round doors (vBake.z); on houses in
+//     poor repair (aWall.z) in blotches up the wall as well;
+//   - painted corner stones (quoins) on a few houses.
+// Nothing here is finer than a hand's width except the broken edge of worn plaster, so from
+// the Postcard view it reads as tone, not speckle.
+const WEATHER_GLSL = (() => { const W = CONFIG.building.weather; return `
       if (layer == PLASTER_LAYER && abs(nG.y) < 0.5) {
         vec2 q = vec2(dot(wp, t), wp.y);
         float amt = fract(vWall.z), flags = floor(vWall.z + 0.001);
         float h = wp.y - vMGround;
         float dCorner = vWall.x >= 0.0 ? min(vWall.x, vWall.y - vWall.x) : 9.0;
+        const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
         // gentle colour variation across a facade (sun-faded, repainted bits)
         c *= 1.0 + (mFbm(q * 0.11 + 3.7 + vMRand * 5.0) - 0.5) * ${f1(CONFIG.building.wallVariation)} * uWeather;
-        c *= 1.0 + (mFbm(q * 1.4 + vMRand * 9.0) - 0.5) * 0.05 * uWeather;        // gentle mottling of the limewash
+        c *= 1.0 + (mFbm(q * 1.1 + vMRand * 9.0) - 0.5) * ${f1(W.mottle)} * uWeather;        // gentle mottling of the limewash
         c *= 0.97 + 0.06 * vMRand;                                                   // each house its own tone
-        // sun-faded patches: paler and a little greyer, a few metres across
-        float fadeP = smoothstep(0.42, 0.78, mFbm(q * 0.27 + 9.1 + vMRand * 3.0)) * ${f1(CONFIG.building.sunFade)} * uWeather;
-        c = mix(c, mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 0.7) * 1.1, fadeP);
+        // sun-faded patches: paler and a little greyer, a few metres across; more on the sunny side and higher up
+        float sunny = mix(${f1(W.sunFadeShade)}, 1.0, smoothstep(-0.2, 0.7, dot(normalize(nG.xz + 1e-5), vec2(${f1(W.sunnySide[0])}, ${f1(W.sunnySide[1])}))));
+        float fadeP = smoothstep(0.38, 0.74, mFbm(vec2(q.x * 0.3, q.y * 0.2) + 9.1 + vMRand * 3.0)) * ${f1(CONFIG.building.sunFade)} * sunny * mix(0.55, 1.15, smoothstep(1.5, 9.0, h)) * uWeather;
+        c = mix(c, mix(vec3(dot(c, LUM)), c, 0.7) * 1.1, fadeP);
         // painted corner stones: long and short blocks alternating up both corners
         if (flags > 0.5 && dCorner < (mod(floor(wp.y / 0.34), 2.0) < 0.5 ? 0.58 : 0.34) && fract(wp.y / 0.34) > 0.07)
-          c = mix(c, vec3(0.80, 0.77, 0.69) * (c.g / max(base.g, 0.05)), 0.9);
+          c = mix(c, vec3(0.80, 0.77, 0.69) * mix(1.0, c.g / max(base.g, 0.05), 0.5), 0.9);
+        // ---- drip streaks: rain off a sill or a balcony slab, in soft runs a hand or two wide ----
+        float drip = vBake.y;
+        if (drip > 0.004) {
+          float runs = mNoise(vec2(q.x * 6.0 + vMRand * 13.0, q.y * 0.3)) * 0.65 + mNoise(vec2(q.x * 15.0 + 4.0, q.y * 0.8 + vMRand * 7.0)) * 0.35;
+          float dk = drip * (0.3 + 0.7 * smoothstep(0.3, 0.7, runs)) * ${f1(W.drip)} * uWeather;
+          c = mix(c, mix(vec3(dot(c, LUM)), c, 0.6) * vec3(0.55, 0.55, 0.52), dk);
+        }
         // ---- plaster loss ----
         float n1 = mFbm(q * 0.55 + vMRand * 17.0);                       // blotches a couple of metres across
         float n2 = mFbm(q * 2.3 + vMRand * 41.0);                        // jagged edges
         float n3 = mNoise(q * 9.0 + 3.0);                                // crumbs
         float low = 1.0 - smoothstep(0.0, 0.5 + 2.6 * amt, h);
         float corner = 1.0 - smoothstep(0.0, 0.2 + 0.9 * amt, dCorner);
-        float w = ((n1 - 0.5) * 1.1 + (n2 - 0.5) * 0.55 + (n3 - 0.5) * 0.12 + low * 0.42 + corner * (0.1 + 0.3 * n1) * step(0.12, amt) + amt * 0.5 - 0.64) * uWeather;
-        w = amt > 0.02 ? w : -1.0;                                                  // houses in fair repair keep their plaster (v0.13)
+        float w = ((n1 - 0.5) * 1.1 + (n2 - 0.5) * 0.55 + (n3 - 0.5) * 0.06 + low * 0.42 + corner * (0.1 + 0.3 * n1) * step(0.12, amt) + amt * 0.5 - 0.64) * uWeather;
+        w = amt > 0.02 ? w : -1.0;                                                  // houses in fair repair keep their plaster (v0.13)…
+        // …except where it gets knocked: the low corners of the house, and round its doors
+        float scuff = max(vBake.z, (1.0 - smoothstep(0.0, ${f1(W.cornerWear)}, dCorner)) * (1.0 - smoothstep(0.4, ${f1(W.cornerHeight)}, h)) * 0.85);
+        if (scuff > 0.01) w = max(w, (scuff * ${f1(W.wear)} + (n1 - 0.5) * 0.5 + (n2 - 0.5) * 0.6 - 0.5) * uWeather);
         if (w > 0.0) {
           MSample wr = mSample(uv * 0.9 + 0.31, WORN_LAYER);
-          vec3 under = mix(c, vec3(0.80, 0.76, 0.66), 0.55) * (0.92 + 0.16 * n3);   // old limewash / undercoat
+          vec3 under = mix(c, vec3(0.80, 0.76, 0.66), 0.55) * (0.94 + 0.12 * n3);   // old limewash / undercoat
           vec3 render = mTint(vec3(0.56, 0.52, 0.46), wr.col, WORN_LAYER);   // warm grey-beige base render
           float e1 = smoothstep(0.09, 0.13, w);                            // (mostly the pale undercoat shows; render only deeper in)
           vec3 cc = mix(under, render, e1);
@@ -311,15 +330,15 @@ const WEATHER_GLSL = `
           c = mix(c, cc, e0);
           s.tn = normalize(mix(s.tn, tnn, e0));
         }
-        // rising damp: darker, greyer and a touch green near the ground
-        float dampTop = 0.9 + 0.7 * mFbm(vec2(q.x * 0.6, vMRand * 9.0));
-        float damp = (1.0 - smoothstep(dampTop - 0.5, dampTop, h)) * uWeather;
-        vec3 dampCol = mix(vec3(dot(c, vec3(0.3, 0.55, 0.15))), c, 0.45) * vec3(0.72, 0.74, 0.68);
-        c = mix(c, dampCol, damp * 0.55);
-        // faint vertical grime streaks everywhere
-        float streak = mNoise(vec2(q.x * 3.2, q.y * 0.18 + vMRand * 31.0));
-        c *= 1.0 - 0.07 * uWeather * smoothstep(0.55, 0.9, streak);
-      }`;
+        // rising damp: darker, greyer and a touch green near the ground; its top wanders along the wall
+        float dampTop = mix(${f1(W.dampHeight[0])}, ${f1(W.dampHeight[1])}, mFbm(vec2(q.x * 0.45, vMRand * 9.0))) + (mNoise(vec2(q.x * 2.3, vMRand * 5.0)) - 0.5) * 0.3;
+        float damp = (1.0 - smoothstep(dampTop * 0.35, dampTop, h)) * uWeather;
+        vec3 dampCol = mix(vec3(dot(c, vec3(0.3, 0.55, 0.15))), c, 0.5) * vec3(0.66, 0.68, 0.62);
+        c = mix(c, dampCol, damp * ${f1(W.damp)});
+        // faint vertical grime everywhere
+        float grime = mNoise(vec2(q.x * 2.6, q.y * 0.16 + vMRand * 31.0));
+        c *= 1.0 - ${f1(W.grime)} * uWeather * smoothstep(0.5, 0.9, grime);
+      }`; })();
 
 /**
  * The ground. Three families of surface, blended by steepness with a noisy edge:

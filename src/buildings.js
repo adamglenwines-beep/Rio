@@ -406,8 +406,6 @@ export class BuildingRenderer {
       pediment: { geo: mergeColoured([[box(1.52, 0.12, 0.12, 0, 1.03, zb(GAP + 0.07, 0.12)), '#ffffff'], [box(1.4, 0.06, 0.08, 0, 0.95, zb(GAP + 0.03, 0.08)), '#e6e6e6']]), mat: lambert({ vertexColors: true }), shadow: false, far: 260 },
       // a window painted on the plaster (see _fakeMaterial)
       fake:    { geo: new THREE.PlaneGeometry(1.36, 1.9).translate(0, 0.02, GAP), mat: this._fakeMaterial(), shadow: false },
-      // weathering: grime streaks running down from the sill (a darkening decal)
-      streak:  { geo: new THREE.PlaneGeometry(1.1, 1.9).translate(0, -0.95, GAP + 0.02), mat: this._streakMaterial(), shadow: false },
       // the glass: an interior-mapped fake room behind every window (see _glassMaterial)
       // (v0.13: at the back of the recess; scaled to each opening)
       // (v0.19: drawn at every distance, and it draws the frame and glazing bars itself, so far-away windows are
@@ -440,7 +438,6 @@ export class BuildingRenderer {
       // the inside of an open boat store: an interior-mapped vaulted room (see _storeMaterial)
       storeRoom: { geo: new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0), mat: this._storeMaterial(), shadow: false },
     };
-    this.parts.streak.far = 140;
     // Openings (src/facade.js, data/facades.json). v0.19: a window is a hole in a thick wall at every
     // distance: the reveal is part of the wall mesh, the stone sill and the dark glass at the back are
     // always drawn; near, the frame is modelled and the shutter leaves are louvred; far, the leaves are
@@ -1078,7 +1075,6 @@ export class BuildingRenderer {
       put('sur_' + o.type, o.px, o.yc, o.pz, rot, 1, ky, 1, F.trimSoft);
       if (F.deco === 'full' && o.type !== 'small') put('pediment', o.px, o.y1 + WIN.lintel.height + 0.04 - 0.92, o.pz, rot, (o.w + 0.4) / 1.52, 1, 1, F.trimSoft);
     }
-    if (!o.balcony && rng() < CONFIG.building.streakChance) put('streak', o.px, o.y0 - WIN.sill.height, o.pz, rot, (o.w / 1.1) * (0.85 + rng() * 0.3), 0.6 + rng() * 0.5, 1, WHITE);
     // ---- shutters: what each leaf is doing ('shut' | 'flat' | an angle in radians | null = missing) ----
     if (!b.shutterShades) b.shutterShades = [-0.03, 0, 0.03].map((d) => b.shutter.clone().offsetHSL(0, 0, d));
     let state = rng.weighted(SH.states.map((s) => [s.name, s.weight * (s.name === 'closed' ? F.shutMul.closed : s.name === 'open' ? F.shutMul.open : 1)]));
@@ -1209,6 +1205,34 @@ export class BuildingRenderer {
       } };
   }
 
+  /**
+   * Weathering patches (v0.20), the second and third baked numbers:
+   *   _dripBelow  rain runs off a sill or a balcony slab and stains the wall under it: strongest
+   *               at the top, fading down over `reach` m; `ends` = stronger under the two ends
+   *               (where water leaves a slab)
+   *   _scuffRound plaster knocked about round a door: strongest at the jambs near the ground
+   */
+  _dripBelow(u0, u1, yTop, reach, strength, ends = 0) {
+    const side = 0.1, a = u0 - side, b = u1 + side, y0 = yTop - reach, w = Math.min(0.35, (u1 - u0) / 3);
+    return { u0: a, u1: b, y0, y1: yTop, us: ends ? [a, u0, u0 + w, u1 - w, u1, b] : [a, u0, u1, b], ys: [y0, yTop],
+      f: (u, y) => {
+        if (u <= a || u >= b || y <= y0) return [1, 0, 0];
+        const ty = clamp((yTop - y) / reach, 0, 1), tu = u < u0 ? (u0 - u) / side : u > u1 ? (u - u1) / side : 0;
+        const end = ends ? Math.max(0, 1 - Math.min(u - u0, u1 - u) / w) : 0;
+        return [1, strength * (1 - ty) * (1 - clamp(tu, 0, 1)) * (ends ? 1 - ends + ends * end : 1), 0];
+      } };
+  }
+
+  _scuffRound(u0, u1, yFoot, yTop, reach) {
+    const a = u0 - reach, b = u1 + reach, yMid = yFoot + (yTop - yFoot) * 0.45;
+    return { u0: a, u1: b, y0: yFoot - 0.4, y1: yTop, us: [a, u0, u1, b], ys: [yFoot - 0.4, yMid, yTop],
+      f: (u, y) => {
+        const tu = u < u0 ? clamp((u0 - u) / reach, 0, 1) : u > u1 ? clamp((u - u1) / reach, 0, 1) : 0;
+        const ty = clamp((y - yMid) / (yTop - yMid), 0, 1);
+        return [1, 0, (1 - tu) * (1 - ty)];
+      } };
+  }
+
   _shadeCorner(atEnd, L, yBottom, yTop, reach, from) {
     const u0 = atEnd ? L - reach : 0, u1 = atEnd ? L : reach, fade = 0.6;
     return { u0, u1, y0: yBottom, y1: yTop, us: [atEnd ? L - reach : reach], ys: [yTop - fade, yTop],
@@ -1289,35 +1313,6 @@ export class BuildingRenderer {
     if (buildings) this.rebuild(buildings);
   }
 
-  /**
-   * Grime streaks under a sill: drawn with multiply blending, so it darkens
-   * whatever wall colour is behind it — soft vertical runs, strongest at the
-   * top, fading as they run down. (Weathering, along with the damp and grime
-   * in the wall shader, materials.js.)
-   */
-  _streakMaterial() {
-    const m = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, depthWrite: false, fog: false, toneMapped: false,
-      blending: THREE.MultiplyBlending, premultipliedAlpha: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
-    m.onBeforeCompile = (sh) => {
-      sh.vertexShader = 'varying vec2 vSUv;\nvarying float vSR;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-        vSUv = vec2(position.x / 1.1 + 0.5, -position.y / 1.9);
-        vSR = 0.0;
-        #ifdef USE_INSTANCING
-          vSR = fract(sin(dot(instanceMatrix[3].xz, vec2(41.3, 17.7))) * 9137.1);
-        #endif`);
-      sh.fragmentShader = 'varying vec2 vSUv;\nvarying float vSR;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-        float x = vSUv.x, y = vSUv.y;
-        float h = fract(sin(floor(x * 9.0 + vSR * 50.0) * 12.9898) * 43758.5453);           // a few runs
-        float h2 = fract(sin(floor(x * 23.0 + vSR * 31.0) * 78.233) * 12345.678);
-        float run = smoothstep(0.45, 0.95, h) * (0.6 + 0.4 * h2);
-        float len = 0.35 + 0.65 * fract(h * 7.13);                                          // how far each runs
-        float fade = (1.0 - smoothstep(0.0, len, y)) * smoothstep(0.0, 0.18, x) * smoothstep(1.0, 0.82, x);
-        float k = (run * 0.9 + 0.25) * fade;
-        diffuseColor.rgb = vec3(1.0 - ${CONFIG.building.streakStrength.toFixed(2)} * k);`);
-    };
-    return m;
-  }
-
   /** Detail meshes too small to matter in a ripply reflection. */
   smallParts() {
     const keep = (k) => ['glass', 'storeRoom'].includes(k);
@@ -1325,7 +1320,7 @@ export class BuildingRenderer {
   }
 
   /** Flat overlays drawn on top of walls (not solid surfaces): left out of the ambient-occlusion pass. */
-  overlayParts() { return [...this.chunks.values()].map((ch) => ch.parts.streak).filter(Boolean); }
+  overlayParts() { return []; }   // (none since v0.20: the sill streaks are baked into the wall, not a decal)
 
   /** Forget every cached house (the next rebuild redraws the whole town). */
   invalidateAll() { this.cache.clear(); }
@@ -1731,7 +1726,7 @@ export class BuildingRenderer {
     // --- facades: doors and windows along every wall (v0.13: openings cut into the walls) ---
     const holes = [[], [], [], []];                       // per wall: openings to cut, { u0, u1, y0, y1, depth, col }
     const feats = [[], [], [], []];                       // per wall: patches of baked shade (under sills and balconies, inside corners)
-    const AOc = CONFIG.building.ao;
+    const AOc = CONFIG.building.ao, WE = CONFIG.building.weather;
     // inside corners: where a neighbour's wall stands out in front of the end of this wall
     const nearHouses = this.growth.live.map((id) => this.growth.buildings[id]).filter((o) => o && o !== b && !o.arch && Math.abs(o.x - b.x) < 20 && Math.abs(o.z - b.z) < 20);
     const WIN = FACADES.windows;
@@ -1801,6 +1796,7 @@ export class BuildingRenderer {
             put('door', px, g + 0.2, pz, srot, 1, 1, 1, leafCol);
           } else {
             holes[i].push({ u0: u - D.w / 2, u1: u + D.w / 2, y0, y1: y0 + D.h, depth: D.recess, col: (kind === 'shop' ? b.facade : F.doorStone).clone().multiplyScalar(0.95) });
+            if (kind !== 'shop') feats[i].push(this._scuffRound(u - D.w / 2 - 0.15, u + D.w / 2 + 0.15, g, y0 + D.h * 0.8, WE.scuffReach));   // plaster knocked about round the door
             if (kind === 'shop') {
               put('shopFront', px, y0, pz, srot, 1, 1, 1, WHITE);
               put('shopSign', px, y0 + D.h + 0.1, pz, srot, 1, 1, 1, this._c.set(rng.pick(['#2f5a44', '#6b3b2a', '#2a4a6b', '#7a2e2a', '#3a3a3a'])));
@@ -1896,6 +1892,7 @@ export class BuildingRenderer {
         }
         // shutters: a leaf folds back only where there is room beside the window (not over the next window or the door)
         row.sort((p, p2) => p.u - p2.u);
+        const dripReach = WE.dripReach[0] + rng() * (WE.dripReach[1] - WE.dripReach[0]);
         let used = 0.08;                                  // how far along the wall is taken, by openings or folded leaves
         for (let r = 0; r < row.length; r++) {
           const o = row[r], lw = o.w / 2;
@@ -1908,7 +1905,12 @@ export class BuildingRenderer {
             && !covered(A, e, n, o.u + o.w / 2, o.u + o.w / 2 + lw + 0.05, o.y0, o.y1, 0.25);
           holes[i].push({ u0: o.u - o.w / 2, u1: o.u + o.w / 2, y0: o.y0, y1: o.y1, depth: WIN.recess });
           // the sill juts out: shade gathers on the wall under it
-          if (WIN.types[o.type].sill !== false) feats[i].push(this._shadeBelow(o.u - o.w / 2 - WIN.sill.overhang, o.u + o.w / 2 + WIN.sill.overhang, o.y0 - WIN.sill.height, AOc.sillReach, 0.1, AOc.sillFrom));
+          if (WIN.types[o.type].sill !== false) {
+            feats[i].push(this._shadeBelow(o.u - o.w / 2 - WIN.sill.overhang, o.u + o.w / 2 + WIN.sill.overhang, o.y0 - WIN.sill.height, AOc.sillReach, 0.1, AOc.sillFrom));
+            // …and rain running off it leaves streaks down the wall (under most sills, each its own strength)
+            // (one length per storey, so the windows of a row share their cut lines in the wall mesh)
+            if (rng() < WE.dripChance) feats[i].push(this._dripBelow(o.u - o.w / 2 - WIN.sill.overhang, o.u + o.w / 2 + WIN.sill.overhang, o.y0 - WIN.sill.height, dripReach, 0.45 + 0.55 * rng()));
+          }
           b.openings.push({ kind: 'window', wall: i, u0: o.u - o.w / 2, u1: o.u + o.w / 2, y0: o.y0, y1: o.y1 });
           const foldRight = this._opening(put, b, rng, F, W, o);
           used = o.u + o.w / 2 + (foldRight ? lw : 0);
@@ -1921,7 +1923,8 @@ export class BuildingRenderer {
           const u0 = bal[r].u - bal[r].w / 2 - 0.25, u1 = bal[r2].u + bal[r2].w / 2 + 0.25;
           const placed = this._balcony(put, b, rng, F, W, (u0 + u1) / 2, u1 - u0, bal[r].y0 - 0.005, r2 > r || floorBal === 'all', lean(bal[r].y0));
           if (placed) feats[i].push(this._shadeBelow(placed.u0, placed.u1, placed.y, AOc.balconyReach, 0.3, AOc.balconyFrom),
-            this._shadeBelow(placed.u0, placed.u1, placed.y + BAL.slab, AOc.slabReach, 0.15, AOc.slabFrom, true));
+            this._shadeBelow(placed.u0, placed.u1, placed.y + BAL.slab, AOc.slabReach, 0.15, AOc.slabFrom, true),
+            this._dripBelow(placed.u0, placed.u1, placed.y, WE.balconyDripReach, 0.6 + 0.4 * rng(), 0.6));
           r = r2 + 1;
         }
         if (any) lowestFloor = false;

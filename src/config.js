@@ -179,7 +179,7 @@ export const CONFIG = {
     // A house's condition (0 crumbling … 1 fresh, from its plan: src/houseplan.js, data/houses.json):
     condition: { wearBelow: 0.35 },   // plaster starts to fall away only below this condition
     wallVariation: 0.12,   // soft brightness variation across a wall (sun-faded, repainted bits)
-    sunFade: 0.45,         // how strongly sun-faded patches pale and grey a wall's colour
+    sunFade: 0.55,         // how strongly sun-faded patches pale and grey a wall's colour
     facadeGap: 0.03,
     // Baked ambient occlusion on the walls (darkening where less sky reaches):
     ao: {
@@ -200,8 +200,23 @@ export const CONFIG = {
       // …and baked into the parts' own colours: undersides (balcony slabs, sills), consoles under a slab, frames in a recess
       parts: { under: 0.6, console: 0.82, recess: 0.84 },
     },
-    streakChance: 0.6,     // share of windows with grime streaks running down from the sill
-    streakStrength: 0.2,   // how much those streaks darken the wall (0–1)
+    // Plaster weathering (v0.20; the wall shader in materials.js). Kept subtle: every strength is
+    // the most a wall changes (0–1).
+    weather: {
+      dripChance: 0.7,         // share of sills with rain streaks down the wall below them
+      dripReach: [0.7, 1.15],  // how far those run (m): at most down to the head of the window below
+      balconyDripReach: 2.0,   // …and under a balcony slab (strongest under its two ends)
+      drip: 0.4,               // how dark a streak gets
+      damp: 0.5,               // rising damp at the foot of a wall: how dark…
+      dampHeight: [0.7, 1.9],  // …and how high it climbs (m; it wanders along the wall)
+      sunnySide: [-0.77, 0.64],// the side the afternoon sun bleaches (x, z: south-west, toward the sea)
+      sunFadeShade: 0.45,      // walls facing away from it fade this much as strongly
+      scuffReach: 0.55,        // plaster is knocked about within this distance of a door (m)…
+      cornerWear: 0.45, cornerHeight: 2.4,   // …and at the corners of a house, this wide (m) and up to this height
+      wear: 0.7,               // how readily that scuffed plaster falls away to the undercoat and stone
+      grime: 0.04,             // faint vertical grime everywhere
+      mottle: 0.04,            // gentle mottling of the limewash
+    },
   },
 
   // ---- Terraces: level treads held by dry-stone walls (terraces.js) ----------------
@@ -357,6 +372,7 @@ export const CONFIG = {
   textures: {
     detailMin: 0.3, detailMax: 2.4,
     layers: {
+      plaster: { contrast: 0.7, mipBias: 0.4 },   // (v0.20) the pits in the plaster photo read as speckle from the Postcard view
       slateA: { contrast: 0.5, mipBias: 0.75 },
       terraA: { contrast: 0.75, mipBias: 0.5 },   // ridge tiles and terracotta roofs speckled too (roof-shimmer-v0.11)
       terraB: { contrast: 0.75, mipBias: 0.5 },
