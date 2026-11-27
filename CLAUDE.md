@@ -34,3 +34,13 @@ when a design decision changes.
   port later only needs new input code.
 - Stay efficient anyway: instanced or merged meshes, no per-object draw calls, and watch
   growth-step and rebuild times on desktop.
+- **Keep a future engine port cheap.** The game may later be ported to a game engine
+  (Godot is the current lean; not decided). So:
+  - **Content is data, not code.** Buildings, resources, household levels and needs,
+    wealth bands and production chains live in plain JSON files (e.g. under `data/`),
+    read by the game. Don't hard-code them in JS modules.
+  - **Game rules are separate from drawing.** Simulation (households, needs met, wealth,
+    production, stock) lives in its own modules with no Three.js imports and no DOM
+    access. Rendering reads the simulation state and draws it (e.g. the sim says
+    "needs 40% met"; the renderer decides that means peeling plaster).
+  - Keep `DESIGN.md` current: it is the blueprint for any rebuild.
