@@ -1,6 +1,6 @@
 # Textures
 
-87 free **CC0** PBR texture sets (no attribution required), collected by Adam from
+106 free **CC0** PBR texture sets (no attribution required), collected by Adam from
 Poly Haven and ambientCG and converted here for the browser:
 
 - `*_color.jpg`: 2048 px, sRGB colour.
@@ -9,6 +9,7 @@ Poly Haven and ambientCG and converted here for the browser:
 - `*_height.jpg`: 1024 px, greyscale height (for height-blending and parallax).
 - `*_ao.jpg`: 2048 px ambient occlusion, where the source had one.
 - `*_opacity.jpg`: cut-out mask (Grate001 only).
+- `*_metalness.jpg`: 2048 px greyscale metalness (metal sets only).
 
 Load only what a scene uses; this folder is a library, not a list to load. **Recommended**
 marks the best fits for the target look. Liguria is dry and sunny, so prefer less mossy,
@@ -33,6 +34,7 @@ less lush sets. Originals were mostly 4K; ask Adam if a higher resolution is eve
 |---|---|---|---|
 | `stone_wall` | Dry stone. **Recommended** for terraces and retaining walls. | color, height, normal, roughness | [Poly Haven](https://polyhaven.com/a/stone_wall) |
 | `stone_wall_04` | Coursed fortress stone. **Recommended** for harbour bases and the watchtower. | color, height, normal, roughness | [Poly Haven](https://polyhaven.com/a/stone_wall_04) |
+| `coral_fort_wall_02` | Pale rough seaside stone. **Recommended** for the harbour wall. | ao, color, height, normal, roughness | [Poly Haven](https://polyhaven.com/a/coral_fort_wall_02) |
 | `Bricks078` | Rubble stone set in mortar. Good for old walls and the viaduct. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Bricks078) |
 | `Bricks102` | Rough coursed stone blocks. Church or tower walls. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Bricks102) |
 | `Bricks111B` | Squared stone blocks. Quay edges, landmark plinths. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Bricks111B) |
@@ -53,6 +55,10 @@ less lush sets. Originals were mostly 4K; ask Adam if a higher resolution is eve
 | `Rock034` | Dark mossy rock. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Rock034) |
 | `Rock060` | Grey-brown veined rock. Good for headlands. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Rock060) |
 | `Rocks002` | Loose grey pebbles. Beach and shoreline. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Rocks002) |
+| `Gravel020` | Large rounded grey stones. **Recommended** for the pebble beach. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Gravel020) |
+| `ganges_river_pebbles` | Mixed coloured pebbles. Shoreline variety. | ao, color, height, normal, roughness | [Poly Haven](https://polyhaven.com/a/ganges_river_pebbles) |
+| `seaside_rock` | Dark coastal rock. Waterline and sea-washed cliff base. | ao, color, height, normal, roughness | [Poly Haven](https://polyhaven.com/a/seaside_rock) |
+| `rocks_ground_06` | Pale layered coastal rock. Outcrops and headlands. | ao, color, height, normal, roughness | [Poly Haven](https://polyhaven.com/a/rocks_ground_06) |
 | `Gravel022` | Fine gravel. Paths and terrace floors. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Gravel022) |
 | `Ground019` | Grey-violet gravel with ochre flecks. Gravel yards, quarry floor. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground019) |
 | `Ground024` | Grey earth, small moss patches. Shaded ground and damp corners. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground024) |
@@ -108,6 +114,47 @@ less lush sets. Originals were mostly 4K; ask Adam if a higher resolution is eve
 | `Rope001` | Rope. Moorings, nets, boats. | color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Rope001) |
 | `Grate001` | Drain grate decal with an opacity (cut-out) map. | ao, color, height, normal, opacity, roughness | [ambientCG](https://ambientcg.com/view?id=Grate001) |
 | `ThatchedRoof001A` | Thatch. Not Ligurian; maybe huts or sheds only. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=ThatchedRoof001A) |
+
+## Trees (bark)
+
+| Folder | Use | Maps | Source |
+|---|---|---|---|
+| `Bark001` | Grey, deeply fissured. **Recommended** for olive trunks. | color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Bark001) |
+| `tree_bark_03` | Grey fissured with a little moss. Second olive option. | ao, color, height, normal, roughness | [Poly Haven](https://polyhaven.com/a/tree_bark_03) |
+| `Bark002` | Pale, fairly smooth. Fig and lemon trees. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Bark002) |
+
+## Metal (railings, anchors, bell)
+
+Metal sets include a `metalness` map; painted metal uses it to separate paint from bare rusty metal.
+
+| Folder | Use | Maps | Source |
+|---|---|---|---|
+| `Metal041B` | Grey iron with rust. **Recommended** for railings and mooring rings. | color, height, metalness, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Metal041B) |
+| `Metal041C` | Heavy rust. Anchors and chains. | color, height, metalness, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Metal041C) |
+| `PaintedMetal006` | Green paint over rust. Gates and shutter hardware (darken toward Ligurian shutter green). | ao, color, height, metalness, normal, roughness | [ambientCG](https://ambientcg.com/view?id=PaintedMetal006) |
+| `PaintedMetal010` | Off-white paint over rust. Balcony railings. | ao, color, height, metalness, normal, roughness | [ambientCG](https://ambientcg.com/view?id=PaintedMetal010) |
+| `Metal017` | Dark aged bronze. Church bell. | color, height, metalness, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Metal017) |
+| `Metal058C` | Copper with strong green patina. Fountain spouts; small items only. | color, height, metalness, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Metal058C) |
+
+## Tiles and clay (patios, church, pots)
+
+| Folder | Use | Maps | Source |
+|---|---|---|---|
+| `patio_tiles` | Terracotta squares. **Recommended** for patios and terraces. | ao, color, height, normal, roughness | [Poly Haven](https://polyhaven.com/a/patio_tiles) |
+| `floor_tiles_04` | Warm stone blocks. Steps and piazzette. | ao, color, height, normal, roughness | [Poly Haven](https://polyhaven.com/a/floor_tiles_04) |
+| `floor_tiles_06` | Checkered marble. Church floor. | ao, color, height, normal, roughness | [Poly Haven](https://polyhaven.com/a/floor_tiles_06) |
+| `clay_floor_001` | Plain clay. Pots and cisterns. | ao, color, height, normal, roughness | [Poly Haven](https://polyhaven.com/a/clay_floor_001) |
+| `GlazedTerracotta001` | Glazed orange terracotta. Decorated pots. | color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=GlazedTerracotta001) |
+
+## Sky (HDRI)
+
+Kept in `assets/hdri/` (2K `.hdr`, Poly Haven, CC0). Use for sky lighting and water reflections.
+
+| File | Use | Source |
+|---|---|---|
+| `kloofendal_48d_partly_cloudy_puresky_2k.hdr` | Bright midday, scattered cloud. **Recommended** main daytime sky. | [Poly Haven](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky) |
+| `autumn_field_puresky_2k.hdr` | Clear deep-blue sky. Calm days. | [Poly Haven](https://polyhaven.com/a/autumn_field_puresky) |
+| `kloppenheim_06_puresky_2k.hdr` | Soft golden dusk band. Evening with lit windows. | [Poly Haven](https://polyhaven.com/a/kloppenheim_06_puresky) |
 
 ## Roofs
 
