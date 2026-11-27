@@ -1,0 +1,18 @@
+{
+ "wide": {
+  "popping": 0.2589,
+  "zfight": 0.005
+ },
+ "clipping": {
+  "popping": 0.5482,
+  "zfight": 0.0102
+ },
+ "washing": {
+  "popping": 0.4718,
+  "zfight": 0.0031
+ },
+ "roof": {
+  "popping": 0.3696,
+  "zfight": 0.0069
+ }
+}

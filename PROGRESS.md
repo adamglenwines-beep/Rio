@@ -138,6 +138,53 @@ Medium and High): sunlit wall **#E9C18D, 71%, hue 34°** (target #F3C17B, 72%, 3
 83% (sun, 90th), median 68%; the paint-overs run 34% to 78%, median 60%. The game still has less
 deep shade than the paint-overs: their houses stand closer and cast more shadow on each other.
 
+### Performance (before and after)
+
+**Before anything was changed** (v0.11, `tools/profile.cjs`, postcard view, 1280×720, software
+renderer: absolute times are ~60× a real GPU's, the split is what to read). Where High's frame
+went at Golden hour: the main scene pass 68% (of it, trees and bushes ~21%, houses ~31%, ground
+~24%, sea ~9%), screen-space AO 18% (it also drew the whole scene again), the harbour mirror 4%,
+bloom 3%, grade + output 2%; the shadow map is redrawn only when something changes. Triangles
+per frame: High 2.85 million, of which 1.9 million were trees and bushes; Medium 2.46 M; Low
+1.21 M. Draw calls: 57–59 (instancing works; calls are not the problem).
+
+| Preset, time (software renderer) | v0.11 frame | v0.12 frame | change | triangles |
+|---|---|---|---|---|
+| Low, midday | 2.79 s | 2.80 s | 0% | 1.21 M → 0.52 M |
+| Low, golden hour | 3.16 s | 2.89 s | −9% | 1.21 M → 0.52 M |
+| Medium, midday | 5.63 s | 4.38 s | −22% | 2.46 M → 1.04 M |
+| Medium, golden hour | 5.41 s | 5.06 s | −6% | 2.46 M → 1.04 M |
+| High, midday | 7.24 s | 5.06 s | −30% | 2.85 M → 1.04 M |
+| High, golden hour | 7.85 s | 5.34 s | −32% | 2.85 M → 1.04 M |
+
+What saved it: trees and bushes out (−1.8 M triangles; they were drawn in the scene, the AO pass
+and the shadow map), screen-space AO off (−18% of a High frame), and fewer window parts (no
+openings on covered walls: 239k house triangles instead of 403k). Low barely changes because it
+already drew few plants and no AO; its cost is filling pixels (ground and houses).
+**On your PC** (v0.11, High, Golden hour: 8 fps, 121 ms) the same −32% would mean about
+**82 ms, ~12 fps**; this sandbox has no real GPU, so please check the numbers in ⚙️ Settings.
+Where the rest goes now (High): the main pass ~87%, of which ground ~35% and houses ~30%; the
+mirror 6%, bloom 5%. Next savings to try: draw the far terrain ring coarser, and skip the
+mirror pass when the harbour is off screen.
+
+### What got worse, what still differs, what next
+
+- **Hillsides look bare and bright green.** Expected with the trees out; the stronger sun also
+  lights the scrub ground more, and from the west some cliffs are brighter and others darker.
+- **The town is lighter than the paint-overs overall** (median warm wall 68% vs ~60%): the
+  paint-overs have much more deep shade, from houses packed closer and taller. That is massing
+  (next run), not light.
+- **Still differs from the targets:** separate towers instead of continuous blocks; windows
+  small and sparse with few balconies; mostly pale slate roofs where the targets show more
+  terracotta; little greenery and flowers on the buildings; no deep shadowed lanes.
+- **Roofs are a little lighter** than before (the texture-brightness fix); slate is calmer.
+- **Tune next:** the far terrain and the mirror pass for speed; a contact shadow where walls meet
+  the ground; golden-hour sky fill slightly warmer if shade reads too grey on your screen.
+- **Next run: the buildings** (the brief Adam sent during this run): windows and doors, massing,
+  roofs, materials, signs of life, floor-by-floor data and a condition value per house.
+  Network: polyhaven.com and ambientcg.com are reachable again (checked at the end of this
+  run); Poly Haven's `damaged_plaster` is confirmed CC0 (its licence page: all assets CC0).
+
 ## Earlier run: Borgo brief, Step 0 + Phases B, C, D (v0.9–v0.11)
 
 One long run. After each phase: commit, merge to `main`, wait for GitHub Pages, give the
