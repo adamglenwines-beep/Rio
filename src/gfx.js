@@ -85,13 +85,18 @@ const LADDER = [
 
 // ---- time of day ------------------------------------------------------------------
 // Keyframes by hour; everything in between is interpolated.
+// v0.12: the sun stands in the west (az < 0: to the left of the postcard view, setting over the
+// sea as at Riomaggiore), so from the postcard the fronts are sunlit and the side walls in shade.
+// Sun and sky strengths were calibrated on the six-house test scene (index.html?scene=six) so an
+// ochre wall (#E2BC78) shows about #EDC183 in sun and #A07A50 in shade at midday, against the art
+// target's #F3C17B / #9E794D (Rio-reference art-target-v2). The sky fill is cool, the sun warm.
 export const TIMES = { midday: 12, golden: 18.6, dusk: 20.4, night: 23 };
 export const KEYS = [
-  { h: 12, elev: 50, az: 35, sun: '#fff7ea', sunI: 3.35, sky: '#e2f0ff', ground: '#9a8a70', hemiI: 1.5,
-    top: '#2a7fd0', hor: '#bcdcf4', glow: '#fff6e6', glowI: 0.6, fog: '#bcd6ec', exp: 1.14, lit: 0 },
-  { h: 18.6, elev: 14, az: 40, sun: '#ffdcb6', sunI: 3.2, sky: '#eef0f2', ground: '#94806a', hemiI: 1.4,
+  { h: 12, elev: 42, az: -50, sun: '#fff4e2', sunI: 5.4, sky: '#dceaff', ground: '#9a8a70', hemiI: 2.0,
+    top: '#2a7fd0', hor: '#bcdcf4', glow: '#fff6e6', glowI: 0.6, fog: '#bcd6ec', exp: 1.2, lit: 0 },
+  { h: 18.6, elev: 14, az: -42, sun: '#ffd4a6', sunI: 5.35, sky: '#d6e0f0', ground: '#94806a', hemiI: 2.15,
     top: '#4f8fd6', hor: '#f6dcc6', glow: '#ffc79c', glowI: 2.0, fog: '#e4dad2', exp: 1.12, lit: 0.06 },
-  { h: 20.4, elev: 7, az: 75, sun: '#ff9a7a', sunI: 0.35, sky: '#8a7fb8', ground: '#3d3550', hemiI: 0.95,
+  { h: 20.4, elev: 7, az: -75, sun: '#ff9a7a', sunI: 0.35, sky: '#8a7fb8', ground: '#3d3550', hemiI: 0.95,
     top: '#1e2f5e', hor: '#e48a6f', glow: '#ff8a60', glowI: 1.4, fog: '#8f6f86', exp: 1.3, lit: 0.35 },
   { h: 23, elev: 40, az: -30, sun: '#9fb6ff', sunI: 0.5, sky: '#3a4a78', ground: '#1c1c2a', hemiI: 0.75,
     top: '#070d22', hor: '#1d2a4a', glow: '#8fa6e0', glowI: 0.25, fog: '#141d33', exp: 1.4, lit: 0.5 },

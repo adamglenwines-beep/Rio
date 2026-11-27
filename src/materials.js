@@ -70,12 +70,17 @@ export function setManifest(json) {
   manifest = json;
   manifest.layers.forEach((L, i) => {
     LAYERS[L.key] = i;
+    // the manifest's mean colours are sRGB; texture samples arrive in linear light, so the
+    // mean brightness they are compared with must be linear too (v0.8–0.11 compared linear
+    // samples with an sRGB mean, which drew every textured surface at ~65% of its colour)
     const lum = 0.2126 * L.mean[0] + 0.7152 * L.mean[1] + 0.0722 * L.mean[2];
+    const lin = (v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+    const lumLin = 0.2126 * lin(L.mean[0]) + 0.7152 * lin(L.mean[1]) + 0.0722 * lin(L.mean[2]);
     const keepHue = L.tone === 'grey' ? 0 : L.tone === 'greyish' ? 0.35 : 0.6;
-    matUniforms.uLayerP.value[i].set(L.scale, keepHue, 1, lum);
+    matUniforms.uLayerP.value[i].set(L.scale, keepHue, 1, lumLin);
     matUniforms.uLayerMean.value[i].setRGB(L.mean[0], L.mean[1], L.mean[2], THREE.SRGBColorSpace);
     const Q = CONFIG.textures.layers[L.key] || {};
-    matUniforms.uLayerQ.value[i].set(Q.contrast ?? 1, Q.mipBias ?? 0, 0, 0);
+    matUniforms.uLayerQ.value[i].set(Q.contrast ?? 1, Q.mipBias ?? 0, lum, 0);   // z: the old (sRGB) mean, for surfaces kept as they were
   });
   return manifest;
 }
@@ -171,7 +176,7 @@ const GLSL_COMMON = /* glsl */`
       vec2 muv = mat2(0.8, -0.6, 0.6, 0.8) * uv * 0.21 + 0.37;
       vec3 m = texture(uAlbedoArr, vec3(muv, float(layer)), 2.0 + uMipBias).rgb;
       float ml = dot(m, vec3(0.2126, 0.7152, 0.0722));
-      s.col *= mix(1.0, clamp(ml / max(uLayerP[layer].w, 0.05), 0.6, 1.5), 0.55 * uMacro);
+      s.col *= mix(1.0, clamp(ml / max(mix(uLayerP[layer].w, uLayerQ[layer].z, mLegacy), 0.05), 0.6, 1.5), 0.55 * uMacro);
     }
     return s;
   }
@@ -180,7 +185,8 @@ const GLSL_COMMON = /* glsl */`
     vec4 P = uLayerP[layer];
     float lum = dot(tex, vec3(0.2126, 0.7152, 0.0722));
     float c = uLayerQ[layer].x;                                            // this texture's detail contrast
-    float ratio = clamp(lum / max(P.w, 0.03), ${f1(CONFIG.textures.detailMin)}, ${f1(CONFIG.textures.detailMax)});
+    float meanL = mix(P.w, uLayerQ[layer].z, mLegacy);                     // linear mean (houses) or the old one (ground, paths)
+    float ratio = clamp(lum / max(meanL, 0.03), ${f1(CONFIG.textures.detailMin)}, ${f1(CONFIG.textures.detailMax)});
     float k = exp(log(ratio) * c * uDetail);                              // luminance detail
     vec3 hue = exp(log(clamp(tex / max(uLayerMean[layer], vec3(0.03)), vec3(0.2), vec3(3.0))) * c);   // the texture's own colour shifts
     return base * mix(vec3(k), mix(vec3(1.0), hue, uDetail), P.y);
@@ -233,7 +239,8 @@ export function injectSurface(sh, cfg) {
       if (dot(nG, vSN) < 0.0) nG = -nG;
       ${FACE_GLSL(cfg)}
     }`;
-  sh.fragmentShader = 'varying float vMLayer;\nvarying float vMRand;\nvarying float vMGround;\nvarying vec4 vMask;\nvec3 mNormalW = vec3(0.0); float mRough = -1.0;\n' + GLSL_COMMON + sh.fragmentShader
+  sh.fragmentShader = 'varying float vMLayer;\nvarying float vMRand;\nvarying float vMGround;\nvarying vec4 vMask;\nvec3 mNormalW = vec3(0.0); float mRough = -1.0;\n'
+    + `const float mLegacy = ${cfg.trueMean ? '0.0' : '1.0'};\n` + GLSL_COMMON + sh.fragmentShader
     .replace('#include <color_fragment>', '#include <color_fragment>\n' + body)
     .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
       if (mRough >= 0.0) roughnessFactor = clamp(mix(roughnessFactor, mRough, 0.85), 0.25, 1.0);`)
@@ -268,7 +275,10 @@ const WEATHER_GLSL = `
         float h = wp.y - vMGround;
         float dCorner = vWall.x >= 0.0 ? min(vWall.x, vWall.y - vWall.x) : 9.0;
         // gentle colour variation across a facade (sun-faded, repainted bits)
-        c *= 1.0 + (mFbm(q * 0.11 + 3.7 + vMRand * 5.0) - 0.5) * 0.14 * uWeather;
+        c *= 1.0 + (mFbm(q * 0.11 + 3.7 + vMRand * 5.0) - 0.5) * ${f1(CONFIG.building.wallVariation)} * uWeather;
+        // sun-faded patches: paler and a little greyer, a few metres across
+        float fadeP = smoothstep(0.42, 0.78, mFbm(q * 0.27 + 9.1 + vMRand * 3.0)) * ${f1(CONFIG.building.sunFade)} * uWeather;
+        c = mix(c, mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 0.7) * 1.1, fadeP);
         // painted corner stones: long and short blocks alternating up both corners
         if (flags > 0.5 && dCorner < (mod(floor(wp.y / 0.34), 2.0) < 0.5 ? 0.58 : 0.34) && fract(wp.y / 0.34) > 0.07)
           c = mix(c, vec3(0.80, 0.77, 0.69) * (c.g / max(base.g, 0.05)), 0.9);

@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 
-const VIEW = { cam: [-15, 14, 21], target: [3, 8, -5] };   // offsets from the group's middle
+const VIEW = { cam: [17, 4, 30], target: [-1, 5, -2] };   // offsets from the group's middle
 
 export function setupSixHouses(game, params) {
   game.demo();

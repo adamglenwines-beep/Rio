@@ -41,7 +41,7 @@ export const STYLES = {
   painted: {
     label: 'Hand-painted', flat: false, paint: 0.4, grad: 0.4,
     tex: { detail: 1.0, normal: 1.0, mipBias: 0.3 },     // textures: full detail (closest to the art target), a touch soft so they don't fizz
-    hemi: 1.1, sun: 0.95, sat: 1.12, contrast: 1.0, shadowTint: [1.08, 0.98, 1.2],
+    hemi: 1.1, sun: 0.95, sat: 1.0, contrast: 1.0, shadowTint: [1.08, 0.98, 1.2],   // sat was 1.12: walls went egg-yolk
     chamfer: 0.12, smoothCorners: false, roundFoliage: true, smoothTerrain: true,
     detailScale: 1.14, cornice: 0.5, overhang: 0.36,
     sky: { clouds: 1, soft: 0.5 },

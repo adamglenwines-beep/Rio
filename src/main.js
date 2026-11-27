@@ -30,7 +30,9 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'hi
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+// Khronos PBR Neutral: keeps wall colours true and sunlit walls bright without the hue
+// shifts and washed-out highlights of ACES (v0.12)
+renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.12;
 app.appendChild(renderer.domElement);
 

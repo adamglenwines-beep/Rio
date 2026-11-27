@@ -299,7 +299,7 @@ export class BuildingRenderer {
     this.parts.streak.far = 140;
     this.parts.aoRing.far = 320;
     for (const p of Object.values(this.parts)) { p.mesh = null; p.cap = 0; }
-    registerStyled(this.massMat, 'surface', { mode: 'face', layer: 'attr', weather: true });
+    registerStyled(this.massMat, 'surface', { mode: 'face', layer: 'attr', weather: true, trueMean: true });
     const surf = { shutterOpen: 'woodPaint', shutterClosed: 'woodPaint', shutterHalf: 'woodPaint', shutterTilt: 'woodPaint', door: 'woodPaint', chimney: 'plaster', surround: 'plaster', doorFrame: 'stoneDressed' };
     // detail by distance: a part with `far` shrinks away beyond that many metres (× the quality's reach)
     this.detailReach = { value: 1 };
@@ -324,7 +324,7 @@ export class BuildingRenderer {
       seen.add(p.mat);
       if (p.far) fadeFar(p.mat, p.far);
       if (p.mat.isMeshBasicMaterial) continue;
-      registerStyled(p.mat, p.kind || 'surface', surf[k] ? { mode: 'face', layer: surf[k] } : null);
+      registerStyled(p.mat, p.kind || 'surface', surf[k] ? { mode: 'face', layer: surf[k], trueMean: true } : null);
     }
   }
 

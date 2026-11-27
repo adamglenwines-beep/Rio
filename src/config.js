@@ -173,6 +173,8 @@ export const CONFIG = {
     // Wall-mounted parts (windows, shutters, doors, signs, painted windows…) stand clear of the
     // wall: every face parallel to the wall is at least this far in front of it (or buried well
     // inside it), and the layers of a window are at least 2 cm apart, so they can't flicker.
+    wallVariation: 0.18,   // soft brightness variation across a wall (sun-faded, repainted bits)
+    sunFade: 0.45,         // how strongly sun-faded patches pale and grey a wall's colour
     facadeGap: 0.03,
     // Baked ambient occlusion on the walls (darkening where less sky reaches):
     ao: {
@@ -350,28 +352,29 @@ export const CONFIG = {
   },
 };
 
-// Facade palette: [colour, weight, family]. Between the real town (pale: cream, pink,
-// salmon) and the art targets (saturated gold and coral), and a little cooler than the
-// targets: less yellow, more pink and cream. Two houses that touch never share a colour,
-// and avoid sharing a family where they can.
+// Facade palette: [colour, weight, family]. v0.12: lighter, warmer, sun-faded colours, from
+// section 7 of Rio-reference/art-target-v2/graphics-review-v0.10.md, each lightened and faded a
+// little the way ochre #D5AC55 had to become #E2BC78 to match the art target's sunlit wall.
+// (v0.10–0.11 had a cooler, more saturated palette: Genoa red, orange, pale blue-grey.)
+// Two houses that touch never share a colour, and avoid sharing a family where they can.
 export const FACADE_COLOURS = [
-  ['#f1dfa8', 16, 'yellow'],   // cream
-  ['#eecb72', 8, 'yellow'],    // straw
-  ['#e2b455', 6, 'yellow'],    // ochre
-  ['#f0ad82', 12, 'orange'],   // peach
-  ['#e88f68', 11, 'orange'],   // salmon
-  ['#e27b48', 7, 'orange'],    // orange
-  ['#eea39c', 12, 'pink'],     // pink
-  ['#e08681', 8, 'pink'],      // rose
-  ['#d2574a', 7, 'red'],       // Genoa red
-  ['#f1ede2', 4, 'pale'],      // off-white
-  ['#b0a898', 2, 'pale'],      // unpainted grey render
-  ['#c6d6b0', 2, 'cool'],      // sage
-  ['#c3d4dc', 2, 'cool'],      // pale blue-grey
+  ['#e2bc78', 10, 'yellow'],   // ochre, sun-faded
+  ['#ead39b', 9, 'yellow'],    // lemon plaster
+  ['#eadcbe', 7, 'pale'],      // warm cream
+  ['#f0e6d2', 3, 'pale'],      // limewash, off-white
+  ['#eeb68e', 11, 'orange'],   // peach
+  ['#d99c66', 6, 'orange'],    // burnt orange, faded
+  ['#cd8b6a', 8, 'orange'],    // terracotta, faded
+  ['#e09e8a', 11, 'pink'],     // salmon
+  ['#d6a59a', 9, 'pink'],      // dusty rose
+  ['#e7b3a6', 5, 'pink'],      // pale rose
+  ['#b8bea6', 4, 'cool'],      // sage
+  ['#c9bfaa', 2, 'cool'],      // unpainted render (limestone)
 ];
-// Shutters: green on nine windows in ten, one colour per house.
+// Shutters: green on nine windows in ten, one colour per house. v0.12: a richer, lighter
+// green (v0.11's were nearly black).
 export const SHUTTER_COLOURS = [
-  ['#1c4332', 3], ['#1f5237', 2.5], ['#27623f', 2], ['#2b6e48', 1], ['#2a6a5c', 0.8], ['#7d8a82', 0.4], ['#6e3a2c', 0.3],
+  ['#2f7656', 3], ['#36805a', 2.5], ['#3d8a62', 2], ['#2e7262', 1], ['#4a8a63', 0.8], ['#8a968e', 0.4], ['#8a5040', 0.3],
 ];
 // Roofs: mostly weathered grey slate (pale from above, some with a lichen cast), about one
 // in six terracotta.
