@@ -144,7 +144,7 @@ export const CONFIG = {
     roofPitch: 0.07,       // (old flat roofs; each house now draws its pitch from look.roofPitch)
     detailReach: { low: 0.5, medium: 0.8, high: 1.0 },
     chunkSize: 48,         // the town is drawn in square chunks this wide (m): off-screen chunks are skipped
-    lodDistance: 75,       // closer than this (m, × detailReach), openings are recessed with louvred shutters; further, painted flat   // how far small facade details are drawn (× each detail's own distance)
+    lodDistance: 55,       // closer than this (m, × detailReach), openings show frames and louvred leaves; further, painted flat   // how far small facade details are drawn (× each detail's own distance)
     // The look of a house: shares (0–1) of houses or windows that get each thing.
     look: {
       wearNone: 0.58, wearSome: 0.3,         // plaster wear: most houses are sound, 3 in 10 worn, about 1 in 8 badly worn

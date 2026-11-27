@@ -69,6 +69,22 @@ class GeoBuilder {
     this.wall.push(-1, 0, this.wear, -1, 0, this.wear, -1, 0, this.wear);
   }
 
+  /** Push one triangle with a known normal and a colour per vertex. */
+  _triVC(a, b, d, n, ca, cb, cd) {
+    this.pos.push(a[0], a[1], a[2], b[0], b[1], b[2], d[0], d[1], d[2]);
+    this.nor.push(n[0], n[1], n[2], n[0], n[1], n[2], n[0], n[1], n[2]);
+    this.col.push(ca[0], ca[1], ca[2], cb[0], cb[1], cb[2], cd[0], cd[1], cd[2]);
+    this.lay.push(this.layer, this.layer, this.layer);
+    this.wall.push(-1, 0, 0, -1, 0, 0, -1, 0, 0);
+  }
+
+  /** Arrays for merged facade detail (frames, leaves, balconies…): textured per vertex, no baked AO. */
+  arraysPlain(rand = 0) {
+    const n = this.pos.length, ao = new Float32Array(n);
+    for (let i = 0; i < n; i += 3) { ao[i] = -1e4; ao[i + 1] = 0; ao[i + 2] = this.lay[i / 3] + 1 + rand * 0.9; }
+    return { pos: new Float32Array(this.pos), nor: new Float32Array(this.nor), col: new Float32Array(this.col), ao, wall: new Float32Array(this.wall) };
+  }
+
   /** Mark the last `count` vertices as wall: u = metres along the wall for each, L = the wall's length. */
   _wallUV(us, L) {
     const o = this.wall.length - us.length * 3;
@@ -333,7 +349,7 @@ export class BuildingRenderer {
       // small things, coloured per instance
       bar:     { geo: box(1, 1, 1, 0, 0.5, 0), mat: lambert(), shadow: false, far: 190 },        // rails, posts, pipes, lines, beams
       pot:     { geo: new THREE.CylinderGeometry(0.2, 0.13, 0.3, 7).translate(0, 0.15, 0), mat: lambert(), shadow: false, far: 130 },
-      blob:    { geo: new THREE.IcosahedronGeometry(1, 1), mat: lambert({ flatShading: false }), shadow: false, far: 240, kind: 'foliage' },   // climbers, pot plants
+      blob:    { geo: new THREE.IcosahedronGeometry(1, 1), mat: lambert({ flatShading: false }), shadow: false, far: 150, kind: 'foliage' },   // climbers, pot plants
       cloth:   { geo: box(1, 1, 0.02, 0, -0.5, 0), mat: lambert(), shadow: false, far: 230 },    // washing
       cone:    { geo: new THREE.ConeGeometry(1, 0.42, 8).translate(0, 0.21, 0), mat: lambert(), shadow: true, far: 400 },   // parasols
       flowerbox: { geo: mergeColoured([[box(0.92, 0.16, 0.2, 0, 0, 0), '#a2674a'], [lump(0.15, -0.28, 0.14, 0.02), '#6f8f4a'], [lump(0.13, 0.05, 0.16, 0), '#ffffff'],
@@ -381,7 +397,9 @@ export class BuildingRenderer {
     const D = GF.door, dg = doorGeometries(D.w, D.h, D.recess);
     this.parts.doorJambs = { geo: dg.surround, mat: lambert({ vertexColors: true }), shadow: true };
     this.parts.doorLeaf = { geo: dg.leaf, mat: lambert({ vertexColors: true }), shadow: true };
-    for (const st of ['closed', 'open', 'half', 'none']) this.parts['paint_' + st] = { geo: paintGeo, mat: paintedOpeningMaterial(st), shadow: false, lod: 'far' };
+    // (shut or shutterless windows need only the opening's width; folded-back leaves twice that)
+    const paintNarrow = new THREE.PlaneGeometry(1.12, 1.06).translate(0, -0.03, GAP + 0.02);
+    for (const st of ['closed', 'open', 'half', 'none']) this.parts['paint_' + st] = { geo: st === 'open' || st === 'half' ? paintGeo : paintNarrow, mat: paintedOpeningMaterial(st), shadow: false, lod: 'far' };
     for (const p of Object.values(this.parts)) { p.mesh = null; p.cap = 0; }
     registerStyled(this.massMat, 'surface', { mode: 'face', layer: 'attr', weather: true, trueMean: true });
     const surf = { leafL: 'woodPaint', leafR: 'woodPaint', door: 'woodPaint', chimney: 'plaster', doorFrame: 'stoneDressed', doorLeaf: 'planks', doorJambs: 'stoneDressed', wsLeaf: 'planks', wsJambs: 'stoneDressed', archLeaf: 'planks', archJambs: 'stoneDressed', archRing: 'stoneDressed', archSpandrel: 'plaster',
@@ -406,6 +424,17 @@ export class BuildingRenderer {
     // detail by distance for whole openings: 'near' parts (recess frames, glass, louvred leaves) show
     // only in chunks within the LOD distance, 'far' parts (painted openings) only beyond it (updateLod)
     this.lodDist = { value: CONFIG.building.lodDistance };
+    // Facade parts that never change on their own are baked into two merged meshes per chunk
+    // (one always drawn, one only near: frames and louvred leaves) instead of one instanced batch
+    // per kind per chunk: far fewer draw calls. Parts with their own shaders or a fade with
+    // distance (glass, painted openings, awnings, plants, pots, washing) stay instanced.
+    this.mergeNear = new Set(['leafL', 'leafR', ...WINDOW_TYPES.map((k) => 'frame_' + k)]);
+    this.mergeAlways = new Set(['doorJambs', 'doorLeaf', 'wsJambs', 'wsLeaf', 'archJambs', 'archLeaf', 'archSpandrel', 'archRing', 'shopFront', 'shopSign',
+      'chimney', 'pediment', 'door', 'doorFrame', 'shop', 'awning', 'awningStripe', 'balcony', 'balconySolid', 'holeBack', 'window',
+      ...Object.keys(this.parts).filter((k) => k.startsWith('balSlab_') || k.startsWith('balRail_') || k.startsWith('sur_'))]);
+    this.partLayer = {};
+    for (const k of Object.keys(this.parts)) this.partLayer[k] = surf[k] ? (LAYERS[surf[k]] ?? -1) : -1;
+    this._flats = {};
     const seen = new Set([this.massMat]);
     for (const [k, p] of Object.entries(this.parts)) {
       if (seen.has(p.mat)) { if (p.far) { p.mat = p.mat.clone(); } else continue; }
@@ -1086,7 +1115,7 @@ export class BuildingRenderer {
   /** Detail meshes too small to matter in a ripply reflection. */
   smallParts() {
     const keep = (k) => ['window', 'glass', 'storeRoom'].includes(k) || k.startsWith('frame_');
-    return [...this.chunks.values()].flatMap((ch) => Object.entries(ch.parts).filter(([k]) => !keep(k)).map(([, m]) => m));
+    return [...this.chunks.values()].flatMap((ch) => [ch.det, ch.detN, ...Object.entries(ch.parts).filter(([k]) => !keep(k)).map(([, m]) => m)]).filter(Boolean);
   }
 
   /** Flat overlays drawn on top of walls (not solid surfaces): left out of the ambient-occlusion pass. */
@@ -1137,40 +1166,17 @@ export class BuildingRenderer {
   /** (Re)fill one chunk's meshes from its houses' cached pieces. */
   _fillChunk(key, list) {
     let ch = this.chunks.get(key);
-    if (!ch) { ch = { key, mass: null, massCap: 0, parts: {}, sphere: new THREE.Sphere(), ids: '' }; this.chunks.set(key, ch); }
+    if (!ch) { ch = { key, mass: null, det: null, detN: null, parts: {}, sphere: new THREE.Sphere(), ids: '' }; this.chunks.set(key, ch); }
     ch.ids = list.map((b) => b.id).join(',');
     // its bounding sphere: every house's footprint, from its lowest ground to its roof (plus balconies and awnings)
     const box = new THREE.Box3(), v = new THREE.Vector3();
     for (const b of list) for (const p of b.corners) { box.expandByPoint(v.set(p[0], b.gMin - 1.5, p[1])); box.expandByPoint(v.set(p[0], (b.roofTop ?? b.top) + 2, p[1])); }
     box.expandByScalar(2.5);
     box.getBoundingSphere(ch.sphere);
-    // --- the merged walls + roofs ---
-    let nv = 0;
-    for (const b of list) nv += this.cache.get(b.id).pos.length;
-    if (!ch.mass || ch.massCap < nv) {
-      ch.massCap = Math.ceil((nv * 1.3 + 900) / 9) * 9;   // whole triangles (3 vertices × 3 floats), with head-room
-      const geo = new THREE.BufferGeometry();
-      for (const [name, size] of [['position', 3], ['normal', 3], ['color', 3], ['aoParams', 3], ['aWall', 3]]) {
-        geo.setAttribute(name, new THREE.BufferAttribute(new Float32Array(ch.massCap), size).setUsage(THREE.DynamicDrawUsage));
-      }
-      if (ch.mass) { ch.mass.geometry.dispose(); ch.mass.geometry = geo; }
-      else {
-        ch.mass = new THREE.Mesh(geo, this.massMat);
-        ch.mass.castShadow = true; ch.mass.receiveShadow = true;
-        ch.mass.userData.houseMass = true;
-        this.group.add(ch.mass);
-      }
-    }
-    const A = ch.mass.geometry.attributes;
-    let o = 0;
-    for (const b of list) {
-      const c = this.cache.get(b.id);
-      A.position.array.set(c.pos, o); A.normal.array.set(c.nor, o); A.color.array.set(c.col, o); A.aoParams.array.set(c.ao, o); A.aWall.array.set(c.wall, o);
-      o += c.pos.length;
-    }
-    for (const a of Object.values(A)) { a.clearUpdateRanges(); a.addUpdateRange(0, nv); a.needsUpdate = true; }
-    ch.mass.geometry.setDrawRange(0, nv / 3);
-    ch.mass.geometry.boundingSphere = ch.sphere.clone();
+    // --- the merged meshes: walls + roofs, facade detail, and near-only facade detail ---
+    this._fillMerged(ch, 'mass', list, (c) => c);
+    this._fillMerged(ch, 'det', list, (c) => c.det);
+    this._fillMerged(ch, 'detN', list, (c) => c.detN);
     // --- instance batches ---
     for (const k of Object.keys(this.parts)) {
       let n = 0;
@@ -1204,8 +1210,41 @@ export class BuildingRenderer {
     ch.lodNear = null;                           // re-apply detail by distance on the next frame
   }
 
+  /** Copy the cached pieces of a chunk's houses into one of its merged meshes (`slot`). */
+  _fillMerged(ch, slot, list, pick) {
+    let nv = 0;
+    for (const b of list) nv += pick(this.cache.get(b.id)).pos.length;
+    const capKey = slot + 'Cap';
+    if (!ch[slot] || ch[capKey] < nv) {
+      ch[capKey] = Math.ceil((nv * 1.3 + 900) / 9) * 9;   // whole triangles (3 vertices × 3 floats), with head-room
+      const geo = new THREE.BufferGeometry();
+      for (const [name, size] of [['position', 3], ['normal', 3], ['color', 3], ['aoParams', 3], ['aWall', 3]]) {
+        geo.setAttribute(name, new THREE.BufferAttribute(new Float32Array(ch[capKey]), size).setUsage(THREE.DynamicDrawUsage));
+      }
+      if (ch[slot]) { ch[slot].geometry.dispose(); ch[slot].geometry = geo; }
+      else {
+        const m = new THREE.Mesh(geo, this.massMat);
+        m.castShadow = true; m.receiveShadow = true;
+        m.userData = { houseMass: slot === 'mass', merged: slot, lod: slot === 'detN' ? 'near' : null };
+        ch[slot] = m;
+        this.group.add(m);
+      }
+    }
+    const A = ch[slot].geometry.attributes;
+    let o = 0;
+    for (const b of list) {
+      const c = pick(this.cache.get(b.id));
+      A.position.array.set(c.pos, o); A.normal.array.set(c.nor, o); A.color.array.set(c.col, o); A.aoParams.array.set(c.ao, o); A.aWall.array.set(c.wall, o);
+      o += c.pos.length;
+    }
+    for (const a of Object.values(A)) { a.clearUpdateRanges(); a.addUpdateRange(0, nv); a.needsUpdate = true; }
+    ch[slot].geometry.setDrawRange(0, nv / 3);
+    ch[slot].geometry.boundingSphere = ch.sphere.clone();
+    ch[slot].visible = nv > 0;
+  }
+
   _disposeChunk(ch) {
-    if (ch.mass) { this.group.remove(ch.mass); ch.mass.geometry.dispose(); }
+    for (const slot of ['mass', 'det', 'detN']) if (ch[slot]) { this.group.remove(ch[slot]); ch[slot].geometry.dispose(); }
     for (const m of Object.values(ch.parts)) { this.group.remove(m); m.dispose(); }
   }
 
@@ -1226,12 +1265,18 @@ export class BuildingRenderer {
         const lod = m.userData.lod;
         m.visible = m.count > 0 && (!lod || (lod === 'near') === near);
       }
+      if (ch.detN) ch.detN.visible = near && ch.detN.geometry.drawRange.count > 0;
     }
     return changed;
   }
 
   /** How many instances of a part kind the town has (all chunks). */
-  partCount(k) { let n = 0; for (const ch of this.chunks.values()) if (ch.parts[k]) n += ch.parts[k].count; return n; }
+  partCount(k) {
+    let n = 0;
+    for (const ch of this.chunks.values()) if (ch.parts[k]) n += ch.parts[k].count;
+    for (const c of this.cache.values()) if (c.counts && c.counts[k]) n += c.counts[k];   // (merged parts)
+    return n;
+  }
 
   /** Every walls-and-roofs mesh (one per chunk). */
   massMeshes() { return [...this.chunks.values()].map((ch) => ch.mass).filter(Boolean); }
@@ -1339,7 +1384,11 @@ export class BuildingRenderer {
     const lists = {};
     for (const k of Object.keys(this.parts)) lists[k] = [];
     // instance = [x, y, z, rotY, sx, sy, sz, colour]
-    const put = (k, x, y, z, rot, sx, sy, sz, col) => lists[k].push(x, y, z, rot, sx, sy, sz, col.r, col.g, col.b);
+    const gbA = new GeoBuilder(), gbN = new GeoBuilder(), counts = {};   // merged facade detail: always / near only
+    const put = (k, x, y, z, rot, sx, sy, sz, col) => {
+      if (this.mergeAlways.has(k) || this.mergeNear.has(k)) { this._bake(this.mergeNear.has(k) ? gbN : gbA, k, x, y, z, rot, sx, sy, sz, col); counts[k] = (counts[k] || 0) + 1; }
+      else lists[k].push(x, y, z, rot, sx, sy, sz, col.r, col.g, col.b);
+    };
     const cream = CREAM, stone = STONE, awnCols = AWN_COLS;
     const gb = new GeoBuilder();
     const ov = this.style.overhang;
@@ -1685,7 +1734,36 @@ export class BuildingRenderer {
       parts[k] = { n, m: M, c: C };
     }
     const g = gb.arrays((x, z, nx, nz) => this._enclosure(b, x, z, nx, nz), t, (b.seed % 997) / 997, b.top - this.style.cornice);
-    return { ver: b.ver, pos: g.pos, nor: g.nor, col: g.col, ao: g.ao, wall: g.wall, parts };
+    const rnd = (b.seed % 997) / 997;
+    return { ver: b.ver, pos: g.pos, nor: g.nor, col: g.col, ao: g.ao, wall: g.wall, parts, det: gbA.arraysPlain(rnd), detN: gbN.arraysPlain(rnd), counts };
+  }
+
+  /** A part's triangles (non-indexed positions and vertex colours), made once. */
+  _flat(k) {
+    if (this._flats[k]) return this._flats[k];
+    const g = this.parts[k].geo.index ? this.parts[k].geo.toNonIndexed() : this.parts[k].geo;
+    const C = g.attributes.color;
+    return (this._flats[k] = { pos: g.attributes.position.array, col: C ? C.array : null });
+  }
+
+  /** Bake one placed part into a merged builder: translate · rotateY · scale, colour × the part's vertex colours. */
+  _bake(gbX, k, x, y, z, rot, sx, sy, sz, col) {
+    const f = this._flat(k), P = f.pos, C = f.col, c = Math.cos(rot), s = Math.sin(rot);
+    gbX.layer = this.partLayer[k];
+    const v = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], vc = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], n = [0, 0, 0];
+    for (let i = 0; i < P.length; i += 9) {
+      for (let j = 0; j < 3; j++) {
+        const o = i + j * 3, lx = P[o] * sx, ly = P[o + 1] * sy, lz = P[o + 2] * sz;
+        v[j][0] = x + c * lx + s * lz; v[j][1] = y + ly; v[j][2] = z - s * lx + c * lz;
+        if (C) { vc[j][0] = C[o] * col.r; vc[j][1] = C[o + 1] * col.g; vc[j][2] = C[o + 2] * col.b; } else { vc[j][0] = col.r; vc[j][1] = col.g; vc[j][2] = col.b; }
+      }
+      const ux = v[1][0] - v[0][0], uy = v[1][1] - v[0][1], uz = v[1][2] - v[0][2], wx = v[2][0] - v[0][0], wy = v[2][1] - v[0][1], wz = v[2][2] - v[0][2];
+      n[0] = uy * wz - uz * wy; n[1] = uz * wx - ux * wz; n[2] = ux * wy - uy * wx;
+      const l = Math.hypot(n[0], n[1], n[2]);
+      if (l < 1e-12) continue;
+      n[0] /= l; n[1] /= l; n[2] /= l;
+      gbX._triVC([...v[0]], [...v[1]], [...v[2]], [...n], [...vc[0]], [...vc[1]], [...vc[2]]);
+    }
   }
 
   /** A small grated cellar window on a stone ground floor (no recess: the stone stands proud). */

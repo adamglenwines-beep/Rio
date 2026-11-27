@@ -115,11 +115,17 @@ export function leafGeometry(right, near) {
 
 /** A thin painted band round the opening (window surrounds on decorated houses). */
 export function surroundGeometry(type) {
-  const T = WIN.types[type], w = T.w, h = T.h, band = 0.13, p = new Parts(), z0 = -0.02, z1 = GAP, c = '#ffffff';
-  p.box(-w / 2 - band, h / 2, z0, w / 2 + band, h / 2 + band, z1, c);
-  p.box(-w / 2 - band, -h / 2 - band, z0, w / 2 + band, -h / 2, z1, c);
-  p.box(-w / 2 - band, -h / 2, z0, -w / 2, h / 2, z1, c);
-  p.box(w / 2, -h / 2, z0, w / 2 + band, h / 2, z1, c);
+  // (front faces and outer edges only: the band is a few centimetres thick, its inner edges hidden by the reveal)
+  const T = WIN.types[type], w = T.w / 2, h = T.h / 2, b = 0.13, p = new Parts(), z = GAP, c = '#ffffff';
+  const W = w + b, Hh = h + b;
+  p.quad([-W, h, z], [W, h, z], [W, Hh, z], [-W, Hh, z], c);             // head
+  p.quad([-W, -Hh, z], [W, -Hh, z], [W, -h, z], [-W, -h, z], c);         // foot
+  p.quad([-W, -h, z], [-w, -h, z], [-w, h, z], [-W, h, z], c);           // left
+  p.quad([w, -h, z], [W, -h, z], [W, h, z], [w, h, z], c);               // right
+  p.quad([-W, Hh, z], [W, Hh, z], [W, Hh, -0.02], [-W, Hh, -0.02], c);   // outer edges
+  p.quad([-W, -Hh, -0.02], [W, -Hh, -0.02], [W, -Hh, z], [-W, -Hh, z], c);
+  p.quad([-W, -Hh, -0.02], [-W, -Hh, z], [-W, Hh, z], [-W, Hh, -0.02], c);
+  p.quad([W, -Hh, z], [W, -Hh, -0.02], [W, Hh, -0.02], [W, Hh, z], c);
   return p.geometry();
 }
 
