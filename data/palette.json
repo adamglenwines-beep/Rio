@@ -1,30 +1,45 @@
 {
-  "_about": "House colours. facade: [hex, weight, family]. Houses that touch never share a colour, and avoid sharing a family where they can. v0.13: stronger reds, deep ochres and golden yellows (towards art target 05 and the golden-hour photo); v0.12 was too pastel. Lighting is unchanged (see DESIGN.md, Light).",
-  "facade": [
-    ["#e6b545", 9, "yellow", "golden yellow"],
-    ["#d49a3c", 8, "yellow", "deep ochre"],
-    ["#e2bc78", 6, "yellow", "sun-faded ochre"],
-    ["#e8cf7e", 5, "yellow", "lemon"],
-    ["#e08a45", 8, "orange", "orange"],
-    ["#cf7a40", 6, "orange", "burnt orange"],
-    ["#e9a273", 7, "orange", "peach"],
-    ["#c9463a", 4, "red", "Genoa red (bold)"],
-    ["#d9604c", 6, "red", "coral"],
-    ["#c06a4a", 5, "red", "terracotta"],
-    ["#df8a76", 8, "pink", "salmon"],
-    ["#e09a95", 6, "pink", "rose"],
-    ["#cc8a80", 4, "pink", "dusty rose"],
-    ["#ead7ad", 5, "pale", "cream"],
-    ["#ece3cf", 2, "pale", "limewash"],
-    ["#a9b48f", 2, "cool", "sage"]
-  ],
-  "shutter": [
-    ["#2f7656", 3], ["#36805a", 2.5], ["#3d8a62", 2], ["#2e7262", 1], ["#4a8a63", 0.8], ["#8a968e", 0.4], ["#8a5040", 0.3]
-  ],
-  "door": [
-    ["#1f5a3a", 4.5], ["#8a6844", 3], ["#4a2f22", 1.5], ["#2a5a5a", 0.6], ["#6e6558", 1]
-  ],
-  "awningStripes": [
-    ["#ece6d6", "#2e7cb8"], ["#ece6d6", "#3b9c6b"], ["#ece6d6", "#d24b3f"], ["#e6cf8a", "#ece6d6"], ["#ece6d6", "#e3a63a"], ["#ece6d6", "#ece6d6"]
-  ]
+ "_about": "House colours. facade: [hex, weight, family, name]. Houses that touch never share a colour, and avoid sharing a family where they can. v0.17: chosen so the reference photos (Riomaggiore harbour, the shuttered facades), the paint-overs (art-target-v2) and the greyscale plaster texture agree: more pinks, creams and a few cool houses, fewer oranges, every colour a little less saturated (limewash paint is chalky). With v0.16's light a wall in full sun shows about the colour written here. History: v0.13 stronger and oranger (towards art target 05); v0.12 paler. See PROGRESS.md (Stage 2) for the reasoning.",
+ "facade": [
+  ["#dda546", 7, "yellow", "golden ochre"],
+  ["#cb8f3b", 5, "yellow", "deep ochre"],
+  ["#e0bc73", 6, "yellow", "straw"],
+  ["#e5ce86", 5, "yellow", "pale lemon"],
+  ["#db8444", 6, "orange", "soft orange"],
+  ["#c66a39", 5, "orange", "burnt orange"],
+  ["#e09a6b", 6, "orange", "peach"],
+  ["#b14635", 4, "red", "Genoa red"],
+  ["#cb5a41", 4, "red", "coral red"],
+  ["#aa5f44", 4, "red", "terracotta"],
+  ["#d88269", 8, "pink", "salmon"],
+  ["#d58d81", 7, "pink", "rose"],
+  ["#c37c71", 6, "pink", "dusty rose"],
+  ["#e0ac97", 6, "pink", "shell pink"],
+  ["#e2cea3", 6, "pale", "cream"],
+  ["#dfd4bd", 3, "pale", "limewash"],
+  ["#caba99", 4, "pale", "stone render"],
+  ["#adb795", 3, "cool", "sage"],
+  ["#beceae", 2, "cool", "pale mint"],
+  ["#b0bab8", 1, "cool", "grey blue"]
+ ],
+ "_shutter": "Shutters: the deep bottle green of Ligurian persiane (dark in shade, emerald only where the sun hits the slats), a few lighter or sun-faded, the odd bare brown or slate-blue pair. Hue between the photos' yellower green and the paint-overs' teal. v0.13-v0.16 were lighter and brighter (#2f7656 ... #4a8a63) and read as flat poster green.",
+ "shutter": [
+  ["#2a5a3c", 3], ["#23533a", 2.5], ["#2e6347", 2], ["#1f4d3b", 1.5], ["#3a6844", 1.2], ["#5b7a60", 0.7], ["#7b8a7c", 0.3], ["#6b4a38", 0.3], ["#39505a", 0.2]
+ ],
+ "door": [
+  ["#24513b", 3.5],
+  ["#7d5f41", 3.5],
+  ["#4a3226", 2],
+  ["#3c5560", 0.6],
+  ["#6e6558", 1],
+  ["#6b2f28", 0.6]
+ ],
+ "awningStripes": [
+  ["#ece6d6", "#3a78a8"],
+  ["#ece6d6", "#3f8f6a"],
+  ["#ece6d6", "#c4503f"],
+  ["#e6cf8a", "#ece6d6"],
+  ["#ece6d6", "#d9a441"],
+  ["#ece6d6", "#ece6d6"]
+ ]
 }

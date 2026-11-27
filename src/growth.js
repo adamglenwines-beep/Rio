@@ -829,7 +829,7 @@ export class Growth {
     this._forCells(b.corners, RASTER_INSET, (k) => { if (k >= 0 && this.occ[k] === EMPTY) this.occ[k] = id; });
     // the colour is chosen once the house is on the map, so neighbours are found both ways round
     b.colourKey = this._pickColour(b);
-    b.facade = new THREE.Color(FACADE_COLOURS[b.colourKey][0]).offsetHSL(r.range(-0.008, 0.008), r.range(-0.04, 0.03), r.range(-0.025, 0.025));
+    b.facade = new THREE.Color(FACADE_COLOURS[b.colourKey][0]).offsetHSL(r.range(-0.012, 0.012), r.range(-0.05, 0.03), r.range(-0.035, 0.03));   // each house its own mix of the pigment
     this._touch(b);
     this.dirty = true;
     return b;

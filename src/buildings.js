@@ -1445,7 +1445,7 @@ export class BuildingRenderer {
     const F = this._look(b, rng);
     // condition: paint fades and greys, plaster crumbles only on houses in poor repair, fewer flowers
     const cond = plan.condition, paint = b.facade.clone(), hslP = {};
-    paint.getHSL(hslP); paint.setHSL(hslP.h, hslP.s * (0.74 + 0.26 * cond), Math.min(0.92, hslP.l + (1 - cond) * 0.07));
+    paint.getHSL(hslP); paint.setHSL(hslP.h, hslP.s * (0.74 + 0.26 * cond), Math.min(0.92, hslP.l + (1 - cond) * 0.05));
     F.wear = cond < CONFIG.building.condition.wearBelow ? (CONFIG.building.condition.wearBelow - cond) / CONFIG.building.condition.wearBelow * 0.85 : 0;
     F.flowers *= 0.4 + cond; F.pots = F.pots && rng() < 0.45 + cond;
     const base = b.gMin - 1.2;

@@ -94,12 +94,15 @@ A **Manor Lords-style hybrid**:
 - **Tower houses**: narrow fronts (3.5–6 m), each with its own leaning to be a storey or
   two taller or shorter than its site suggests. A house beside two lanes gets a door on
   each (front door low, back door on the higher lane: the *uservàn*).
-- **Colour** (v0.13, `data/palette.json`): warm, strong Ligurian pigments, towards art target 05:
-  golden yellow, deep and sun-faded ochre, lemon, orange, burnt orange, peach, a few bold Genoa-red
-  houses, coral, terracotta, salmon, rose, cream, limewash, sage; soft mottling and sun-faded
-  patches within each wall, a slight tone per house. (v0.12 was lighter and too pastel; v0.10 cooler.)
-  Houses that touch never share a colour and rarely a colour family. Shutters are a rich, fairly
-  light green on almost every house.
+- **Colour** (v0.17, `data/palette.json`): chalky Ligurian limewash, mid-toned and a little less
+  saturated than before: golden and deep ochre, straw, pale lemon; soft and burnt orange, peach;
+  Genoa red, coral red, terracotta; salmon, rose, dusty rose, shell pink; cream, limewash, stone
+  render; and at low weight sage, pale mint and a grey blue. Orange and yellow together are about
+  40% of houses (v0.13–v0.15: nearly half, stronger and oranger; v0.12: paler). Soft mottling and
+  sun-faded patches within each wall, a slight tone per house. Houses that touch never share a
+  colour and rarely a colour family. **Shutters are the deep bottle green of Ligurian persiane**
+  (dark in shade), a few lighter or sun-faded, the odd brown or slate-blue pair. The hex codes
+  and the reasons are in PROGRESS.md (Stage 2 of the v0.16–v0.21 run).
 - **Walls**: rough stone ground floors (the cellar) or a rough render dado, plaster above,
   walls leaning in a touch. Plaster wears in layers (colour coat, pale undercoat, grey
   render, rubble stone), mostly low down and at corners; about one house in eight is badly

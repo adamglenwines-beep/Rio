@@ -19,7 +19,7 @@ once at the very end. After each stage: commit, merge to `main`, publish, screen
 | Stage | Version | State |
 |---|---|---|
 | 1. Sunlight | `v0.16 · Sunlight` | **done, published** |
-| 2. Palette and shutter colour | `v0.17` | to do |
+| 2. Palette and shutter colour | `v0.17 · Palette` | **done, published** |
 | 3. Small-scale shading | `v0.18` | to do |
 | 4. Windows, shutters and doors | `v0.19` | to do |
 | 5. Plaster weathering | `v0.20` | to do |
@@ -103,6 +103,82 @@ same weaker sun, so the whole picture is slightly less bright and less bleached 
 deeper). Nothing in terrain, water or sky code was edited.
 
 Pictures: `docs/progress/v0.16/` (`postcard_`, `overview_`, `facade_before_after.jpg`).
+
+### Stage 2 · Palette and shutter colour (v0.17) — done
+
+Data only (`data/palette.json`), plus two one-line changes in code (a little more colour
+difference from house to house in `growth.js`; paint in poor condition lightens a little less).
+
+**How the colours were chosen.** Three sources had to agree:
+- *The photos* (Riomaggiore harbour from the water, the row of shuttered facades): salmon and
+  rose pinks, pale yellows and creams, ochre, one strong orange-red and one weathered red per
+  row, the odd white, pale green or pale blue house. Chalky, not glossy. Shutters a deep
+  bottle green, nearly black in shade.
+- *The paint-overs* (clustered with a small script): sunlit walls are salmon/coral (#E68A63,
+  #E78C72), orange (#D97244, #F1874A), golden (#D8A353, #F2B25B), peach (#EBAC79, #F7BF85) and
+  pale cream-peach (#E8CFB5). They lean orange because they were painted over the game. Their
+  shutters are dark teal-greens: #163A31 to #356156, lit slats about #116354.
+- *The plaster texture* is greyscale and tinted by the house colour, so it agrees with anything;
+  it adds about ±10% brightness, which is why the paints are mid-tones rather than pale.
+So: fewer oranges, more pinks and creams, three cool colours at low weight, every pigment less
+saturated than v0.15, and mid-toned enough that the brightest sunlit walls stay under ~80%.
+
+**House colours** (hex, relative weight, family). With v0.16's light a wall in full sun shows
+about the colour written here.
+
+| Family | Colours |
+|---|---|
+| yellow | golden ochre `#dda546` (7) · deep ochre `#cb8f3b` (5) · straw `#e0bc73` (6) · pale lemon `#e5ce86` (5) |
+| orange | soft orange `#db8444` (6) · burnt orange `#c66a39` (5) · peach `#e09a6b` (6) |
+| red | Genoa red `#b14635` (4) · coral red `#cb5a41` (4) · terracotta `#aa5f44` (4) |
+| pink | salmon `#d88269` (8) · rose `#d58d81` (7) · dusty rose `#c37c71` (6) · shell pink `#e0ac97` (6) |
+| pale | cream `#e2cea3` (6) · limewash `#dfd4bd` (3) · stone render `#caba99` (4) |
+| cool | sage `#adb795` (3) · pale mint `#beceae` (2) · grey blue `#b0bab8` (1) |
+
+**Shutters** (per house): bottle greens `#2a5a3c` (3), `#23533a` (2.5), `#2e6347` (2), `#1f4d3b`
+(1.5), lighter `#3a6844` (1.2), sun-faded `#5b7a60` (0.7), weathered grey-green `#7b8a7c` (0.3),
+bare brown `#6b4a38` (0.3), slate blue `#39505a` (0.2). v0.15's were `#2f7656`–`#4a8a63`: lighter,
+brighter and all one hue, which is why they read as flat poster green. The hue sits between the
+photos' yellower green and the paint-overs' teal.
+**Doors:** dark green `#24513b`, timber `#7d5f41`, walnut `#4a3226`, weathered grey `#6e6558`,
+blue-grey `#3c5560`, oxblood `#6b2f28`. **Awning stripes** a little less bright.
+
+**In the demo town** (182 houses): yellow 45 → 40, orange 41 → 33, red 26 → 21, pink 38 → 37,
+pale 25 → 38, cool 7 → 13. Orange + yellow fell from 47% to 40% of houses. Touching houses still
+never share a colour (unit test, unchanged) and rarely a family.
+
+**Measured** (same methods as Stage 1; `docs/progress/v0.17/`):
+
+| | v0.15 | v0.16 | v0.17 | target |
+|---|---|---|---|---|
+| Postcard picture, like the paint-overs: shade / typical / brightest | 36.5 / 67.5 / 87.6 | 35.5 / 60.8 / 80.6 | **32.5 / 59.8 / 79.6** | 29–31 / 56–61 / 77–80 |
+| …mean saturation of warm pixels | 0.53 | 0.43 | **0.41** | 0.47–0.55 |
+| Wall pixels only, High Neutral midday | 38 / 68 / 88 | 38 / 61 / 81 | 36 / 62 / 79 | 37–46 / ~60 / ~76 |
+| …sunlit walls only (10th / 50th / 90th) | 60 / 73 / 88 | 53 / 62 / 79 | 49 / 65 / **76** | |
+| Low Neutral midday | | 38 / 60 / 81 | 35 / 61 / 78 | |
+| High Warm midday | 39 / 66 / 83 | 38 / 59 / 77 | 36 / 61 / 76 | |
+| High Neutral golden hour | | 36 / 58 / 75 | 33 / 60 / 74 | |
+
+**Decisions.**
+- *Saturation went down, but not as far as a first try.* The first version of this palette
+  (paler, greyer) measured 34 / 62.5 / 80 with saturation 0.38: lighter than the target and well
+  under the paint-overs' own saturation (0.47–0.55). Each warm colour was then deepened by about
+  4 points of lightness and given 5 points of saturation back. Every colour is still less
+  saturated than its v0.15 counterpart.
+- *Pale houses rose to one in five.* That is what the harbour photo shows, but it holds the
+  "brightest" figure near 79–80%. If that still reads as washed out on a real screen, lower the
+  weights of cream, limewash and shell pink in `data/palette.json`.
+- *Shade got about 3 points darker* in these figures (35.5 → 32.5) although no light changed:
+  the deeper reds and ochres are simply darker in shade. It is still inside the paint-overs'
+  range.
+- *Shutters stay mostly green.* The brief asked for less flat, less saturated: the paints are
+  darker and vary more between houses now; the flatness itself is the job of Stages 3–4 (slats,
+  thickness, shade).
+
+**Frame rate:** data only, so nothing to draw differently (same 122 draw calls, 0.61 M
+triangles as v0.16). Not re-profiled.
+
+Pictures: `docs/progress/v0.17/`.
 
 ### Decisions that hold for the whole run
 - **CC0 models (windows, shutters, doors, railings): looked, not used.** Poly Haven is reachable
