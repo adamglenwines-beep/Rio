@@ -1,1 +1,19 @@
-{}
+{
+  "_about": "Houses as the simulation sees them (v0.13). Each house gets a plan: a condition (0 = crumbling plaster and faded paint, 1 = fresh) and a use for each floor. The renderer only reads the plan; later gameplay can set floor uses and let a household's wealth move the condition.",
+  "condition": { "mean": 0.58, "spread": 0.2, "min": 0.05, "max": 1.0 },
+  "_condition": "drawn from a seeded bell curve: mostly in the middle, a few crumbling, a few freshly painted",
+  "groundUse": {
+    "harbour": [["shop", 4], ["workshop", 2], ["family", 3]],
+    "town": [["shop", 1], ["workshop", 1.5], ["family", 7]]
+  },
+  "archedEntry": 0.3,
+  "_archedEntry": "share of family and workshop ground floors entered through a round-headed arch",
+  "upperUse": [["family", 1]],
+  "cellarBelowGround": true,
+  "uses": {
+    "family": { "label": "Family floor" },
+    "shop": { "label": "Shop" },
+    "workshop": { "label": "Workshop" },
+    "cellar": { "label": "Cellar or store" }
+  }
+}

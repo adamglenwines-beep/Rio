@@ -9,7 +9,7 @@ All are **CC0** (public domain, no attribution required).
 | Layer key | Texture set | Used for | Source | Licence | Download @1024 / @512 |
 |---|---|---|---|---|---|
 | `plaster` | `plastered_wall` | house walls (tinted per house) | [Poly Haven](https://polyhaven.com/a/plastered_wall) | CC0 | 600 KB / 118 KB |
-| `plasterWorn` | `red_plaster_weathered` | weathered patches blended into walls | [Poly Haven](https://polyhaven.com/a/red_plaster_weathered) | CC0 | 369 KB / 59 KB |
+| `plasterWorn` | `damaged_plaster` (v0.13; was `red_plaster_weathered`) | where plaster has fallen away on worn houses; rough render dados | [Poly Haven](https://polyhaven.com/a/damaged_plaster) (Amal Kumar) | CC0 (checked on polyhaven.com, 27 Nov 2026) | 602 KB / 157 KB |
 | `stoneBase` | `stone_wall_04` | harbour stone bases, plinths, passage vaults | [Poly Haven](https://polyhaven.com/a/stone_wall_04) | CC0 | 848 KB / 194 KB |
 | `stoneDry` | `stone_wall` | dry-stone terrace walls | [Poly Haven](https://polyhaven.com/a/stone_wall) | CC0 | 701 KB / 203 KB |
 | `stoneDressed` | `Bricks111B` | dressed stone: arch frames, quay edges | [ambientCG](https://ambientcg.com/view?id=Bricks111B) | CC0 | 480 KB / 123 KB |
@@ -42,12 +42,10 @@ game by the large-scale second sample.
 
 ## Not used (and why)
 
-- `damaged_plaster` (in the private `Rio-reference` repo, `textures/damaged_plaster_2k/`).
-  Its file names follow Poly Haven's pattern, and everything on Poly Haven is CC0, but the
-  licence could **not be verified** in the v0.9–v0.11 run: the build sandbox could not reach
-  polyhaven.com. It stays in the private repo until someone confirms
-  https://polyhaven.com/a/damaged_plaster exists and says CC0. The worn-plaster look is
-  built from sets already in the library instead.
+- `red_plaster_weathered` (Poly Haven, CC0): the worn-plaster layer until v0.12, replaced by
+  `damaged_plaster` in v0.13; its source files stay in `assets/textures/red_plaster_weathered/`.
+- (`damaged_plaster` was here until v0.13, when its CC0 licence was confirmed on polyhaven.com:
+  the asset page exists, by Amal Kumar, and Poly Haven's licence page puts every asset under CC0.)
 - No 3D model packs (Kenney, Quaternius) yet: shapes are made by code. The sandbox cannot
   reach those sites either, so nothing new was downloaded in this run.
 

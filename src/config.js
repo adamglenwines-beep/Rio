@@ -175,7 +175,9 @@ export const CONFIG = {
     // Wall-mounted parts (windows, shutters, doors, signs, painted windows…) stand clear of the
     // wall: every face parallel to the wall is at least this far in front of it (or buried well
     // inside it), and the layers of a window are at least 2 cm apart, so they can't flicker.
-    wallVariation: 0.18,   // soft brightness variation across a wall (sun-faded, repainted bits)
+    // A house's condition (0 crumbling … 1 fresh, from its plan: src/houseplan.js, data/houses.json):
+    condition: { wearBelow: 0.35 },   // plaster starts to fall away only below this condition
+    wallVariation: 0.12,   // soft brightness variation across a wall (sun-faded, repainted bits)
     sunFade: 0.45,         // how strongly sun-faded patches pale and grey a wall's colour
     facadeGap: 0.03,
     // Baked ambient occlusion on the walls (darkening where less sky reaches):
@@ -187,7 +189,7 @@ export const CONFIG = {
       window: 0.32,            // a soft dark ring round each window frame and under its sill
     },
     streakChance: 0.6,     // share of windows with grime streaks running down from the sill
-    streakStrength: 0.3,   // how much those streaks darken the wall (0–1)
+    streakStrength: 0.2,   // how much those streaks darken the wall (0–1)
   },
 
   // ---- Terraces: level treads held by dry-stone walls (terraces.js) ----------------

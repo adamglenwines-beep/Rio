@@ -22,6 +22,7 @@ import { sub, norm, dist, lerp2, centroid, edgeNormal, offsetPoly, chamferPoly, 
 import { STYLES, registerStyled } from './style.js';
 import { LAYERS } from './materials.js';
 import { PALETTE, FACADES } from './data.js';
+import { planHouse, groundLook } from './houseplan.js';
 import { frameGeometry, leafGeometry, surroundGeometry, paintedOpeningMaterial, doorGeometries, balconyGeometries, chairGeometry, shopfrontGeometry, signGeometry, archGeometries, awningGeometry, awningMaterial, WINDOW_TYPES, GLASS_Z } from './facade.js';
 
 const FH = CONFIG.building.floorHeight;
@@ -1301,7 +1302,15 @@ export class BuildingRenderer {
     const ov = this.style.overhang;
 
     const rng = makeRng(b.seed);
+    // the house as the simulation sees it: its condition and what each floor is used for
+    const [pcx, pcz] = centroid(b.corners), phb = this.terrain.harbour;
+    const plan = planHouse(b, Math.max(1, Math.round((b.top - b.gMin) / FH)), Math.hypot(pcx - phb.x, pcz - phb.z) < FACADES.groundFloors.harbourRadius);
     const F = this._look(b, rng);
+    // condition: paint fades and greys, plaster crumbles only on houses in poor repair, fewer flowers
+    const cond = plan.condition, paint = b.facade.clone(), hslP = {};
+    paint.getHSL(hslP); paint.setHSL(hslP.h, hslP.s * (0.74 + 0.26 * cond), Math.min(0.92, hslP.l + (1 - cond) * 0.07));
+    F.wear = cond < CONFIG.building.condition.wearBelow ? (CONFIG.building.condition.wearBelow - cond) / CONFIG.building.condition.wearBelow * 0.85 : 0;
+    F.flowers *= 0.4 + cond; F.pots = F.pots && rng() < 0.45 + cond;
     const base = b.gMin - 1.2;
     const q = b.corners;
     const qTop = offsetPoly(q, -F.taper);                 // walls lean in a touch: old walls are never plumb
@@ -1376,21 +1385,27 @@ export class BuildingRenderer {
       return out;
     };
     const covered = this._coverTest(b);
-    // string courses: painted or moulded bands at the floor lines
-    if (F.deco !== 'none' && !b.arch) {
+    // trim (data/facades.json trim): bands at the floor lines on decorated houses and some plain ones, kept
+    // subtle (close to the wall colour), always above the highest ground so they never cross a door
+    const TR = FACADES.trim;
+    if (!b.arch && (F.deco !== 'none' || rng() < TR.bands.chance)) {
       gb.layer = LAYERS.plaster;
+      const bandCol = F.deco === 'none' ? paint.clone().offsetHSL(0, -0.04, 0.05) : F.trimSoft;
       let first = true;
       for (let k = Math.floor((b.top - b.gMin) / FH); k >= 1; k--) {
         const y = b.top - FH * k;
-        if (y < Math.max(b.gMin + 2.2, stoneTop + 0.3)) continue;
-        if (first || F.deco === 'full') gb.prism(offsetPoly(q, 0.045), y - 0.09, y + 0.09, F.trim, true, true);
+        if (y < Math.max(b.gMax + 2.9, stoneTop + 0.3)) continue;
+        if (first || F.deco !== 'band') gb.prism(offsetPoly(q, TR.bands.proud), y - TR.bands.height / 2, y + TR.bands.height / 2, bandCol, true, true);
         first = false;
       }
     }
+    // the cornice under the eaves: two steps, the upper standing further out, so it casts a shadow line
     const corniceCol = rng() < 0.6 ? cream : b.facade.clone().offsetHSL(0, -0.1, 0.12);
-    const cor = this.style.cornice;
+    const cor = this.style.cornice, cp = TR.cornice.proud * (0.8 + 0.4 * this.style.cornice);
     gb.layer = LAYERS.plaster;
-    this._walls(gb, offsetPoly(qTop, 0.11 + (cor - 0.32) * 0.4), b.top - cor, b.top, corniceCol, true);
+    this._walls(gb, offsetPoly(qTop, cp * 0.45), b.top - cor, b.top - cor * 0.45, corniceCol.clone().multiplyScalar(0.97), true);
+    this._walls(gb, offsetPoly(qTop, cp), b.top - cor * 0.45, b.top, corniceCol, true);
+    gb.face(offsetPoly(qTop, cp).map((p2) => [p2[0], b.top - cor * 0.45, p2[1]]), corniceCol.clone().multiplyScalar(0.85), [0, -1, 0]);
 
     // --- roof, chimneys, roof terrace ---
     const ridge = this._roof(gb, b, ov, F.pitch, F);
@@ -1447,7 +1462,8 @@ export class BuildingRenderer {
         const where = harbourHouse ? 'harbour' : 'town';
         let kind = 'door', awn = 0;
         if (front || harbourHouse) {                       // by the harbour, every wall onto a lane, the quay or the piazza
-          const v = b.kind === ZONE.COM && front ? GF.variants.find((x) => x.name === 'shop')
+          // the front wall shows the ground floor's use (from the house's plan); other walls by the harbour, a mix
+          const v = front ? GF.variants.find((x) => x.name === groundLook(plan) && x.where === where) || GF.variants.find((x) => x.name === groundLook(plan))
             : rng.weighted(GF.variants.filter((x) => x.where === where).map((x) => [x, x.weight]));
           kind = v.name; awn = v.awning;
         }
@@ -1604,7 +1620,7 @@ export class BuildingRenderer {
     gb.layer = LAYERS.plaster;
     const yb = b.arch ? b.arch.y : base;
     if (b.arch) gb.face(q.map((p2) => [p2[0], yb, p2[1]]), b.facade, [0, -1, 0]);
-    this._shell(gb, q, qTop, yb, b.top, b.facade, holes);
+    this._shell(gb, q, qTop, yb, b.top, paint, holes);
     this._bands(gb, q, bands, holes);
 
     // --- pack the detail instances as ready-made matrices ---

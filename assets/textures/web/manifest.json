@@ -30,10 +30,10 @@
   },
   {
    "key": "plasterWorn",
-   "set": "red_plaster_weathered",
+   "set": "damaged_plaster",
    "tone": "grey",
-   "scale": 3.6,
-   "use": "weathered patches blended into walls",
+   "scale": 3.0,
+   "use": "where plaster has fallen away on worn houses, and rough render dados (Poly Haven damaged_plaster, CC0; v0.13)",
    "mean": [
     0.696,
     0.696,
@@ -43,12 +43,12 @@
     "1024": {
      "albedo": "plasterWorn_albedo_1024.webp",
      "data": "plasterWorn_data_1024.webp",
-     "bytes": 378150
+     "bytes": 617460
     },
     "512": {
      "albedo": "plasterWorn_albedo_512.webp",
      "data": "plasterWorn_data_512.webp",
-     "bytes": 60624
+     "bytes": 161926
     }
    }
   },

@@ -276,6 +276,8 @@ const WEATHER_GLSL = `
         float dCorner = vWall.x >= 0.0 ? min(vWall.x, vWall.y - vWall.x) : 9.0;
         // gentle colour variation across a facade (sun-faded, repainted bits)
         c *= 1.0 + (mFbm(q * 0.11 + 3.7 + vMRand * 5.0) - 0.5) * ${f1(CONFIG.building.wallVariation)} * uWeather;
+        c *= 1.0 + (mFbm(q * 1.4 + vMRand * 9.0) - 0.5) * 0.05 * uWeather;        // gentle mottling of the limewash
+        c *= 0.97 + 0.06 * vMRand;                                                   // each house its own tone
         // sun-faded patches: paler and a little greyer, a few metres across
         float fadeP = smoothstep(0.42, 0.78, mFbm(q * 0.27 + 9.1 + vMRand * 3.0)) * ${f1(CONFIG.building.sunFade)} * uWeather;
         c = mix(c, mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 0.7) * 1.1, fadeP);
@@ -289,11 +291,12 @@ const WEATHER_GLSL = `
         float low = 1.0 - smoothstep(0.0, 0.5 + 2.6 * amt, h);
         float corner = 1.0 - smoothstep(0.0, 0.2 + 0.9 * amt, dCorner);
         float w = ((n1 - 0.5) * 1.1 + (n2 - 0.5) * 0.55 + (n3 - 0.5) * 0.12 + low * 0.42 + corner * (0.1 + 0.3 * n1) * step(0.12, amt) + amt * 0.5 - 0.64) * uWeather;
+        w = amt > 0.02 ? w : -1.0;                                                  // houses in fair repair keep their plaster (v0.13)
         if (w > 0.0) {
           MSample wr = mSample(uv * 0.9 + 0.31, WORN_LAYER);
           vec3 under = mix(c, vec3(0.80, 0.76, 0.66), 0.55) * (0.92 + 0.16 * n3);   // old limewash / undercoat
-          vec3 render = mTint(vec3(0.40, 0.38, 0.34), wr.col, WORN_LAYER);   // grey-beige base render
-          float e1 = smoothstep(0.016, 0.028, w);
+          vec3 render = mTint(vec3(0.56, 0.52, 0.46), wr.col, WORN_LAYER);   // warm grey-beige base render
+          float e1 = smoothstep(0.09, 0.13, w);                            // (mostly the pale undercoat shows; render only deeper in)
           vec3 cc = mix(under, render, e1);
           vec3 tnn = mix(s.tn, wr.tn, e1);
           float e2 = smoothstep(0.2, 0.22, w);
@@ -303,7 +306,7 @@ const WEATHER_GLSL = `
             tnn = mix(tnn, st.tn, e2);
             s.rough = mix(s.rough, st.rough, e2);
           }
-          cc *= 1.0 - 0.28 * (1.0 - smoothstep(0.0, 0.035, abs(w - 0.205)));   // the broken edge casts a thin shadow
+          cc *= 1.0 - 0.12 * (1.0 - smoothstep(0.0, 0.03, abs(w - 0.205)));   // the broken edge casts a thin shadow
           float e0 = smoothstep(0.0, 0.012, w);                          // a crisp, jagged edge
           c = mix(c, cc, e0);
           s.tn = normalize(mix(s.tn, tnn, e0));
@@ -312,7 +315,7 @@ const WEATHER_GLSL = `
         float dampTop = 0.9 + 0.7 * mFbm(vec2(q.x * 0.6, vMRand * 9.0));
         float damp = (1.0 - smoothstep(dampTop - 0.5, dampTop, h)) * uWeather;
         vec3 dampCol = mix(vec3(dot(c, vec3(0.3, 0.55, 0.15))), c, 0.45) * vec3(0.72, 0.74, 0.68);
-        c = mix(c, dampCol, damp * 0.85);
+        c = mix(c, dampCol, damp * 0.55);
         // faint vertical grime streaks everywhere
         float streak = mNoise(vec2(q.x * 3.2, q.y * 0.18 + vMRand * 31.0));
         c *= 1.0 - 0.07 * uWeather * smoothstep(0.55, 0.9, streak);
