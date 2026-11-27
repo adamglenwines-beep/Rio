@@ -13,8 +13,8 @@ live link, carry straight on. Dev branch: `claude/hopeful-knuth-kp9ia6`.
 |---|---|---|
 | Step 0: flashing when the camera moves | (in v0.9) | done |
 | Phase B: terrain and vegetation | `v0.9 · Terrain` | done, published |
-| Phase C: facades, town shape and clutter | `v0.10 · Facades` | **next** |
-| Phase D: sky and water | `v0.11 · Sea and sky` | to do |
+| Phase C: facades, town shape and clutter | `v0.10 · Facades` | done, published |
+| Phase D: sky and water | `v0.11 · Sea and sky` | **next** |
 
 Not in this run: Phases E to I (landmarks, life, camera and cutaway, foundations, gameplay).
 
@@ -72,9 +72,30 @@ What was found:
 - Old vertex-colour ground (the source of the blurry green patches) is gone.
 - Comparisons: `docs/progress/phase-b/` (and its README: what still differs, what got worse).
 
+## Phase C — facades, town shape and clutter (done, `v0.10 · Facades`)
+
+- `src/buildings.js`: each house draws a "look" from its seed (`_look`): wear, trim,
+  ground floor, roof pitch, shutter habits. New instanced parts (surround, pediment,
+  painted window, four shutter states, two balcony kinds, door frame and leaf, bars, pots,
+  plants, cloth, parasols, flower boxes), each with its own draw distance.
+- Wall shader (`materials.js`, `WEATHER_GLSL`): layered plaster loss using a per-vertex
+  wall coordinate (`aWall`: metres along the wall, wall length, wear + flags), painted
+  quoins.
+- `src/growth.js`: facade colour chosen after a house is on the map so touching houses
+  never match (`neighboursOf`, `_pickColour`); roof kind stored (`roofKind`).
+- `src/infill.js`: fishing and farming quarters (`quarterAt`), boats hauled up, nets,
+  racks, crates, barrels, stakes, baskets, café on the piazza; the ground around the town
+  is bare earth (`terrain.setTownMask`).
+- Demo: four more flights of steps off the main street.
+- Not done from the Phase C list: windows are still proud of the wall rather than recessed
+  into it; no lamps, house numbers or awnings beyond shops; fake windows and the cat are
+  drawn by a small shader, not hand art; the lane layout is otherwise as before (the
+  frontage system already kept fronts on the lane edge and houses off the paths).
+- Comparisons: `docs/progress/phase-c/` (and its README).
+
 ## Tests
 
-`npm run test:unit` (38 tests, ~4 s) and `npm run test:browser` (19 checks, ~6 min in the
+`npm run test:unit` (46 tests, ~8 s) and `npm run test:browser` (22 checks, ~8 min in the
 software renderer). `tests/browser/baseline.json` holds software-renderer frame times per
 preset (2× tolerance). Re-create with `npm run test:browser -- --update-baseline`.
 
@@ -95,6 +116,13 @@ preset (2× tolerance). Re-create with `npm run test:browser -- --update-baselin
   contrast between beds kept moderate so slopes don't look like zebra stripes.
 - **Terraces only where farmed**: the demo has six small areas; there is no paint tool for
   them yet (gameplay comes later) but the API is ready.
+- **Palette**: kept more saturated than the real town (the design asks for colours that
+  read at a distance) but with less yellow than the targets: yellow-family houses are held
+  under about 40%.
+- **Roofs**: pale weathered slate rather than the dark slate of v0.8, because from above
+  the real towns are pale; pitch raised from nearly flat to about 13–23°.
+- **Plaster wear amount**: most houses sound, 3 in 10 worn, 1 in 8 badly; an earlier pass
+  with more wear made the town look derelict from the postcard view.
 - **Shadows redraw only on change**: bobbing boats therefore keep a still shadow (the
   movement is a few centimetres).
 - **Default style = Hand-painted**; WebP textures, texture arrays (from Phase A, unchanged).

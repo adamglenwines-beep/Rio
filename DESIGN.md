@@ -73,6 +73,34 @@ A **Manor Lords-style hybrid**:
 - **Postcard view** = from out on the water, looking up the cove (as in the art targets).
 - Vegetation is a **light first pass** (lumpy instanced bushes); a fuller pass comes later.
 
+## The look of the town (v0.10)
+
+- **Tower houses**: narrow fronts (3.5–6 m), each with its own leaning to be a storey or
+  two taller or shorter than its site suggests. A house beside two lanes gets a door on
+  each (front door low, back door on the higher lane: the *uservàn*).
+- **Colour**: a 13-colour palette between the real town (pale cream, pink, salmon) and the
+  targets (saturated gold and coral), a little cooler than the targets. Houses that touch
+  never share a colour and rarely a colour family. Shutters are dark green on almost every
+  house.
+- **Walls**: rough stone ground floors (the cellar) or a rough render dado, plaster above,
+  walls leaning in a touch. Plaster wears in layers (colour coat, pale undercoat, grey
+  render, rubble stone), mostly low down and at corners; about one house in eight is badly
+  worn.
+- **Painted trim**: string courses, window surrounds and cornice strips on some houses,
+  painted corner stones on a few, and now and then a window painted on a blank bay
+  (sometimes with a cat).
+- **Windows**: uneven rhythm, small top-floor windows on a third of houses; shutters shut,
+  shut with the lower panel pushed out, open, or half and half. Balconies (bars or solid),
+  flower boxes, washing lines, drainpipes, bougainvillea up some corners, pots by doors.
+- **Roofs**: low-pitched, mostly pale weathered slate with a terracotta or lime-mortar
+  ridge, about one in six terracotta; chimneys with slab caps or pots; roof terraces with
+  railings, pergolas, parasols and washing.
+- **Two quarters**: the fishing quarter by the harbour (boats hauled up, nets, crates,
+  floats) and the farming quarter higher up (barrels, vine stakes, baskets). Café tables
+  with parasols on the piazza.
+- **Detail by distance**: small things (pots, bars, washing, flower boxes) are not drawn
+  beyond a distance set per item and scaled by the quality setting.
+
 ## Resources and industry
 
 - **Stone** comes from a quarry. It's needed for the harbour, terraces and stone bases.

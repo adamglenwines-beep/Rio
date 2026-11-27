@@ -28,6 +28,7 @@ All are **CC0** (public domain, no attribution required).
 | `soil` | `Ground085` | terrace treads and garden soil (v0.9) | [ambientCG](https://ambientcg.com/view?id=Ground085) | CC0 | 968 KB / 230 KB |
 | `pebbles` | `ganges_river_pebbles` | pebble beach and shallow sea bed (v0.9) | [Poly Haven](https://polyhaven.com/a/ganges_river_pebbles) | CC0 | 671 KB / 204 KB |
 | `rockPale` | `rocks_ground_06` | boulders, rock shelves and skerries (v0.9) | [Poly Haven](https://polyhaven.com/a/rocks_ground_06) | CC0 | 895 KB / 209 KB |
+| `rubble` | `Bricks078` | rough stone ground floors, and the stone under worn plaster (v0.10) | [ambientCG](https://ambientcg.com/view?id=Bricks078) | CC0 | 624 KB / 167 KB |
 
 Medium and High load the 1024 px files; Low loads the 512 px files.
 

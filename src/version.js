@@ -2,4 +2,4 @@
 // version.js — the version label shown in the title pill (top left).
 // Bump it at the end of every round, so the live site shows which round it is.
 // ---------------------------------------------------------------------------
-export const VERSION = 'v0.9 · Terrain';
+export const VERSION = 'v0.10 · Facades';

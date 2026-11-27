@@ -84,7 +84,7 @@ The first load needs internet access, to fetch Three.js from the CDN.
 | `src/geom.js` | Small 2D polygon helpers |
 | `src/growth.js` | **The growth simulation** (placement, scoring, storeys) |
 | `src/infill.js` | Decorates leftover spaces: gardens, piazzette, rocks, pots, washing lines… |
-| `src/buildings.js` | Low-poly houses from footprint polygons: walls, roofs, stone bases, windows, shutters… |
+| `src/buildings.js` | Houses from footprint polygons: stone ground floors, worn plaster, slate roofs, windows and shutters, balconies, doors, painted trim, roof terraces |
 | `src/terraces.js` | Vine terraces: level treads and dry-stone walls that can be laid on any slope |
 | `src/scenery.js` | The wild hillside: scrub, pines, olives, agave, bougainvillea, boulders (with budgets and distance fade) |
 | `src/autoquality.js` | The patient watchdog behind the Auto quality setting |
