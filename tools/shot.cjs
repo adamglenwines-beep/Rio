@@ -26,6 +26,9 @@ const VIEWS = {
   shore: [[40, 6, 38], [28, 0, 12]],              // shoreline rocks and shallows
   far: [[150, 60, 190], [0, 20, -30]],            // whole coast from out at sea
   waterline: [[10, 2.2, 26], [-2, 3, 0]],         // low over the water toward the quay
+  v010: [[54, 34, 50], [-14, 12, -28]],           // about where Adam's v0.10 High screenshot was taken (art-target-v2: target-v2-5)
+  v010top: [[8, 96, 112], [-6, 10, -40]],         // about the view of game-v0.10-same-view.png (art-target-v2: target-v2-1…4)
+  single: [[22, 16, 22], [0, 11, -6]],            // close on harbour-front houses (single-building-target-vs-game)
 };
 
 function parseArgs() {

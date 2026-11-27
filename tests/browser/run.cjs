@@ -45,7 +45,7 @@ function check(name, ok, detail = '') {
         for (let i = 0; i < 60 && (game.infill.busy || i < 3); i++) game.renderFrame(0.05);
         const sc = game.scenery, out = { walls: game.terraces.walls.length, areas: game.terraces.areas.length, counts: {}, onTown: 0 };
         for (const q of ['low', 'medium', 'high']) { sc.setQuality(q); out.counts[q] = sc.kinds.blob.mesh.count; }
-        out.budget = CONFIG.flora.budget;
+        out.budget = CONFIG.flora.budget; out.trees = CONFIG.flora.trees; out.trunks = sc.shown.trunk;
         const m = new game.THREE.Matrix4(), mesh = sc.kinds.blob.mesh;
         for (let i = 0; i < sc.shown.blob; i += 3) {
           mesh.getMatrixAt(i, m);
@@ -56,8 +56,10 @@ function check(name, ok, detail = '') {
         return out;
       });
       check('demo lays terraces with walls', r.areas >= 3 && r.walls > 10, `${r.areas} areas, ${r.walls} walls`);
-      check('plant budget follows quality', r.counts.low <= r.budget.low && r.counts.medium <= r.budget.medium && r.counts.low < r.counts.high,
+      if (r.trees) check('plant budget follows quality', r.counts.low <= r.budget.low && r.counts.medium <= r.budget.medium && r.counts.low < r.counts.high,
         `low ${r.counts.low}, medium ${r.counts.medium}, high ${r.counts.high}`);
+      else check('trees and bushes are off (v0.12): no trunks, only wall bougainvillea', r.trunks === 0 && r.counts.high < 1500,
+        `${r.trunks} trunks, ${r.counts.high} plant lumps (bougainvillea on terrace walls)`);
       check('no bushes on lanes or in houses', r.onTown === 0, r.onTown + ' found');
     } catch (e) { check('landscape checks', false, e.message); }
 

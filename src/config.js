@@ -358,18 +358,19 @@ export const CONFIG = {
 // (v0.10–0.11 had a cooler, more saturated palette: Genoa red, orange, pale blue-grey.)
 // Two houses that touch never share a colour, and avoid sharing a family where they can.
 export const FACADE_COLOURS = [
-  ['#e2bc78', 10, 'yellow'],   // ochre, sun-faded
-  ['#ead39b', 9, 'yellow'],    // lemon plaster
-  ['#eadcbe', 7, 'pale'],      // warm cream
-  ['#f0e6d2', 3, 'pale'],      // limewash, off-white
-  ['#eeb68e', 11, 'orange'],   // peach
-  ['#d99c66', 6, 'orange'],    // burnt orange, faded
-  ['#cd8b6a', 8, 'orange'],    // terracotta, faded
-  ['#e09e8a', 11, 'pink'],     // salmon
-  ['#d6a59a', 9, 'pink'],      // dusty rose
-  ['#e7b3a6', 5, 'pink'],      // pale rose
-  ['#b8bea6', 4, 'cool'],      // sage
-  ['#c9bfaa', 2, 'cool'],      // unpainted render (limestone)
+  ['#e2bc78', 12, 'yellow'],   // ochre, sun-faded (the colour calibrated against the art target)
+  ['#e3b062', 6, 'yellow'],    // golden ochre
+  ['#e4c886', 8, 'yellow'],    // lemon plaster
+  ['#e2d1b0', 5, 'pale'],      // warm cream
+  ['#ebe0cb', 2, 'pale'],      // limewash, off-white
+  ['#e8a77a', 10, 'orange'],   // peach
+  ['#d8914f', 9, 'orange'],    // burnt orange, faded
+  ['#c97b58', 8, 'orange'],    // terracotta, faded
+  ['#dc8d78', 10, 'pink'],     // salmon
+  ['#cf9488', 7, 'pink'],      // dusty rose
+  ['#e2a497', 3, 'pink'],      // pale rose
+  ['#adb596', 3, 'cool'],      // sage
+  ['#c4b8a0', 2, 'cool'],      // unpainted render (limestone)
 ];
 // Shutters: green on nine windows in ten, one colour per house. v0.12: a richer, lighter
 // green (v0.11's were nearly black).
