@@ -106,6 +106,64 @@ Numbers: 175 houses (v0.13: 219), mean footprint 30 m² (v0.13: 23 m²), 545 sto
   passage);
 - no opening or wall-mounted part on a party wall below the neighbour's top.
 
+### Performance
+
+Interleaved runs in this sandbox's software renderer (`tools/profile.cjs`, postcard view,
+1280×720, Golden hour): v0.13, v0.14, v0.13, v0.14. Single runs vary by about ±10–20%.
+
+| Preset | v0.13 | v0.14 | change |
+|---|---|---|---|
+| Low | 2.85 / 2.81 s, mean 2.83 s | 3.13 / 2.71 s, mean 2.92 s | +3% (within the noise) |
+| Medium | 4.44 / 4.09 s, mean 4.26 s | 4.50 / 4.01 s, mean 4.25 s | 0% |
+| High | 4.84 / 4.38 s, mean 4.61 s | 4.81 / 4.41 s, mean 4.61 s | 0% |
+
+Draw calls 142 → 122. Triangles at the postcard view: Low/Medium 0.58 M → 0.61 M; High 0.58 M →
+0.90 M (more houses inside High's near-detail range now the blocks are full). Party walls skip
+their hidden faces, which pays for most of the extra walls of a denser town. The browser test
+suite's frame-time checks: Low ×1.04, Medium ×1.04, High ×0.80 of baseline. **So v0.14 runs at
+about the same speed as v0.13.** Raw runs: `docs/progress/v0.14/profile/`.
+
+### Comparison sheets
+In Rio-reference `progress/`: `v0.14_overhead_before_after.jpg` (the shore–piazza blocks from
+above, as in Adam's phone screenshot), `v0.14_postcard_before_after.jpg`,
+`v0.14_target-v2-1_vs_game.jpg`, `v0.14_block_plan.jpg` (top-down plans). Game-only copies in
+`docs/progress/v0.14/`.
+
+### What still differs from target-v2-1, what got worse, what next
+Still differs:
+- The target's town climbs the hill in long stepped rows along the stairs; ours is still a
+  compact rectangle round the main street, because the demo's zoning and lanes stop there.
+- The target has a few big landmark buildings and visible lanes/stairs cutting through; our
+  lanes are now narrow slots between eaves, nearly hidden from above.
+- Roofs: big wedge and corner lots get one broad roof each; the target's roofs are smaller and
+  more broken up. Some wedge houses come to sharp points (down to ~24°) that real towns avoid.
+- Rear houses and courtyards hardly appear (the demo's blocks are 14–20 m deep, so front houses
+  reach the middle).
+- Terraces, gardens and the shoreline detail of the target are untouched (out of scope).
+
+Got worse:
+- **Archways over stairs, covered passages over lanes and pointed flatiron buildings are no
+  longer made** (the template growth made them; the block plan doesn't yet).
+- Fewer, bigger houses: 175 instead of 219 (mean footprint 30 m² vs 23 m²), so fewer storeys in
+  all (545 vs 563).
+- Redoing the plan costs ~0.3–0.4 s, once, at the next growth step after a path or zone change
+  (a small hitch while painting zones).
+- Some houses now reach a little further onto the beach edge by the harbour.
+
+Next I'd tune: bring archways and flatirons back as lot types in the plan; split very large
+wedge lots in two (smaller roofs, more houses); cap the sharpest wedge angles; make the demo's
+zoning run further up the hill so the town climbs like the target.
+
+### Decisions (v0.14)
+- Lots are cut from frontage lines in order of lane rank (the quay first), so a corner house
+  fronts the busier lane: same rule as before.
+- Fronts reach the middle of the block rather than stopping at a fixed depth and leaving a
+  courtyard: the brief asked for nearly solid blocks, and the demo's blocks are shallow.
+- The old template growth is kept behind `CONFIG.sim.plannedLots = false` for comparison and
+  for a quick rollback.
+- Coverage targets are minimums for harbour and town; the edge band's 40% is a guide, not
+  enforced (it came out at 62%).
+
 ## Earlier run: v0.13 · Facades (facade detail and colour)
 
 Adam's buildings brief, narrowed by his addendum after reviewing v0.12: building shapes and massing

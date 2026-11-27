@@ -1,0 +1,122 @@
+[
+ {
+  "preset": "low",
+  "time": "golden",
+  "pixelRatio": 1,
+  "frame": 2808,
+  "stages": {
+   "reflection": 0.2,
+   "scene (direct)": 2949.9,
+   "shadow map redraw (only when dirty)": 96.8
+  },
+  "plainScene": 2857.3,
+  "info": {
+   "calls": 142,
+   "triangles": 580559
+  },
+  "partCost": {
+   "wild plants (scenery)": -130,
+   "houses": 1266.6,
+   "infill": -26.6,
+   "terraces": -22.7,
+   "terrain": 925.8,
+   "far terrain": -13.3,
+   "sea": -14.6,
+   "paths": 108.6,
+   "fish": 57.3
+  },
+  "partTriangles": {
+   "wild plants (scenery)": 43170,
+   "houses": 303459,
+   "infill": 1092,
+   "terraces": 6354,
+   "terrain": 115200,
+   "far terrain": 50688,
+   "sea": 48130,
+   "paths": 11208,
+   "fish": 9
+  }
+ },
+ {
+  "preset": "medium",
+  "time": "golden",
+  "pixelRatio": 1,
+  "frame": 4084.8,
+  "stages": {
+   "reflection": 131.4,
+   "RenderPass": 3785.3,
+   "UnrealBloomPass": 159.8,
+   "ShaderPass": 127.4,
+   "OutputPass": 26.7,
+   "shadow map redraw (only when dirty)": 113
+  },
+  "plainScene": 3570.8,
+  "info": {
+   "calls": 142,
+   "triangles": 580991
+  },
+  "partCost": {
+   "wild plants (scenery)": 88.8,
+   "houses": 1550.9,
+   "infill": 61.3,
+   "terraces": 16.2,
+   "terrain": 1368.1,
+   "far terrain": 243.4,
+   "sea": 373.7,
+   "paths": 114.9,
+   "fish": -95.5
+  },
+  "partTriangles": {
+   "wild plants (scenery)": 43170,
+   "houses": 303459,
+   "infill": 1092,
+   "terraces": 6354,
+   "terrain": 115200,
+   "far terrain": 50688,
+   "sea": 48130,
+   "paths": 11208,
+   "fish": 9
+  }
+ },
+ {
+  "preset": "high",
+  "time": "golden",
+  "pixelRatio": 1,
+  "frame": 4378.1,
+  "stages": {
+   "reflection": 247.4,
+   "RenderPass": 3714.1,
+   "UnrealBloomPass": 185.5,
+   "ShaderPass": 130.7,
+   "OutputPass": 27.5,
+   "shadow map redraw (only when dirty)": 249.6
+  },
+  "plainScene": 3498.9,
+  "info": {
+   "calls": 142,
+   "triangles": 581423
+  },
+  "partCost": {
+   "wild plants (scenery)": 208.1,
+   "houses": 1517.1,
+   "infill": 140.3,
+   "terraces": 100.1,
+   "terrain": 1368.2,
+   "far terrain": 196.8,
+   "sea": 223.4,
+   "paths": 168.5,
+   "fish": -39.6
+  },
+  "partTriangles": {
+   "wild plants (scenery)": 43170,
+   "houses": 303459,
+   "infill": 1092,
+   "terraces": 6354,
+   "terrain": 115200,
+   "far terrain": 50688,
+   "sea": 48130,
+   "paths": 11208,
+   "fish": 9
+  }
+ }
+]
