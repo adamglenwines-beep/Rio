@@ -446,12 +446,33 @@ export class Graphics {
     const cam = this.camera;
     this.cameraMoving = this._camPos.distanceToSquared(cam.position) > 1e-8 || Math.abs(this._camQuat.dot(cam.quaternion)) < 1 - 1e-9;
     this._camPos.copy(cam.position); this._camQuat.copy(cam.quaternion);
+    this._fitNearPlane();
     this.sky.position.copy(cam.position);
     this.skyU.uTime.value += dt;
     this._shadowTimer -= dt;
     if (this._shadowTimer <= 0) { this._shadowTimer = 0.5; this._fitShadow(); }
     this._shadowsIfDirty();
     this._autoQuality(rawDt);
+  }
+
+  /**
+   * Depth precision: a depth buffer resolves distance far more finely near the camera
+   * than far away, and how finely depends on the near plane. A near plane of 0.5 m left
+   * only millimetres to tell a window from its wall 150 m away, so they flickered. The
+   * near plane now moves out with the distance to the pivot (the point the camera looks
+   * at), but never so far that it could slice into the ground or a roof just below.
+   */
+  _fitNearPlane() {
+    const cam = this.camera, N = CONFIG.graphics.nearPlane, g = this.game;
+    const rig = g.rig, tgt = rig && rig.controls ? rig.controls.target : null;
+    const d = tgt ? cam.position.distanceTo(tgt) : 10;
+    let below = g.terrain ? g.terrain.surfaceAt(cam.position.x, cam.position.z) : 0;
+    if (g.growth) {
+      const o = g.growth.occAt(cam.position.x, cam.position.z), b = o >= 0 ? g.growth.buildings[o] : null;
+      if (b) below = Math.max(below, b.roofTop ?? b.top + 2);
+    }
+    const near = THREE.MathUtils.clamp(Math.min(d * N.perMetre, (cam.position.y - below) * N.clearance), N.min, N.max);
+    if (Math.abs(near - cam.near) > 0.01 * cam.near) { cam.near = near; cam.updateProjectionMatrix(); }
   }
 
   /**

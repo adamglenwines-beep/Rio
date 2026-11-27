@@ -576,7 +576,7 @@ export class Growth {
     for (const id of this.live) {
       const o = this.buildings[id];
       if (Math.abs(o.x - c.x) > 16 || Math.abs(o.z - c.z) > 16) continue;
-      if (convexOverlap(q, o.corners) > 0.12) return (c.why = 'overlap', false);
+      if (convexOverlap(q, o.corners) > B.maxOverlap) return (c.why = 'overlap', false);   // houses may touch, never intersect
     }
     c.arch = null;
     if (c.type === 'arch') {

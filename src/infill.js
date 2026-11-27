@@ -310,6 +310,7 @@ export class Infill {
   }
 
   _shrub(x, z, rng) {
+    if (!CONFIG.flora.trees) return;   // trees and bushes are off for now (see config)
     const y = this._h(x, z), s = rng.range(0.7, 1.2);
     this._put('blob', x, y + 0.3 * s, z, 0.55 * s, 0.45 * s, 0.5 * s, rng.pick(COL.leaf), rng() * 6);
     if (rng() < 0.4) for (let k = 0; k < 3; k++) this._put('blob', x + rng.range(-0.35, 0.35) * s, y + rng.range(0.4, 0.7) * s, z + rng.range(-0.35, 0.35) * s, 0.08, 0.08, 0.08, rng.pick(COL.flowers));
@@ -352,7 +353,7 @@ export class Infill {
     const lo = Math.min(ha, hb, this._h(x, z)), hi = Math.max(ha, hb, this._h(x, z));
     this._put('box', x, lo - 0.3, z, len, hi - lo + 0.95, 0.42, rng.pick(COL.stone), yaw);
     this._put('box', x, hi + 0.62, z, len + 0.05, 0.08, 0.48, rng.pick(COL.stone).clone().multiplyScalar(1.08), yaw);
-    if (rng() < 0.5) this._put('blob', x + c * len * 0.3, hi + 0.7, z - s * len * 0.3, 0.3, 0.18, 0.25, rng.pick(COL.lightLeaf));
+    if (rng() < 0.5 && CONFIG.flora.trees) this._put('blob', x + c * len * 0.3, hi + 0.7, z - s * len * 0.3, 0.3, 0.18, 0.25, rng.pick(COL.lightLeaf));
   }
 
   _steps(x, z, rng) {
@@ -366,6 +367,7 @@ export class Infill {
   }
 
   _lemon(x, z, rng, fig = false) {
+    if (!CONFIG.flora.trees) return;
     const y = this._h(x, z), s = rng.range(0.85, 1.2);
     this._put('cyl', x, y - 0.1, z, 0.1 * s, 1.3 * s, 0.1 * s, COL.trunk);
     if (fig) {
@@ -380,6 +382,7 @@ export class Infill {
   }
 
   _pine(x, z, rng) {
+    if (!CONFIG.flora.trees) return;
     const y = this._h(x, z), s = rng.range(0.9, 1.2);
     this._put('cyl', x, y - 0.2, z, 0.22 * s, 6 * s, 0.22 * s, COL.trunk, 0, rng.range(-0.08, 0.08));
     this._put('blob', x, y + 6 * s, z, 3.2 * s, 1.1 * s, 3.0 * s, COL.pine, rng() * 6);
@@ -411,6 +414,7 @@ export class Infill {
   }
 
   _wild(x, z, rng) {
+    if (!CONFIG.flora.trees) return;
     const y = this._h(x, z);
     this._put('blob', x, y + 0.12, z, 0.35, 0.25, 0.35, rng.pick(COL.lightLeaf), rng() * 6);
     if (rng() < 0.5) this._put('blob', x, y + 0.3, z, 0.08, 0.08, 0.08, rng.pick(COL.flowers));

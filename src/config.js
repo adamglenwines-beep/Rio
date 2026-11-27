@@ -168,6 +168,12 @@ export const CONFIG = {
     },
     roofOverhang: 0.2,     // eaves overhang (m); kept below path.setback so eaves never reach the steps
     minGround: 0.5,        // lowest ground (m above sea) a house may stand on
+    maxOverlap: 0.005,     // two houses may touch but never push into each other by more than this (m);
+                           // v0.11 allowed 0.12, and walls crossing at a slight angle flickered
+    // Wall-mounted parts (windows, shutters, doors, signs, painted windows…) stand clear of the
+    // wall: every face parallel to the wall is at least this far in front of it (or buried well
+    // inside it), and the layers of a window are at least 2 cm apart, so they can't flicker.
+    facadeGap: 0.03,
     streakChance: 0.6,     // share of windows with grime streaks running down from the sill
     streakStrength: 0.3,   // how much those streaks darken the wall (0–1)
   },
@@ -198,6 +204,12 @@ export const CONFIG = {
 
   // ---- Wild vegetation and boulders (scenery.js) ----------------------------------
   flora: {
+    // Trees and bushes are switched OFF for now (v0.12): the hillside scrub, the soft clumps
+    // on the far hills, umbrella pines, olives, flowering cushions on rock, and in the town's
+    // gardens the lemon, fig and pine trees, shrubs and green tufts. They come back properly in
+    // a later vegetation pass; set this to true to see the old ones again. Still drawn either
+    // way: terrace vines, agave and prickly pear, bougainvillea on walls, pots and flower boxes.
+    trees: false,
     spacing: 2.0,          // one candidate bush per this many metres each way
     density: 1.15,         // chance of a bush = scrub cover × this
     bushSize: [0.7, 2.1],  // bush radius (m)
@@ -284,6 +296,10 @@ export const CONFIG = {
       goodSeconds: 30,       // smooth seconds in a row before stepping back up
       dwellSeconds: 10,      // after any change, wait this long before judging again
     },
+    // The camera's near plane moves out as the camera pulls back (depth precision: walls and
+    // the parts on them stay crisp far away). near = distance to the pivot × perMetre, kept
+    // within [min, max] and under `clearance` × the gap between the camera and what is below it.
+    nearPlane: { min: 0.5, perMetre: 0.04, max: 6, clearance: 0.6 },
     autoMinResolution: 0.6,  // on Low, Auto lowers the resolution no further than this
     bloomStrength: 0.22,     // keep it subtle
     bloomRadius: 0.5,

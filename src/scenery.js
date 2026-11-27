@@ -173,8 +173,8 @@ export class Scenery {
       list.push({ x, y, z, sx, sy, sz, col, yaw, rank, fixed, tilt, tilt2 });
 
     // --- macchia scrub inside the playable square ---
-    const S = F.spacing, half = t.half;
-    for (let gz = -half + 2; gz < half - 2; gz += S) for (let gx = -half + 2; gx < half - 2; gx += S) {
+    const S = F.spacing, half = t.half, trees = F.trees;   // trees and bushes are off for now (see config)
+    if (trees) for (let gz = -half + 2; gz < half - 2; gz += S) for (let gx = -half + 2; gx < half - 2; gx += S) {
       const x = gx + (rng() - 0.5) * S * 0.95, z = gz + (rng() - 0.5) * S * 0.95;
       const cover = t.coverAt(x, z), r = rng(), r2 = rng(), r3 = rng(), r4 = rng();
       if (r > cover * F.density) continue;
@@ -193,7 +193,7 @@ export class Scenery {
 
     // --- soft clumps on the distant hills ---
     const R = F.farReach, FS = F.farSpacing;
-    for (let gz = -R; gz < R; gz += FS) for (let gx = -R; gx < R; gx += FS) {
+    if (trees) for (let gz = -R; gz < R; gz += FS) for (let gx = -R; gx < R; gx += FS) {
       const x = gx + (rng() - 0.5) * FS, z = gz + (rng() - 0.5) * FS;
       const r = rng(), r2 = rng(), r3 = rng();
       if (Math.abs(x) < half + 1 && Math.abs(z) < half + 1) continue;
@@ -218,7 +218,7 @@ export class Scenery {
       }
     };
     let clumps = 0;
-    for (let k = 0; k < 3000 && clumps < F.pineClumps; k++) {
+    for (let k = 0; trees && k < 3000 && clumps < F.pineClumps; k++) {
       const x = rng.range(-half + 8, half - 8), z = rng.range(-half + 8, half - 30);
       const y = t.heightAt(x, z);
       if (y < F.pineMinHeight || t.slopeAt(x, z, 3) > 36) continue;
@@ -234,7 +234,7 @@ export class Scenery {
       clumps++;
     }
     // a few on the near skyline outside the square, where they show against the sky
-    for (let k = 0; k < 4000 && clumps < F.pineClumps + F.farPineClumps; k++) {
+    for (let k = 0; trees && k < 4000 && clumps < F.pineClumps + F.farPineClumps; k++) {
       const x = rng.range(-320, 320), z = rng.range(-340, 60);
       if (Math.abs(x) < half && Math.abs(z) < half) continue;
       const y = t.outerHeightFn(x, z);
@@ -254,7 +254,7 @@ export class Scenery {
       put(blob, x, y + 2.1 * s, z, 1.9 * s, 1.35 * s, 1.9 * s, col, yaw, 97, true);
       put(blob, x + Math.cos(yaw) * 0.9 * s, y + 1.8 * s, z + Math.sin(yaw) * 0.9 * s, 1.3 * s, 1.0 * s, 1.3 * s, col.clone().multiplyScalar(0.92), yaw + 1, 96, true);
     };
-    if (T) for (const A of T.areas) {
+    if (T && trees) for (const A of T.areas) {
       if (A.crop !== 'olive') continue;
       for (let k = 0; k < A.r * A.r * 0.09; k++) {
         const a = rng() * 6.28, d = Math.sqrt(rng()) * A.r, x = A.x + Math.cos(a) * d, z = A.z + Math.sin(a) * d;
@@ -274,7 +274,7 @@ export class Scenery {
       if (r < 0.4) {
         const s = rng.range(0.8, 1.5);
         put(agave, x, y - 0.05, z, s, s, s, pick(agaveC).clone().multiplyScalar(0.9 + 0.2 * r2), r2 * 6.28, 60 + s, true, (rng() - 0.5) * 0.3, (rng() - 0.5) * 0.3);
-      } else {
+      } else if (trees) {
         const s = rng.range(0.35, 0.8), col = pick(flower).clone();
         put(blob, x, y - s * 0.1, z, s * 1.3, s * 0.7, s * 1.3, col, r2 * 6.28, 40 + s, true);
         if (r2 < 0.6) put(blob, x + 0.5, t.heightAt(x + 0.5, z + 0.3) - s * 0.1, z + 0.3, s * 0.9, s * 0.6, s * 0.9, pick(leaf).clone(), r * 6.28, 39, true);
