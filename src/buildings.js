@@ -123,14 +123,14 @@ class GeoBuilder {
     if (bottom) this.face(poly.map((p) => [p[0], y0, p[1]]), c, [0, -1, 0]);
   }
 
-  /** Typed arrays for this builder's triangles, plus per-vertex occlusion params (see step 4). */
   /**
    * Typed arrays for this builder's triangles, plus baked occlusion params per
-   * vertex: aoParams = (ground height here, how enclosed it is 0..1, unused).
-   * The walls shader darkens walls near the ground, more so in narrow lanes.
+   * vertex: aoParams = (ground height here, eaves height in decimetres + how
+   * enclosed it is 0..0.9, texture layer + house random). The walls shader
+   * darkens walls near the ground (more so in narrow lanes) and under the eaves.
    * `probe(x, z, nx, nz)` returns the enclosure for a wall facing (nx, nz).
    */
-  arrays(probe, terrain, rand = 0) {
+  arrays(probe, terrain, rand = 0, eaves = 0) {
     const n = this.pos.length, P = this.pos, N = this.nor;
     const ao = new Float32Array(n);
     const memo = new Map();
@@ -144,7 +144,7 @@ class GeoBuilder {
         v = [g, enc];
         memo.set(key, v);
       }
-      ao[i] = v[0]; ao[i + 1] = v[1]; ao[i + 2] = this.lay[i / 3] + 1 + rand * 0.9;   // layer + house random (materials.js)
+      ao[i] = v[0]; ao[i + 1] = Math.floor(Math.max(eaves, 0) * 10) + v[1] * 0.9; ao[i + 2] = this.lay[i / 3] + 1 + rand * 0.9;   // layer + house random (materials.js)
     }
     return { pos: new Float32Array(P), nor: new Float32Array(N), col: new Float32Array(this.col), ao, wall: new Float32Array(this.wall) };
   }
@@ -202,18 +202,28 @@ export class BuildingRenderer {
     const lambert = (opts = {}) => new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0, flatShading: true, ...opts });
     const vc = lambert({ vertexColors: true });
     this.massMat = lambert({ vertexColors: true });
-    // Baked ambient occlusion: walls darken toward the ground, more in narrow lanes.
-    // (Cheap: two numbers per vertex, computed once when a house is built.)
+    // Baked ambient occlusion (stable, and on every quality level): walls darken toward
+    // the ground, more in narrow lanes, and in a band under the eaves. Worked out per
+    // pixel from three numbers per vertex, computed once when a house is built.
+    const AO = CONFIG.building.ao;
     this.aoUniforms = { uAO: { value: 1 } };
     this.massMat.onBeforeCompile = (sh) => {
       sh.uniforms.uAO = this.aoUniforms.uAO;
-      sh.vertexShader = 'attribute vec3 aoParams;\nvarying float vAO;\nuniform float uAO;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-        float hAbove = max((modelMatrix * vec4(position, 1.0)).y - aoParams.x, 0.0);
-        float reach = mix(1.8, 7.0, aoParams.y);            // narrow lanes stay dark higher up
-        float k = 1.0 - smoothstep(0.0, reach, hAbove);
-        vAO = 1.0 - uAO * k * mix(0.22, 0.5, aoParams.y);`);
-      sh.fragmentShader = 'varying float vAO;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-        diffuseColor.rgb *= vAO;`);
+      sh.vertexShader = 'attribute vec3 aoParams;\nvarying vec4 vAOp;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        {
+          float wy = (modelMatrix * vec4(position, 1.0)).y;
+          // height above the ground, enclosure, height below the eaves, wall (1) or roof (0)
+          vAOp = vec4(wy - aoParams.x, fract(aoParams.y) / 0.9, floor(aoParams.y) * 0.1 - wy, step(abs(normal.y), 0.5));
+        }`);
+      sh.fragmentShader = 'varying vec4 vAOp;\nuniform float uAO;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          float enc = clamp(vAOp.y, 0.0, 1.0);
+          float k = 1.0 - smoothstep(0.0, mix(${AO.baseReach[0].toFixed(2)}, ${AO.baseReach[1].toFixed(2)}, enc), max(vAOp.x, 0.0));   // narrow lanes stay dark higher up
+          float ao = 1.0 - uAO * k * mix(${AO.base[0].toFixed(2)}, ${AO.base[1].toFixed(2)}, enc);
+          float e = vAOp.w * step(-0.05, vAOp.z) * (1.0 - smoothstep(0.0, ${AO.eavesReach.toFixed(2)}, vAOp.z));
+          ao *= 1.0 - uAO * ${AO.eaves.toFixed(2)} * e;
+          diffuseColor.rgb *= ao;
+        }`);
     };
     this.mass = null;   // the merged walls + roofs mesh
     this.cache = new Map();   // house id → its generated geometry and instances
@@ -248,6 +258,9 @@ export class BuildingRenderer {
       fake:    { geo: new THREE.PlaneGeometry(1.36, 1.9).translate(0, 0.02, GAP), mat: this._fakeMaterial(), shadow: false },
       // weathering: grime streaks running down from the sill (a darkening decal)
       streak:  { geo: new THREE.PlaneGeometry(1.1, 1.9).translate(0, -0.95, GAP + 0.02), mat: this._streakMaterial(), shadow: false },
+      // ambient occlusion round the window: a soft darkening of the wall (and painted surround)
+      // where the frame and sill stand out from it (see _windowAOMaterial)
+      aoRing:  { geo: new THREE.PlaneGeometry(1.7, 2.3).translate(0, -0.05, GAP + 0.02), mat: this._windowAOMaterial(), shadow: false },
       // the glass: an interior-mapped fake room behind every window (see _glassMaterial)
       glass:   { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, Ly.glass), mat: this._glassMaterial(), shadow: false },
       shutterOpen:   { geo: mergeColoured([[box(0.42, 1.3, 0.05, -0.68, 0, zb(Ly.shutterOpen, 0.05)), '#ffffff'], [box(0.42, 1.3, 0.05, 0.68, 0, zb(Ly.shutterOpen, 0.05)), '#ffffff']]), mat: lambert(), shadow: false },
@@ -284,6 +297,7 @@ export class BuildingRenderer {
       storeRoom: { geo: new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0), mat: this._storeMaterial(), shadow: false },
     };
     this.parts.streak.far = 140;
+    this.parts.aoRing.far = 320;
     for (const p of Object.values(this.parts)) { p.mesh = null; p.cap = 0; }
     registerStyled(this.massMat, 'surface', { mode: 'face', layer: 'attr', weather: true });
     const surf = { shutterOpen: 'woodPaint', shutterClosed: 'woodPaint', shutterHalf: 'woodPaint', shutterTilt: 'woodPaint', door: 'woodPaint', chimney: 'plaster', surround: 'plaster', doorFrame: 'stoneDressed' };
@@ -796,15 +810,37 @@ export class BuildingRenderer {
     return m;
   }
 
+  /**
+   * Ambient occlusion round a window, as a decal multiplied onto the wall: a soft dark
+   * ring hugging the frame, a little deeper under the sill. Stable (no screen-space
+   * noise), and drawn on every quality level.
+   */
+  _windowAOMaterial() {
+    const m = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, depthWrite: false, fog: false, toneMapped: false,
+      blending: THREE.MultiplyBlending, premultipliedAlpha: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+    m.onBeforeCompile = (sh) => {
+      sh.vertexShader = 'varying vec2 vAp;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        vAp = position.xy;`);
+      sh.fragmentShader = 'varying vec2 vAp;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        vec2 d2 = max(abs(vAp - vec2(0.0, 0.0)) - vec2(0.5, 0.75), 0.0);
+        float ring = 1.0 - smoothstep(0.0, 0.22, length(d2));
+        float sill = (1.0 - smoothstep(0.0, 0.3, max(-0.81 - vAp.y, 0.0))) * step(vAp.y, -0.81) * (1.0 - smoothstep(0.5, 0.62, abs(vAp.x)));
+        float k = max(ring, sill * 1.2);
+        diffuseColor.rgb = vec3(1.0 - ${CONFIG.building.ao.window.toFixed(2)} * k * uAOk);`).replace('void main() {', 'uniform float uAOk;\nvoid main() {');
+      sh.uniforms.uAOk = this.aoUniforms.uAO;
+    };
+    return m;
+  }
+
   /** Detail meshes too small to matter in a ripply reflection. */
   smallParts() {
     return ['shutterOpen', 'shutterClosed', 'shutterHalf', 'shutterTilt', 'balcony', 'balconySolid', 'door', 'doorFrame', 'awning', 'awningStripe', 'chimney', 'storeRoom',
-      'streak', 'surround', 'pediment', 'fake', 'bar', 'pot', 'blob', 'cloth', 'cone', 'flowerbox']
+      'streak', 'aoRing', 'surround', 'pediment', 'fake', 'bar', 'pot', 'blob', 'cloth', 'cone', 'flowerbox']
       .map((k) => this.parts[k].mesh).filter(Boolean);
   }
 
   /** Flat overlays drawn on top of walls (not solid surfaces): left out of the ambient-occlusion pass. */
-  overlayParts() { return ['streak'].map((k) => this.parts[k].mesh).filter(Boolean); }
+  overlayParts() { return ['streak', 'aoRing'].map((k) => this.parts[k].mesh).filter(Boolean); }
 
   /** Forget every cached house (the next rebuild redraws the whole town). */
   invalidateAll() { this.cache.clear(); }
@@ -1200,7 +1236,7 @@ export class BuildingRenderer {
       }
       parts[k] = { n, m: M, c: C };
     }
-    const g = gb.arrays((x, z, nx, nz) => this._enclosure(b, x, z, nx, nz), t, (b.seed % 997) / 997);
+    const g = gb.arrays((x, z, nx, nz) => this._enclosure(b, x, z, nx, nz), t, (b.seed % 997) / 997, b.top - this.style.cornice);
     return { ver: b.ver, pos: g.pos, nor: g.nor, col: g.col, ao: g.ao, wall: g.wall, parts };
   }
 
@@ -1221,6 +1257,7 @@ export class BuildingRenderer {
     // the room's wall colour, and how far its curtain is drawn
     this._gc.setRGB(rng(), rng(), rng());
     put('glass', x, yy, z, rot, sx, sy, 1, this._gc);
+    put('aoRing', x, yy, z, rot, sx, sy, 1, WHITE);
     if (o.cellar) { put('bar', x + W.nx * 0.12, yy - 0.3 * sy, z + W.nz * 0.12, rot, 0.03, 0.6 * sy, 0.03, IRON); return; }
     if (F.deco === 'surrounds' || F.deco === 'full') {
       put('surround', x, yy, z, rot, sx, sy, 1, F.trim);

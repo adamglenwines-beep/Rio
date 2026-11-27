@@ -83,7 +83,7 @@ const LADDER = [
 // ---- time of day ------------------------------------------------------------------
 // Keyframes by hour; everything in between is interpolated.
 export const TIMES = { midday: 12, golden: 18.6, dusk: 20.4, night: 23 };
-const KEYS = [
+export const KEYS = [
   { h: 12, elev: 50, az: 35, sun: '#fff7ea', sunI: 3.35, sky: '#e2f0ff', ground: '#9a8a70', hemiI: 1.5,
     top: '#2a7fd0', hor: '#bcdcf4', glow: '#fff6e6', glowI: 0.6, fog: '#bcd6ec', exp: 1.14, lit: 0 },
   { h: 18.6, elev: 14, az: 40, sun: '#ffdcb6', sunI: 3.2, sky: '#eef0f2', ground: '#94806a', hemiI: 1.4,

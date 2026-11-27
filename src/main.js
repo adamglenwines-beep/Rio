@@ -130,6 +130,15 @@ game.renderFrame = (dt, rawDt = dt) => {
 };
 renderer.setAnimationLoop(frame);
 
+// a test scene for tuning light and colour (index.html?scene=six, see testscene.js)
+{
+  const params = new URLSearchParams(location.search);
+  if (params.get('scene') === 'six') {
+    const { setupSixHouses } = await import('./testscene.js');
+    setupSixHouses(game, params);
+  }
+}
+
 /** Tall phone screens get a wider lens so the cove still fits side to side. */
 function fitCamera() {
   camera.aspect = innerWidth / innerHeight;

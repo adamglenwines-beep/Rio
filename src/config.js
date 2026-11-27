@@ -174,6 +174,14 @@ export const CONFIG = {
     // wall: every face parallel to the wall is at least this far in front of it (or buried well
     // inside it), and the layers of a window are at least 2 cm apart, so they can't flicker.
     facadeGap: 0.03,
+    // Baked ambient occlusion on the walls (darkening where less sky reaches):
+    ao: {
+      base: [0.22, 0.5],       // at the foot of a wall: in the open … in a narrow lane
+      baseReach: [1.8, 7.0],   // how high up that reaches (m): in the open … in a narrow lane
+      eaves: 0.3,              // under the eaves / cornice
+      eavesReach: 1.1,         // over this many metres down from the cornice
+      window: 0.32,            // a soft dark ring round each window frame and under its sill
+    },
     streakChance: 0.6,     // share of windows with grime streaks running down from the sill
     streakStrength: 0.3,   // how much those streaks darken the wall (0–1)
   },
