@@ -676,8 +676,11 @@ export class BuildingRenderer {
       if (L < 0.4) return;
       const ez = new THREE.Vector3(d[0], d[1], d[2]).divideScalar(L), ex = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), ez).normalize();
       const ey = new THREE.Vector3().crossVectors(ez, ex);
-      const M = new THREE.Matrix4().makeBasis(ex, ey, ez).setPosition((A[0] + B[0]) / 2, (A[1] + B[1]) / 2 + 0.03, (A[2] + B[2]) / 2);
-      gb.geometry(new THREE.BoxGeometry(0.26, 0.11, L + 0.1), M, F.ridge);
+      // the cap's underside is sunk well into the roof (8 cm below the ridge line), so its sides
+      // meet both slopes cleanly; a cap sitting on the ridge left a thin floating slit beside it
+      // that showed as a jagged dark line (bug report roof-shimmer-v0.11)
+      const M = new THREE.Matrix4().makeBasis(ex, ey, ez).setPosition((A[0] + B[0]) / 2, (A[1] + B[1]) / 2 + 0.0025, (A[2] + B[2]) / 2);
+      gb.geometry(new THREE.BoxGeometry(0.26, 0.165, L + 0.1), M, F.ridge);
     };
     cap(r0, r1);
     if (hip) { if (along) { cap(p[0], r0); cap(p[3], r0); cap(p[1], r1); cap(p[2], r1); } }

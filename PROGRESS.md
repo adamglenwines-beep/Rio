@@ -80,6 +80,11 @@ suspect off in turn on a real slate roof seen from a few metres above:
   them a little, so the default style now uses +0.3 everywhere (anisotropic filtering keeps
   them sharp at an angle). The hillside close-up's big score is the camera rig nudging the
   camera off the slope, not the texture.
+- **The v0.11 roof recording** (`roof-shimmer-v0.11`, added during the run) also showed speckle on
+  the terracotta ridge tiles (now contrast 0.75, mip bias +0.5 for both terracotta textures) and a
+  jagged dark line beside the ridge: the ridge cap's underside floated just above the roof on each
+  side, leaving a thin shadowed slit. Caps are now sunk 8 cm into the roof so their sides meet both
+  slopes cleanly.
 - Screen-space AO (GTAO) is switched off on High (it was High-only): it cost about a fifth of a
   High frame, drew the scene a second time, and its un-antialiased edges caused the jagged,
   changing edges on washing. Baked AO replaces it on every quality level (part 4).

@@ -337,7 +337,8 @@ export const CONFIG = {
     detailMin: 0.3, detailMax: 2.4,
     layers: {
       slateA: { contrast: 0.5, mipBias: 0.75 },
-      terraB: { contrast: 0.8, mipBias: 0.25 },
+      terraA: { contrast: 0.75, mipBias: 0.5 },   // ridge tiles and terracotta roofs speckled too (roof-shimmer-v0.11)
+      terraB: { contrast: 0.75, mipBias: 0.5 },
       stoneBase: { contrast: 0.75, mipBias: 0.25 },
       setts: { contrast: 0.8, mipBias: 0.25 },
       planks: { contrast: 0.8, mipBias: 0.25 },
