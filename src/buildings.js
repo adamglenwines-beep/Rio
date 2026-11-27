@@ -209,6 +209,8 @@ export class BuildingRenderer {
     // Instanced details: geometry + material + whether it casts shadows.
     this.parts = {
       window:  { geo: mergeColoured([[box(1.0, 1.5, 0.08, 0, 0, 0.0), '#f1e9d6'], [box(0.74, 1.24, 0.06, 0, 0, 0.04), '#3a3d44']]), mat: vc, shadow: false },
+      // weathering: grime streaks running down from the sill (a darkening decal)
+      streak:  { geo: new THREE.PlaneGeometry(1.1, 1.9).translate(0, -0.95, 0.03), mat: this._streakMaterial(), shadow: false },
       // the glass: an interior-mapped fake room behind every window (see _glassMaterial)
       glass:   { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, 0.072), mat: this._glassMaterial(), shadow: false },
       shutterOpen:   { geo: mergeColoured([[box(0.42, 1.3, 0.05, -0.68, 0, 0.03), '#ffffff'], [box(0.42, 1.3, 0.05, 0.68, 0, 0.03), '#ffffff']]), mat: lambert(), shadow: false },
@@ -623,9 +625,38 @@ export class BuildingRenderer {
     if (buildings) this.rebuild(buildings);
   }
 
+  /**
+   * Grime streaks under a sill: drawn with multiply blending, so it darkens
+   * whatever wall colour is behind it — soft vertical runs, strongest at the
+   * top, fading as they run down. (Weathering, along with the damp and grime
+   * in the wall shader, materials.js.)
+   */
+  _streakMaterial() {
+    const m = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, depthWrite: false, fog: false, toneMapped: false,
+      blending: THREE.MultiplyBlending, premultipliedAlpha: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+    m.onBeforeCompile = (sh) => {
+      sh.vertexShader = 'varying vec2 vSUv;\nvarying float vSR;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        vSUv = vec2(position.x / 1.1 + 0.5, -position.y / 1.9);
+        vSR = 0.0;
+        #ifdef USE_INSTANCING
+          vSR = fract(sin(dot(instanceMatrix[3].xz, vec2(41.3, 17.7))) * 9137.1);
+        #endif`);
+      sh.fragmentShader = 'varying vec2 vSUv;\nvarying float vSR;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        float x = vSUv.x, y = vSUv.y;
+        float h = fract(sin(floor(x * 9.0 + vSR * 50.0) * 12.9898) * 43758.5453);           // a few runs
+        float h2 = fract(sin(floor(x * 23.0 + vSR * 31.0) * 78.233) * 12345.678);
+        float run = smoothstep(0.45, 0.95, h) * (0.6 + 0.4 * h2);
+        float len = 0.35 + 0.65 * fract(h * 7.13);                                          // how far each runs
+        float fade = (1.0 - smoothstep(0.0, len, y)) * smoothstep(0.0, 0.18, x) * smoothstep(1.0, 0.82, x);
+        float k = (run * 0.9 + 0.25) * fade;
+        diffuseColor.rgb = vec3(1.0 - ${CONFIG.building.streakStrength.toFixed(2)} * k);`);
+    };
+    return m;
+  }
+
   /** Detail meshes too small to matter in a ripply reflection. */
   smallParts() {
-    return ['shutterOpen', 'shutterClosed', 'balcony', 'door', 'awning', 'chimney', 'storeRoom']
+    return ['shutterOpen', 'shutterClosed', 'balcony', 'door', 'awning', 'chimney', 'storeRoom', 'streak']
       .map((k) => this.parts[k].mesh).filter(Boolean);
   }
 
@@ -835,6 +866,7 @@ export class BuildingRenderer {
     // the room's wall colour, and how far its curtain is drawn
     this._gc.setRGB(rng(), rng(), rng());
     put('glass', x, y, z, rot, k, k, 1, this._gc);
+    if (rng() < CONFIG.building.streakChance) put('streak', x, y - 0.74 * k, z, rot, k * (0.85 + rng() * 0.3), 0.7 + rng() * 0.6, 1, WHITE);
     // a few slightly different shades per house, made once (not per window)
     if (!b.shutterShades) b.shutterShades = [-0.025, 0, 0.025].map((k) => b.shutter.clone().offsetHSL(0, 0, k));
     const shut = b.shutterShades[(rng() * 3) | 0];

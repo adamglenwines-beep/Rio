@@ -59,7 +59,12 @@ function placeholderArray(srgb) {
 /** Read the manifest (layer order, scales, mean colours). Safe to call often. */
 export async function loadManifest() {
   if (manifest) return manifest;
-  manifest = await (await fetch(BASE + 'manifest.json')).json();
+  return setManifest(await (await fetch(BASE + 'manifest.json')).json());
+}
+
+/** Use an already-read manifest (unit tests in Node read it from disk). */
+export function setManifest(json) {
+  manifest = json;
   manifest.layers.forEach((L, i) => {
     LAYERS[L.key] = i;
     const lum = 0.2126 * L.mean[0] + 0.7152 * L.mean[1] + 0.0722 * L.mean[2];

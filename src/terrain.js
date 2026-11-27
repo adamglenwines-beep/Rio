@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { makeNoise2D, makeRng, clamp, lerp, smoothstep } from './noise.js';
 import { registerStyled } from './style.js';
+import { MeshBVH } from 'three-mesh-bvh';
 
 export const BAND = { FLAT: 0, MODERATE: 1, STEEP: 2, CLIFF: 3, SEA: 4 };
 export const BAND_NAMES = ['flat', 'moderate', 'steep', 'cliff', 'sea'];
@@ -189,28 +190,29 @@ export class Terrain {
     return { x: dx / len, z: dz / len };
   }
 
-  /** Ray-march a ray against the terrain and the sea surface. */
+  /**
+   * First hit of a ray on the terrain or the sea surface: { point, water } or null.
+   * Uses a bounding-volume hierarchy (three-mesh-bvh), so it tests only the few
+   * triangles near the ray instead of marching along it or testing all 29 k.
+   */
   raycast(origin, dir, maxDist = 900) {
-    let prevT = 0, step = 1.0;
-    for (let t = 0; t < maxDist; t += step) {
-      const x = origin.x + dir.x * t, y = origin.y + dir.y * t, z = origin.z + dir.z * t;
-      if (y < -1) return null; // went below the sea surface without a hit
-      if (this.inside(x, z) && y <= this.surfaceAt(x, z)) {
-        // binary refine between prevT and t
-        let lo = prevT, hi = t;
-        for (let k = 0; k < 12; k++) {
-          const m = (lo + hi) / 2;
-          const mx = origin.x + dir.x * m, my = origin.y + dir.y * m, mz = origin.z + dir.z * m;
-          if (my <= this.surfaceAt(mx, mz)) hi = m; else lo = m;
-        }
-        const p = new THREE.Vector3(origin.x + dir.x * hi, 0, origin.z + dir.z * hi);
-        p.y = this.surfaceAt(p.x, p.z);
-        return { point: p, water: this.heightAt(p.x, p.z) < 0 };
-      }
-      prevT = t;
-      step = t < 100 ? 0.5 : 1.0;
-    }
-    return null;
+    const ray = this._ray || (this._ray = new THREE.Ray());
+    ray.origin.copy(origin); ray.direction.copy(dir).normalize();
+    const hit = this.bvh.raycastFirst(ray, THREE.DoubleSide, 0, maxDist);
+    const tLand = hit ? hit.distance : Infinity;
+    const tSea = ray.direction.y < -1e-6 ? -ray.origin.y / ray.direction.y : Infinity;
+    const t = Math.min(tLand, tSea);
+    if (!isFinite(t) || t < 0 || t > maxDist) return null;
+    const p = ray.at(t, new THREE.Vector3());
+    return { point: p, water: tSea <= tLand, distance: t };
+  }
+
+  /** Distance along a ray to the terrain (BVH), or Infinity. Used for camera collision. */
+  rayDistance(origin, dir, maxDist) {
+    const ray = this._ray2 || (this._ray2 = new THREE.Ray());
+    ray.origin.copy(origin); ray.direction.copy(dir).normalize();
+    const hit = this.bvh.raycastFirst(ray, THREE.DoubleSide, 0, maxDist);
+    return hit ? hit.distance : Infinity;
   }
 
   // ---- Classification -------------------------------------------------------
@@ -357,6 +359,8 @@ export class Terrain {
     this.activeColors = this.baseColors;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, flatShading: true });
     registerStyled(mat, 'ground', { mode: 'terrain' });
+    // acceleration structure for picking and camera collision (see raycast)
+    this.bvh = new MeshBVH(geo);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     mesh.castShadow = true;

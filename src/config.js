@@ -102,6 +102,8 @@ export const CONFIG = {
     roofPitch: 0.07,       // roof rise per metre of span (0.07 ≈ 8°: nearly flat, like Ligurian slate)
     roofOverhang: 0.2,     // eaves overhang (m); kept below path.setback so eaves never reach the steps
     minGround: 0.5,        // lowest ground (m above sea) a house may stand on
+    streakChance: 0.6,     // share of windows with grime streaks running down from the sill
+    streakStrength: 0.3,   // how much those streaks darken the wall (0–1)
   },
 
   // ---- Infill: life in the leftover spaces -----------------------------------

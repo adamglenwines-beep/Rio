@@ -110,5 +110,14 @@ export class CameraRig {
     }
     const minY = ground + 3;
     if (cam.y < minY) cam.y = minY;
+    // collision: if a hillside lies between the pivot and the camera, move the
+    // camera in front of it (a BVH ray test, so it's cheap every frame)
+    const toCam = this._v || (this._v = new THREE.Vector3());
+    toCam.subVectors(cam, tgt);
+    const d = toCam.length();
+    if (d > 1) {
+      const hit = t.rayDistance(tgt, toCam, d);
+      if (hit < d - 0.5) cam.copy(tgt).addScaledVector(toCam.normalize(), Math.max(hit - 1.5, 2));
+    }
   }
 }
