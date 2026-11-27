@@ -4,7 +4,66 @@ So a new session can pick up with "Read PROGRESS.md and continue". Read `CLAUDE.
 `DESIGN.md` first. Decisions made without the user (they asked not to be asked) are
 recorded here with the reason.
 
-## The current run: Borgo brief, Step 0 + Phases B, C, D
+## The current run: v0.12 · Light (flicker, shimmer, no trees, light and colour)
+
+A small, surgical run in four parts, in this order. Dev branch: `claude/nice-planck-k467qs`.
+Not touched (later runs): building shapes, window design, roofs, materials, terrain, water.
+
+| Part | State |
+|---|---|
+| 1. Flicker: windows, shutters, washing | done |
+| 2. Roof shimmer | (in progress) |
+| 3. Take out the trees | done |
+| 4. Light and colour on the buildings | (in progress) |
+
+### Part 1 — flicker (done)
+
+Causes found (videos and notes in `Rio-reference/bug-reports/`):
+1. **Window glass 2 mm in front of its dark pane.** The interior-mapped glass sat at 7.2 cm,
+   the dark pane behind it at 7.0 cm. Further than about 100 m the depth buffer can't tell
+   2 mm apart, so the pane and the glass took turns: windows "there one frame, gone the next"
+   (the wide-view video). Other near-misses: painted windows 1 mm from a dado, doors 1 cm in
+   front of a dado, the dark back of boat-store arches 1 cm from the stone.
+2. **The near plane was 0.5 m at every distance.** Depth precision falls with the square of
+   the distance and rises with the near plane; at 150 m two surfaces under ~3 mm apart could
+   swap. Now the near plane moves out with the camera's distance to its pivot (0.5–6 m,
+   `CONFIG.graphics.nearPlane`), never so far it could cut into the ground or a roof under the
+   camera: about ten times the precision at the postcard view.
+3. **Houses pushed up to 12 cm into each other.** The growth rule allowed an overlap depth of
+   0.12 m (`convexOverlap` measures depth, not area): 43 pairs in the demo town, walls
+   crossing at a slight angle (long flickering slivers), windows half buried in a neighbour
+   (the clipping video). Now `CONFIG.building.maxOverlap` = 5 mm: 0 pairs. The demo grows 219
+   houses instead of 235.
+4. **Openings on covered walls.** Windows were hidden only if a neighbour stood 0.8 m in
+   front of the window's centre. Now every door, window, painted window, shopfront,
+   drainpipe and climbing plant checks its whole width, its whole storey, and 0.9 m out in
+   front against every nearby house (walls, stone bases, eaves and roof):
+   `BuildingRenderer._coverTest`. Shared walls get no openings.
+5. **No real gap from the wall.** All wall parts are placed on the wall's outer skin (stone
+   base, dado, plinth or the leaning plaster: `skin()` in `_buildOne`), and every face
+   parallel to the wall is either buried 2 cm in it or stands at least
+   `CONFIG.building.facadeGap` (3 cm) in front. A window's layers are 2 cm apart: surround
+   3 cm, frame 7, pane 10, glass 12, open shutters 9, shut shutters 15.
+6. **Washing**: the jagged, changing edges were the screen-space ambient occlusion (GTAO,
+   High only) working from an un-antialiased depth image at the cloth's edges, plus the cloth
+   sitting where the above flickering parts were. (See part 2 for what replaced GTAO.)
+- Level-of-detail on facade parts was checked: small parts shrink smoothly with distance
+  (no on/off switching), so it was not a cause.
+- Test: `tests/unit/openings.test.js`: houses never overlap; no opening on a covered wall
+  (an independent point-sampling check, which fails if the cover test is switched off);
+  wall parts stand clear of the wall and a window's layers are apart.
+
+### Part 3 — trees taken out (done)
+
+`CONFIG.flora.trees = false` switches off: the hillside scrub (the rounded green pads), the
+soft clumps on the far hills, umbrella pines, olives, flowering cushions on rock
+(`scenery.js`); and in the town's gardens lemon, fig and pine trees, shrubs, green tufts and
+the plant on low walls (`infill.js`). **To bring them back, set `trees: true` in
+`src/config.js` (`flora`)**; nothing was deleted. Kept: ground colour and slope blending,
+terrace vines, agave and prickly pear (not trees or bushes), bougainvillea on houses and
+terrace walls, pots, flower boxes, balcony plants, vegetable rows.
+
+## Earlier run: Borgo brief, Step 0 + Phases B, C, D (v0.9–v0.11)
 
 One long run. After each phase: commit, merge to `main`, wait for GitHub Pages, give the
 live link, carry straight on. Dev branch: `claude/hopeful-knuth-kp9ia6`.
