@@ -38,9 +38,37 @@ const AWN_COLS = [new THREE.Color('#d24b3f'), new THREE.Color('#2e7cb8'), new TH
 
 /** Accumulates flat-shaded, vertex-coloured triangles into one BufferGeometry. */
 class GeoBuilder {
-  constructor() { this.pos = []; this.nor = []; this.col = []; this.lay = []; this.wall = []; this.layer = -1; this.wear = 0; }
+  constructor() { this.pos = []; this.nor = []; this.col = []; this.lay = []; this.wall = []; this.bake = []; this.gnd = []; this.layer = -1; this.wear = 0; this.ground = NaN; }
   // this.wear: how worn this house's plaster is (0–0.95) plus flags in the whole part (1 = painted corner stones)
   // this.layer: the texture layer (materials.js LAYERS index, -1 = none) for what is added next
+  // this.bake: three baked numbers per vertex (v0.18), worked out once when the house is built:
+  //   x  how open to the sky this spot is: 1 = open wall … 0 = deep in a crease (inside a window reveal,
+  //      right under a sill or a balcony, in the corner where a neighbour's wall juts out)
+  //   y, z  weathering masks (v0.20): drip streaks under sills and balconies; scuffing round doors
+  // this.ground: the "ground" under what is added next, when that is not the terrain (a wall that
+  //   starts on a neighbour's roof): baked shade and damp gather there (NaN = the terrain)
+
+  /** Give the last `n` vertices the neutral bake (open wall, no weathering) and the current ground. */
+  _meta(n) { for (let i = 0; i < n; i++) { this.bake.push(1, 0, 0); this.gnd.push(this.ground); } }
+
+  /** Set the bake of the last vertices: `list` = one [open, drip, scuff] per vertex. */
+  _bakeLast(list) {
+    const o = this.bake.length - list.length * 3;
+    for (let i = 0; i < list.length; i++) { this.bake[o + i * 3] = list[i][0]; this.bake[o + i * 3 + 1] = list[i][1]; this.bake[o + i * 3 + 2] = list[i][2]; }
+  }
+
+  /** A planar quad p0→p1→p2→p3 facing along `want`, with a bake per corner (window reveals). */
+  quadB(pts, c, want, bakes) {
+    const [a, b, , d] = pts;
+    const u = sub3(b, a), v = sub3(d, a);
+    let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const l = Math.hypot(n[0], n[1], n[2]);
+    if (l < 1e-9) return;
+    n = n.map((k) => k / l);
+    let P = pts, B = bakes;
+    if (n[0] * want[0] + n[1] * want[1] + n[2] * want[2] < 0) { P = [...pts].reverse(); B = [...bakes].reverse(); n = n.map((k) => -k); }
+    for (const [i, j, k] of [[0, 1, 2], [0, 2, 3]]) { this._tri(P[i], P[j], P[k], n, c); this._bakeLast([B[i], B[j], B[k]]); }
+  }
 
   /** A planar convex face from 3D points; wound to face along `want` (if given). */
   face(pts, c, want) {
@@ -57,6 +85,7 @@ class GeoBuilder {
         this.pos.push(p[0], p[1], p[2]); this.nor.push(n[0], n[1], n[2]); this.col.push(c.r, c.g, c.b); this.lay.push(this.layer);
         this.wall.push(-1, 0, this.wear);
       }
+      this._meta(3);
     }
   }
 
@@ -67,6 +96,7 @@ class GeoBuilder {
     this.col.push(c.r, c.g, c.b, c.r, c.g, c.b, c.r, c.g, c.b);
     this.lay.push(this.layer, this.layer, this.layer);
     this.wall.push(-1, 0, this.wear, -1, 0, this.wear, -1, 0, this.wear);
+    this._meta(3);
   }
 
   /** Push one triangle with a known normal and a colour per vertex. */
@@ -76,13 +106,14 @@ class GeoBuilder {
     this.col.push(ca[0], ca[1], ca[2], cb[0], cb[1], cb[2], cd[0], cd[1], cd[2]);
     this.lay.push(this.layer, this.layer, this.layer);
     this.wall.push(-1, 0, 0, -1, 0, 0, -1, 0, 0);
+    this._meta(3);
   }
 
   /** Arrays for merged facade detail (frames, leaves, balconies…): textured per vertex, no baked AO. */
   arraysPlain(rand = 0) {
     const n = this.pos.length, ao = new Float32Array(n);
     for (let i = 0; i < n; i += 3) { ao[i] = -1e4; ao[i + 1] = 0; ao[i + 2] = this.lay[i / 3] + 1 + rand * 0.9; }
-    return { pos: new Float32Array(this.pos), nor: new Float32Array(this.nor), col: new Float32Array(this.col), ao, wall: new Float32Array(this.wall) };
+    return { pos: new Float32Array(this.pos), nor: new Float32Array(this.nor), col: new Float32Array(this.col), ao, wall: new Float32Array(this.wall), bake: new Float32Array(this.bake) };
   }
 
   /** Mark the last `count` vertices as wall: u = metres along the wall for each, L = the wall's length. */
@@ -129,6 +160,7 @@ class GeoBuilder {
         const tri = (p1, n1, p2, n2, p3, n3) => {
           this.pos.push(...p1, ...p2, ...p3); this.nor.push(...n1, ...n2, ...n3);
           for (let k = 0; k < 3; k++) { this.col.push(c.r, c.g, c.b); this.lay.push(this.layer); this.wall.push(-1, 0, this.wear); }
+          this._meta(3);
         };
         if (ccw) { tri(A0, NA, A1, NA, B1, NB); tri(A0, NA, B1, NB, B0, NB); }
         else { tri(A0, NA, B0, NB, B1, NB); tri(A0, NA, B1, NB, A1, NA); }
@@ -151,7 +183,7 @@ class GeoBuilder {
    * gets four reveal faces going `depth` into the wall: the sun casts real shadow in them.
    * `u` per vertex goes to the wall attribute (wear at corners, painted quoins).
    */
-  wallHoles(P00, P10, P01, P11, L, yb, yt, holes, c, n, uStart = 0, Lwall = L, noReveal = false) {
+  wallHoles(P00, P10, P01, P11, L, yb, yt, holes, c, n, uStart = 0, Lwall = L, noReveal = false, feats = null) {
     const at = (u, y) => {
       const s = u / L, t = (y - yb) / (yt - yb);
       const b0 = [P00[0] + (P10[0] - P00[0]) * s, P00[1] + (P10[1] - P00[1]) * s, P00[2] + (P10[2] - P00[2]) * s];
@@ -163,22 +195,59 @@ class GeoBuilder {
       .map((h) => ({ ...h, y0: Math.max(h.y0, yb), y1: Math.min(h.y1, yt), cutTop: h.y1 >= yt, cutBottom: h.y0 <= yb }));
     const ex = [P10[0] - P00[0], P10[1] - P00[1], P10[2] - P00[2]], ey = [P01[0] - P00[0], P01[1] - P00[1], P01[2] - P00[2]];
     const flip = (ex[1] * ey[2] - ex[2] * ey[1]) * n[0] + (ex[2] * ey[0] - ex[0] * ey[2]) * n[1] + (ex[0] * ey[1] - ex[1] * ey[0]) * n[2] < 0;
-    const ys = [...new Set([yb, yt, ...H.flatMap((h) => [h.y0, h.y1])])].sort((a, b) => a - b);
     const N = [n[0], n[1], n[2]];
-    const quad = (u0, u1, y0, y1) => {
-      const a = at(u0, y0), b = at(u1, y0), cc = at(u1, y1), d = at(u0, y1), U0 = u0 + uStart, U1 = u1 + uStart;
-      if (!flip) { this._tri(a, b, cc, N, c); this._tri(a, cc, d, N, c); this._wallUV([U0, U1, U1, U0, U1, U0], Lwall); }
-      else { this._tri(a, cc, b, N, c); this._tri(a, d, cc, N, c); this._wallUV([U0, U1, U1, U0, U0, U1], Lwall); }
+    // baked shading (v0.18): `feats` = patches of this face with their own baked numbers, each
+    // { u0, u1, y0, y1, us, ys, f(u, y) → [open, drip, scuff] }. The face is cut along each patch's
+    // lines (us, ys: only in the rows the patch touches), so the numbers can change across it; a
+    // patch is neutral on its own outline, so it joins the plain wall round it without a seam.
+    const F = (feats || []).filter((f) => f.u1 > 1e-3 && f.u0 < L - 1e-3 && f.y1 > yb + 1e-3 && f.y0 < yt - 1e-3);
+    const addLine = (arr, v, lo, hi) => { if (v > lo + 0.004 && v < hi - 0.004 && !arr.some((x) => Math.abs(x - v) < 0.004)) arr.push(v); };
+    const lines = [yb, yt, ...H.flatMap((h) => [h.y0, h.y1])];
+    for (const f of F) for (const y of f.ys) addLine(lines, y, yb, yt);
+    const ys = [...new Set(lines)].sort((a, b) => a - b);
+    const NEUT = [1, 0, 0];
+    const bk = (u, y, list) => {
+      let o = 1, d = 0, w = 0;
+      for (const f of list) {
+        if (u < f.u0 - 1e-6 || u > f.u1 + 1e-6 || y < f.y0 - 1e-6 || y > f.y1 + 1e-6) continue;
+        const v = f.f(u, y);
+        if (v[0] < o) o = v[0];
+        if (v[1] > d) d = v[1];
+        if (v[2] > w) w = v[2];
+      }
+      return [o, d, w];
+    };
+    const quad = (u0, u1, y0, y1, list) => {
+      const P = [at(u0, y0), at(u1, y0), at(u1, y1), at(u0, y1)], U = [u0 + uStart, u1 + uStart, u1 + uStart, u0 + uStart];
+      const B = list.length ? [bk(u0, y0, list), bk(u1, y0, list), bk(u1, y1, list), bk(u0, y1, list)] : [NEUT, NEUT, NEUT, NEUT];
+      // split along the diagonal whose two ends are more alike: smoother shading across the quad
+      const sc = (v) => v[0] - v[1] - v[2];
+      const order = Math.abs(sc(B[0]) - sc(B[2])) <= Math.abs(sc(B[1]) - sc(B[3])) ? [0, 1, 2, 0, 2, 3] : [0, 1, 3, 1, 2, 3];
+      for (let t = 0; t < 6; t += 3) {
+        const i0 = order[t], i1 = order[t + (flip ? 2 : 1)], i2 = order[t + (flip ? 1 : 2)];
+        this._tri(P[i0], P[i1], P[i2], N, c);
+        this._wallUV([U[i0], U[i1], U[i2]], Lwall);
+        if (list.length) this._bakeLast([B[i0], B[i1], B[i2]]);
+      }
     };
     for (let j = 0; j + 1 < ys.length; j++) {
       const y0 = ys[j], y1 = ys[j + 1], ym = (y0 + y1) / 2;
       if (y1 - y0 < 1e-4) continue;
-      const cut = H.filter((h) => h.y0 <= ym && h.y1 >= ym).sort((a, b) => a.u0 - b.u0);
-      let u = 0;
-      for (const h of cut) { if (h.u0 > u + 1e-4) quad(u, h.u0, y0, y1); u = Math.max(u, h.u1); }
-      if (L > u + 1e-4) quad(u, L, y0, y1);
+      const cut = H.filter((h) => h.y0 <= ym && h.y1 >= ym);
+      const rowF = F.filter((f) => f.y0 < y1 - 1e-4 && f.y1 > y0 + 1e-4);
+      const ul = [0, L, ...cut.flatMap((h) => [h.u0, h.u1])];
+      for (const f of rowF) for (const u of f.us) addLine(ul, u, 0, L);
+      ul.sort((a, b) => a - b);
+      for (let k = 0; k + 1 < ul.length; k++) {
+        const ua = ul[k], ub = ul[k + 1];
+        if (ub - ua < 1e-4) continue;
+        const um = (ua + ub) / 2;
+        if (cut.some((h) => h.u0 < um && h.u1 > um)) continue;   // inside an opening
+        quad(ua, ub, y0, y1, rowF);
+      }
     }
-    // reveals: the four sides of each opening, going into the wall
+    // reveals: the four sides of each opening, going into the wall. Baked shade: darkest at the
+    // back and under the head, lighter on the seat; a shallow step (a stone base's) hardly at all.
     for (const h of H) {
       if (noReveal || !(h.depth > 0)) continue;
       const d = h.depth, rc = h.col || c, inn = [-N[0] * d, -N[1] * d, -N[2] * d];
@@ -186,10 +255,12 @@ class GeoBuilder {
       const a = at(h.u0, h.y0), b = at(h.u1, h.y0), cc = at(h.u1, h.y1), dd = at(h.u0, h.y1);
       const e = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], el = Math.hypot(...e);
       const E = e.map((v) => v / el);
-      if (!h.cutTop) this.face([dd, cc, back(cc), back(dd)], rc.clone().multiplyScalar(0.92), [0, -1, 0]);   // head (soffit)
-      if (!h.cutBottom) this.face([a, b, back(b), back(a)], rc, [0, 1, 0]);                                // seat
-      this.face([a, dd, back(dd), back(a)], rc.clone().multiplyScalar(0.96), E);                    // jambs
-      this.face([b, cc, back(cc), back(b)], rc.clone().multiplyScalar(0.96), [-E[0], -E[1], -E[2]]);
+      const deep = Math.min(1, d / 0.16), bkv = (front, inner) => { const f = [1 - deep * (1 - front), 0, 0], i = [1 - deep * (1 - inner), 0, 0]; return [f, f, i, i]; };
+      const R = REVEAL_SHADE;
+      if (!h.cutTop) this.quadB([dd, cc, back(cc), back(dd)], rc, [0, -1, 0], bkv(R.head[0], R.head[1]));   // head (soffit)
+      if (!h.cutBottom) this.quadB([a, b, back(b), back(a)], rc, [0, 1, 0], bkv(R.seat[0], R.seat[1]));     // seat
+      this.quadB([a, dd, back(dd), back(a)], rc, E, bkv(R.jamb[0], R.jamb[1]));                             // jambs
+      this.quadB([b, cc, back(cc), back(b)], rc, [-E[0], -E[1], -E[2]], bkv(R.jamb[0], R.jamb[1]));
     }
   }
 
@@ -206,17 +277,18 @@ class GeoBuilder {
     const memo = new Map();
     for (let i = 0; i < n; i += 3) {
       const x = P[i], z = P[i + 2], nx = N[i], nz = N[i + 2];
-      const key = Math.round(x * 2) + ',' + Math.round(z * 2) + ',' + Math.round(nx * 4) + ',' + Math.round(nz * 4);
+      const over = this.gnd[i / 3];   // a wall that starts on a neighbour's roof: that roof is its ground, and it is in the open
+      const key = Math.round(x * 2) + ',' + Math.round(z * 2) + ',' + Math.round(nx * 4) + ',' + Math.round(nz * 4) + (over === over ? ',' + Math.round(over * 4) : '');
       let v = memo.get(key);
       if (!v) {
-        const g = terrain.heightAt(x, z);
-        const enc = Math.abs(N[i + 1]) > 0.7 ? 0 : probe(x, z, nx, nz);   // roofs/terraces: open sky
+        const g = over === over ? over : terrain.heightAt(x, z);
+        const enc = Math.abs(N[i + 1]) > 0.7 ? 0 : over === over ? ROOF_JUNCTION_ENCLOSURE : probe(x, z, nx, nz);   // roofs/terraces: open sky
         v = [g, enc];
         memo.set(key, v);
       }
       ao[i] = v[0]; ao[i + 1] = Math.floor(Math.max(eaves, 0) * 10) + v[1] * 0.9; ao[i + 2] = this.lay[i / 3] + 1 + rand * 0.9;   // layer + house random (materials.js)
     }
-    return { pos: new Float32Array(P), nor: new Float32Array(N), col: new Float32Array(this.col), ao, wall: new Float32Array(this.wall) };
+    return { pos: new Float32Array(P), nor: new Float32Array(N), col: new Float32Array(this.col), ao, wall: new Float32Array(this.wall), bake: new Float32Array(this.bake) };
   }
 
   toGeometry() {
@@ -248,6 +320,9 @@ function mergeColoured(parts) {
   return out;
 }
 const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+// baked shade inside an opening's reveal, as "how open" [at the wall face, at the back] (see GeoBuilder.bake)
+const REVEAL_SHADE = CONFIG.building.ao.reveal;
+const ROOF_JUNCTION_ENCLOSURE = 0.12;   // a wall rising from a neighbour's roof is in the open: a short, light foot shade
 const box = (w, h, d, x = 0, y = 0, z = 0) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 /** mergeColoured, moved `dz` further out from the wall. */
 const shift = (dz, parts) => mergeColoured(parts).translate(0, 0, dz);
@@ -277,23 +352,31 @@ export class BuildingRenderer {
     // the ground, more in narrow lanes, and in a band under the eaves. Worked out per
     // pixel from three numbers per vertex, computed once when a house is built.
     const AO = CONFIG.building.ao;
-    this.aoUniforms = { uAO: { value: 1 } };
+    this.aoUniforms = { uAO: { value: 1 }, uAOOnly: { value: 0 } };   // uAOOnly = 1: draw the baked shade alone on white walls (a check: tools/shot.cjs --js)
     this.massMat.onBeforeCompile = (sh) => {
-      sh.uniforms.uAO = this.aoUniforms.uAO;
-      sh.vertexShader = 'attribute vec3 aoParams;\nvarying vec4 vAOp;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      sh.uniforms.uAO = this.aoUniforms.uAO; sh.uniforms.uAOOnly = this.aoUniforms.uAOOnly;
+      sh.vertexShader = 'attribute vec3 aoParams;\nattribute vec3 aBake;\nvarying vec4 vAOp;\nvarying vec3 vBake;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         {
+          vBake = aBake;
           float wy = (modelMatrix * vec4(position, 1.0)).y;
           // height above the ground, enclosure, height below the eaves, wall (1) or roof (0)
           vAOp = vec4(wy - aoParams.x, fract(aoParams.y) / 0.9, floor(aoParams.y) * 0.1 - wy, step(abs(normal.y), 0.5));
         }`);
-      sh.fragmentShader = 'varying vec4 vAOp;\nuniform float uAO;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      sh.fragmentShader = 'varying vec4 vAOp;\nvarying vec3 vBake;\nuniform float uAO, uAOOnly;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
         {
           float enc = clamp(vAOp.y, 0.0, 1.0);
           float k = 1.0 - smoothstep(0.0, mix(${AO.baseReach[0].toFixed(2)}, ${AO.baseReach[1].toFixed(2)}, enc), max(vAOp.x, 0.0));   // narrow lanes stay dark higher up
           float ao = 1.0 - uAO * k * mix(${AO.base[0].toFixed(2)}, ${AO.base[1].toFixed(2)}, enc);
           float e = vAOp.w * step(-0.05, vAOp.z) * (1.0 - smoothstep(0.0, ${AO.eavesReach.toFixed(2)}, vAOp.z));
           ao *= 1.0 - uAO * ${AO.eaves.toFixed(2)} * e;
-          diffuseColor.rgb *= ao;
+          // baked creases (v0.18): inside window reveals, under sills and balconies, inside corners.
+          // vBake.x runs 1 (open wall) … 0 (deep in the crease); the shade gathers close in.
+          float crease = 1.0 - clamp(vBake.x, 0.0, 1.0);
+          ao *= 1.0 - uAO * ${AO.crease.toFixed(2)} * crease;
+          // what light does reach a crease has bounced off the warm walls and paving round it:
+          // the shade is a little warm, never grey
+          vec3 aoCol = pow(vec3(ao), vec3(${(1 - AO.warmth).toFixed(3)}, 1.0, ${(1 + 1.4 * AO.warmth).toFixed(3)}));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8), uAOOnly) * aoCol;
         }`);
     };
     this.chunks = new Map();   // chunk key → { mass, parts: { kind: InstancedMesh }, sphere } (see rebuild)
@@ -903,7 +986,7 @@ export class BuildingRenderer {
    * style: corners cut off (chamfered) in the softer styles, or walls leaning in a touch
    * (q at the foot, qTop at the eaves). `holes[i]` = the openings in wall i (from corner i).
    */
-  _shell(gb, q, qTop, y0, y1, col, holes, from = null) {
+  _shell(gb, q, qTop, y0, y1, col, holes, from = null, feats = null) {
     const S = this.style;
     // where a neighbour hides the lower part of a wall (a party wall), the wall starts higher
     const start = (i) => {
@@ -924,7 +1007,11 @@ export class BuildingRenderer {
         const i = (k - 1) / 2, n = edgeNormal(q, i), uStart = dist(q[i], a), L = dist(a, c2), ys = start(i);
         if (ys >= y1 - 0.01) continue;
         const hs = holes[i].map((h) => ({ ...h, u0: h.u0 - uStart, u1: h.u1 - uStart }));
-        gb.wallHoles([a[0], ys, a[1]], [c2[0], ys, c2[1]], [a[0], y1, a[1]], [c2[0], y1, c2[1]], L, ys, y1, hs, col, [n[0], 0, n[1]], uStart, dist(q[i], q[(i + 1) % 4]));
+        // (patches of baked shade are given along the whole wall: move them to this face's own start)
+        const fs = feats ? feats[i].map((f) => ({ ...f, u0: f.u0 - uStart, u1: f.u1 - uStart, us: f.us.map((u) => u - uStart), f: (u, y) => f.f(u + uStart, y) })) : null;
+        gb.ground = ys > y0 + 0.3 ? ys : NaN;                 // it starts on a neighbour's roof
+        gb.wallHoles([a[0], ys, a[1]], [c2[0], ys, c2[1]], [a[0], y1, a[1]], [c2[0], y1, c2[1]], L, ys, y1, hs, col, [n[0], 0, n[1]], uStart, dist(q[i], q[(i + 1) % 4]), false, fs);
+        gb.ground = NaN;
       }
       return;
     }
@@ -939,7 +1026,9 @@ export class BuildingRenderer {
       let N = [ex[1] * ey[2] - ex[2] * ey[1], ex[2] * ey[0] - ex[0] * ey[2], ex[0] * ey[1] - ex[1] * ey[0]];
       const l = Math.hypot(...N); N = N.map((v) => v / l);
       if (N[0] * n[0] + N[2] * n[1] < 0) N = N.map((v) => -v);
-      gb.wallHoles(P00, P10, P01, P11, dist(A, Bq), ys, y1, holes[i], col, N);
+      gb.ground = ys > y0 + 0.3 ? ys : NaN;
+      gb.wallHoles(P00, P10, P01, P11, dist(A, Bq), ys, y1, holes[i], col, N, 0, dist(A, Bq), false, feats ? feats[i] : null);
+      gb.ground = NaN;
     }
   }
 
@@ -1022,7 +1111,7 @@ export class BuildingRenderer {
     const v = rng.weighted((fits.length ? fits : BAL.variants).map((x) => [x, x.weight]));
     const sx = Math.max(span, v.width * 0.85) / v.width, w = v.width * sx, d = v.depth;
     const ox = A[0] + e[0] * uC + n[0] * inset, oz = A[1] + e[1] * uC + n[1] * inset;
-    if (y - t.heightAt(ox + n[0] * d, oz + n[1] * d) < 2.2) return;   // never a balcony hanging over a lane at head height
+    if (y - t.heightAt(ox + n[0] * d, oz + n[1] * d) < 2.2) return null;   // never a balcony hanging over a lane at head height
     const solid = v.rail === 'solid';
     const railCol = solid ? b.facade.clone().offsetHSL(0, -0.04, 0.05) : new THREE.Color(rng.weighted(BAL.railColours));
     put('balSlab_' + v.name, ox, y, oz, rot, sx, 1, 1, WHITE);
@@ -1055,6 +1144,33 @@ export class BuildingRenderer {
         put('cloth', px, y + H + 0.01, pz, rot, 0.3 + rng() * 0.25, 0.55 + rng() * 0.35, 1, this._c.set(rng.pick(K.washColours)));
       }
     }
+    return { u0: uC - w / 2, u1: uC + w / 2, y: y - BAL.slab, depth: d };
+  }
+
+  /**
+   * Patches of baked shade on a wall (v0.18, see GeoBuilder.wallHoles): each darkens the wall
+   * where less sky reaches it. `open` runs from `from` (0 = deepest) at the crease up to 1.
+   *   _shadeBelow  under something that juts out (a sill, a balcony slab): fades over `reach`
+   *                metres down the wall and over `side` metres past each end
+   *   _shadeCorner in the corner where a neighbour's wall stands out in front of this one
+   */
+  _shadeBelow(u0, u1, yTop, reach, side, from, up = false) {
+    // (`up`: the same, but on the wall above the line: where a balcony slab meets the wall)
+    const a = u0 - side, b = u1 + side, y0 = up ? yTop : yTop - reach, y1 = up ? yTop + reach : yTop;
+    return { u0: a, u1: b, y0, y1, us: [a, u0, u1, b], ys: [y0, y1],
+      f: (u, y) => {
+        const ty = clamp((up ? y - yTop : yTop - y) / reach, 0, 1), tu = u < u0 ? clamp((u0 - u) / side, 0, 1) : u > u1 ? clamp((u - u1) / side, 0, 1) : 0;
+        return [from + (1 - from) * Math.max(ty, tu), 0, 0];
+      } };
+  }
+
+  _shadeCorner(atEnd, L, yBottom, yTop, reach, from) {
+    const u0 = atEnd ? L - reach : 0, u1 = atEnd ? L : reach, fade = 0.6;
+    return { u0, u1, y0: yBottom, y1: yTop, us: [atEnd ? L - reach : reach], ys: [yTop - fade, yTop],
+      f: (u, y) => {
+        const tu = clamp((atEnd ? L - u : u) / reach, 0, 1), ty = clamp((y - (yTop - fade)) / fade, 0, 1);
+        return [from + (1 - from) * Math.max(tu, ty), 0, 0];
+      } };
   }
 
   /**
@@ -1263,7 +1379,7 @@ export class BuildingRenderer {
     if (!ch[slot] || ch[capKey] < nv) {
       ch[capKey] = Math.ceil((nv * 1.3 + 900) / 9) * 9;   // whole triangles (3 vertices × 3 floats), with head-room
       const geo = new THREE.BufferGeometry();
-      for (const [name, size] of [['position', 3], ['normal', 3], ['color', 3], ['aoParams', 3], ['aWall', 3]]) {
+      for (const [name, size] of [['position', 3], ['normal', 3], ['color', 3], ['aoParams', 3], ['aWall', 3], ['aBake', 3]]) {
         geo.setAttribute(name, new THREE.BufferAttribute(new Float32Array(ch[capKey]), size).setUsage(THREE.DynamicDrawUsage));
       }
       if (ch[slot]) { ch[slot].geometry.dispose(); ch[slot].geometry = geo; }
@@ -1279,7 +1395,7 @@ export class BuildingRenderer {
     let o = 0;
     for (const b of list) {
       const c = pick(this.cache.get(b.id));
-      A.position.array.set(c.pos, o); A.normal.array.set(c.nor, o); A.color.array.set(c.col, o); A.aoParams.array.set(c.ao, o); A.aWall.array.set(c.wall, o);
+      A.position.array.set(c.pos, o); A.normal.array.set(c.nor, o); A.color.array.set(c.col, o); A.aoParams.array.set(c.ao, o); A.aWall.array.set(c.wall, o); A.aBake.array.set(c.bake, o);
       o += c.pos.length;
     }
     for (const a of Object.values(A)) { a.clearUpdateRanges(); a.addUpdateRange(0, nv); a.needsUpdate = true; }
@@ -1542,7 +1658,7 @@ export class BuildingRenderer {
     gb.layer = LAYERS.plaster;
     this._walls(gb, offsetPoly(qTop, cp * 0.45), b.top - cor, b.top - cor * 0.45, corniceCol.clone().multiplyScalar(0.97), true);
     this._walls(gb, offsetPoly(qTop, cp), b.top - cor * 0.45, b.top, corniceCol, true);
-    gb.face(offsetPoly(qTop, cp).map((p2) => [p2[0], b.top - cor * 0.45, p2[1]]), corniceCol.clone().multiplyScalar(0.85), [0, -1, 0]);
+    gb.face(offsetPoly(qTop, cp).map((p2) => [p2[0], b.top - cor * 0.45, p2[1]]), corniceCol.clone().multiplyScalar(0.7), [0, -1, 0]);   // its underside, in shade
 
     // --- roof, chimneys, roof terrace ---
     const ridge = this._roof(gb, b, ov, F.pitch, F);
@@ -1562,6 +1678,10 @@ export class BuildingRenderer {
 
     // --- facades: doors and windows along every wall (v0.13: openings cut into the walls) ---
     const holes = [[], [], [], []];                       // per wall: openings to cut, { u0, u1, y0, y1, depth, col }
+    const feats = [[], [], [], []];                       // per wall: patches of baked shade (under sills and balconies, inside corners)
+    const AOc = CONFIG.building.ao;
+    // inside corners: where a neighbour's wall stands out in front of the end of this wall
+    const nearHouses = this.growth.live.map((id) => this.growth.buildings[id]).filter((o) => o && o !== b && !o.arch && Math.abs(o.x - b.x) < 20 && Math.abs(o.z - b.z) < 20);
     const WIN = FACADES.windows;
     const plain = (y) => skins.every((k) => k.dado || y >= k.top);   // plaster here (or a dado that can be cut through)
     const lean = (y) => (this.style.chamfer ? 0 : -F.taper * clamp((y - base) / (b.top - base), 0, 1));
@@ -1574,6 +1694,12 @@ export class BuildingRenderer {
       const srot = Math.atan2(n[0], n[1]);
       const sgn = Math.sign(n[1] * e[0] - n[0] * e[1]) || 1;   // does the parts' local +x run along e (1) or against it (-1)?
       const W = { A, e, n, L, nx: n[0], nz: n[1], ex: e[0], ez: e[1], rot: srot, sgn, wall: i };
+      for (const atEnd of [false, true]) {
+        const cnr = atEnd ? Bc : A, s = atEnd ? 0.35 : -0.35, px = cnr[0] + e[0] * s + n[0] * 0.45, pz = cnr[1] + e[1] * s + n[1] * 0.45;
+        let top = -Infinity;
+        for (const o of nearHouses) if (pointInPoly([px, pz], o.corners)) top = Math.max(top, o.top);
+        if (top > base + 1 && L > 2 * AOc.cornerReach) feats[i].push(this._shadeCorner(atEnd, L, base, Math.min(top, b.top), AOc.cornerReach, AOc.cornerFrom));
+      }
       const cols = Math.max(1, Math.round(L / (front ? WIN.columns.front : WIN.columns.side)));
       const [hcx, hcz] = centroid(q), hbr = this.terrain.harbour;
       const harbourHouse = Math.hypot(hcx - hbr.x, hcz - hbr.z) < FACADES.groundFloors.harbourRadius;
@@ -1723,6 +1849,8 @@ export class BuildingRenderer {
           o.roomRight = nextEdge - (o.u + o.w / 2) >= lw + 0.03 + (next ? next.w / 2 + 0.03 : 0)   // leave the next window its own left leaf
             && !covered(A, e, n, o.u + o.w / 2, o.u + o.w / 2 + lw + 0.05, o.y0, o.y1, 0.25);
           holes[i].push({ u0: o.u - o.w / 2, u1: o.u + o.w / 2, y0: o.y0, y1: o.y1, depth: WIN.recess });
+          // the sill juts out: shade gathers on the wall under it
+          if (WIN.types[o.type].sill !== false) feats[i].push(this._shadeBelow(o.u - o.w / 2 - WIN.sill.overhang, o.u + o.w / 2 + WIN.sill.overhang, o.y0 - WIN.sill.height, AOc.sillReach, 0.1, AOc.sillFrom));
           b.openings.push({ kind: 'window', wall: i, u0: o.u - o.w / 2, u1: o.u + o.w / 2, y0: o.y0, y1: o.y1 });
           const foldRight = this._opening(put, b, rng, F, W, o);
           used = o.u + o.w / 2 + (foldRight ? lw : 0);
@@ -1733,7 +1861,9 @@ export class BuildingRenderer {
           let r2 = r;
           while (r2 + 1 < bal.length && bal[r2 + 1].u - bal[r2].u < 2.4) r2++;
           const u0 = bal[r].u - bal[r].w / 2 - 0.25, u1 = bal[r2].u + bal[r2].w / 2 + 0.25;
-          this._balcony(put, b, rng, F, W, (u0 + u1) / 2, u1 - u0, bal[r].y0 - 0.005, r2 > r || floorBal === 'all', lean(bal[r].y0));
+          const placed = this._balcony(put, b, rng, F, W, (u0 + u1) / 2, u1 - u0, bal[r].y0 - 0.005, r2 > r || floorBal === 'all', lean(bal[r].y0));
+          if (placed) feats[i].push(this._shadeBelow(placed.u0, placed.u1, placed.y, AOc.balconyReach, 0.3, AOc.balconyFrom),
+            this._shadeBelow(placed.u0, placed.u1, placed.y + BAL.slab, AOc.slabReach, 0.15, AOc.slabFrom, true));
           r = r2 + 1;
         }
         if (any) lowestFloor = false;
@@ -1759,7 +1889,7 @@ export class BuildingRenderer {
     if (b.arch) gb.face(q.map((p2) => [p2[0], yb, p2[1]]), b.facade, [0, -1, 0]);
     const party = b.arch ? null : this._partyTops(b, q);
     b.partyTops = party;
-    this._shell(gb, q, qTop, yb, b.top, paint, holes, party);
+    this._shell(gb, q, qTop, yb, b.top, paint, holes, party, feats);
     this._bands(gb, q, bands, holes, party);
 
     // --- pack the detail instances as ready-made matrices ---
@@ -1782,7 +1912,7 @@ export class BuildingRenderer {
     }
     const g = gb.arrays((x, z, nx, nz) => this._enclosure(b, x, z, nx, nz), t, (b.seed % 997) / 997, b.top - this.style.cornice);
     const rnd = (b.seed % 997) / 997;
-    return { ver: b.ver, pos: g.pos, nor: g.nor, col: g.col, ao: g.ao, wall: g.wall, parts, det: gbA.arraysPlain(rnd), detN: gbN.arraysPlain(rnd), counts };
+    return { ver: b.ver, pos: g.pos, nor: g.nor, col: g.col, ao: g.ao, wall: g.wall, bake: g.bake, parts, det: gbA.arraysPlain(rnd), detN: gbN.arraysPlain(rnd), counts };
   }
 
   /** A part's triangles (non-indexed positions and vertex colours), made once. */

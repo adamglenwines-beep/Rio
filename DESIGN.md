@@ -160,8 +160,13 @@ A **Manor Lords-style hybrid**:
   `CONFIG.graphics.tone`. **Town-wide target for warm walls (Postcard view): shade ~37–46%,
   typical ~60%, brightest ~76% lightness**; check with `tools/measure_walls.cjs --scene town`
   (the game) and `tools/measure_image.py` (any picture, including the paint-overs).
-- **Ambient occlusion is baked**, on every quality level: wall feet (deeper in narrow lanes),
-  under the eaves, a soft ring round every window and under its sill. No screen-space AO.
+- **Ambient occlusion is baked**, on every quality level (v0.12; v0.18 added the small-scale
+  part): wall feet (deeper and higher in narrow lanes), under the eaves, inside window and door
+  reveals, under sills and balconies, in the corners where a neighbour's wall juts out, and where
+  a wall rises from a neighbour's roof. The wall mesh carries "how open to the sky" per corner
+  point (`aBake`), worked out once when a house is built; the shade is slightly warm. No
+  screen-space AO. Falloffs are longer than physically exact, because the game is seen from
+  above, where a balcony hides the wall right under it.
 - **Depth**: the camera's near plane moves out with distance; every wall-mounted part stands
   at least 3 cm clear of its wall; houses never intersect; covered walls get no openings.
 

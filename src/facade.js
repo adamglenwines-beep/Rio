@@ -18,6 +18,8 @@ import { FACADES } from './data.js';
 import { CONFIG } from './config.js';
 
 const WIN = FACADES.windows, SH = FACADES.shutters;
+// Baked shade on parts (v0.18): undersides that see no sky, consoles under a slab, the frame at the back of a recess.
+const SHADE = CONFIG.building.ao.parts;
 export const GAP = CONFIG.building.facadeGap;
 
 /** Accumulate boxes and quads into one vertex-coloured, non-indexed geometry. */
@@ -39,6 +41,15 @@ class Parts {
     const col = new THREE.Color(hex), P = g.attributes.position, N = g.attributes.normal;
     for (let i = 0; i < P.count; i++) { this.pos.push(P.getX(i), P.getY(i), P.getZ(i)); this.nor.push(N.getX(i), N.getY(i), N.getZ(i)); this.col.push(col.r, col.g, col.b); }
   }
+  /** Baked shade: darken every face added since vertex `from` that looks down (undersides) by `k`, the rest by `kSide`. */
+  shadeUnder(from, k, kSide = 1) {
+    for (let i = from * 3; i < this.col.length; i += 3) {
+      const m = this.nor[i + 1] < -0.9 ? k : kSide;
+      this.col[i] *= m; this.col[i + 1] *= m; this.col[i + 2] *= m;
+    }
+    return this;
+  }
+  get count() { return this.pos.length / 3; }
   /** Mirror x (a right-hand leaf from a left-hand one), keeping faces outward. */
   mirrorX() {
     const P = this.pos, N = this.nor, C = this.col;
@@ -65,17 +76,20 @@ export const WINDOW_TYPES = Object.keys(WIN.types).filter((k) => k !== 'cellar')
 export function frameGeometry(type) {
   const T = WIN.types[type], F = WIN.frame, S = WIN.sill, Li = WIN.lintel, R = WIN.recess;
   const w = T.w, h = T.h, b = F.bar, zb = -R, zf = -R + F.depth, p = new Parts();
+  const inRecess = '#' + new THREE.Color(F.colour).multiplyScalar(SHADE.recess).getHexString();   // the frame sits back in the wall's shade
   // the frame ring fills the back of the opening edge to edge (so it can never be seen through)
-  p.box(-w / 2, h / 2 - b, zb, w / 2, h / 2, zf, F.colour);
-  p.box(-w / 2, -h / 2, zb, w / 2, -h / 2 + b, zf, F.colour);
-  p.box(-w / 2, -h / 2 + b, zb, -w / 2 + b, h / 2 - b, zf, F.colour);
-  p.box(w / 2 - b, -h / 2 + b, zb, w / 2, h / 2 - b, zf, F.colour);
+  p.box(-w / 2, h / 2 - b, zb, w / 2, h / 2, zf, inRecess);
+  p.box(-w / 2, -h / 2, zb, w / 2, -h / 2 + b, zf, inRecess);
+  p.box(-w / 2, -h / 2 + b, zb, -w / 2 + b, h / 2 - b, zf, inRecess);
+  p.box(w / 2 - b, -h / 2 + b, zb, w / 2, h / 2 - b, zf, inRecess);
   // glazing bars: a mullion between the two casements, and a transom light on tall windows
   const m = F.mullion;
-  if (w > 0.8) p.box(-m / 2, -h / 2 + b, zf - 0.03, m / 2, h / 2 - b, zf + 0.012, F.colour);
-  if (T.transom) p.box(-w / 2 + b, h / 2 - 0.45 - m / 2, zf - 0.03, w / 2 - b, h / 2 - 0.45 + m / 2, zf + 0.012, F.colour);
+  if (w > 0.8) p.box(-m / 2, -h / 2 + b, zf - 0.03, m / 2, h / 2 - b, zf + 0.012, inRecess);
+  if (T.transom) p.box(-w / 2 + b, h / 2 - 0.45 - m / 2, zf - 0.03, w / 2 - b, h / 2 - 0.45 + m / 2, zf + 0.012, inRecess);
   // the stone sill: from the frame out past the wall face, a little wider than the opening
+  const s0 = p.count;
   if (T.sill !== false) p.box(-w / 2 - S.overhang, -h / 2 - S.height, zb, w / 2 + S.overhang, -h / 2, S.proud, S.colour);
+  p.shadeUnder(s0, SHADE.under);
   // the lintel: a pale band over the opening, standing just clear of the wall
   p.box(-w / 2 - Li.overhang, h / 2, GAP - 0.01, w / 2 + Li.overhang, h / 2 + Li.height, GAP + 0.03, Li.colour);
   return p.geometry();
@@ -199,12 +213,14 @@ export function balconyGeometries(w, d, kind) {
   const stone = '#e6dfd2', under = '#cfc7b8';
   s.box(-w / 2, -t, 0, w / 2, 0, d, stone);
   s.box(-w / 2 - 0.03, -t - 0.02, d - 0.05, w / 2 + 0.03, -t + 0.04, d + 0.03, under);   // a moulded front edge
-  const nb = w > 2.2 ? 3 : 2;
+  s.shadeUnder(0, SHADE.under);                                          // baked shade: the slab's underside sees no sky
+  const nb = w > 2.2 ? 3 : 2, c0 = s.count;
   for (let k = 0; k < nb; k++) {                                         // consoles under the slab, tapering to the wall
     const x = nb === 2 ? (k ? 1 : -1) * (w / 2 - 0.22) : (k - 1) * (w / 2 - 0.25);
     s.box(x - 0.06, -t - 0.16, 0, x + 0.06, -t, d * 0.75, under);
     s.box(x - 0.06, -t - 0.34, 0, x + 0.06, -t - 0.16, d * 0.35, under);
   }
+  s.shadeUnder(c0, SHADE.under, SHADE.console);                          // …and the consoles sit in its shade
   const zf = d - 0.06, white = '#ffffff';
   if (kind === 'solid') {
     r.box(-w / 2, 0, zf - 0.04, w / 2, H * 0.95, zf + 0.04, white);
@@ -287,7 +303,7 @@ export function awningGeometry(depth, drop) {
   const p = new Parts(), c = '#ffffff';
   const slope = 0.42, zf = depth, yf = -depth * Math.tan(slope);
   p.quad([-0.5, 0, GAP], [-0.5, yf, zf], [0.5, yf, zf], [0.5, 0, GAP], c);           // canopy, top
-  p.quad([-0.5, 0, GAP], [0.5, 0, GAP], [0.5, yf, zf], [-0.5, yf, zf], '#d9d9d9');   // canopy, underside
+  p.quad([-0.5, 0, GAP], [0.5, 0, GAP], [0.5, yf, zf], [-0.5, yf, zf], '#b4b4b4');   // canopy, underside (in its own shade)
   p.quad([-0.5, yf - drop, zf], [0.5, yf - drop, zf], [0.5, yf, zf], [-0.5, yf, zf], c);   // valance
   p.quad([-0.5, yf - drop, zf], [-0.5, yf, zf], [0.5, yf, zf], [0.5, yf - drop, zf], '#d9d9d9');
   for (const x of [-0.5, 0.5]) p.quad([x, 0, GAP], [x, yf, zf], [x, yf - 0.02, zf], [x, -0.02, GAP], '#bdbdbd');   // side arms (thin)

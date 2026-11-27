@@ -183,11 +183,22 @@ export const CONFIG = {
     facadeGap: 0.03,
     // Baked ambient occlusion on the walls (darkening where less sky reaches):
     ao: {
-      base: [0.22, 0.5],       // at the foot of a wall: in the open … in a narrow lane
-      baseReach: [1.8, 7.0],   // how high up that reaches (m): in the open … in a narrow lane
-      eaves: 0.3,              // under the eaves / cornice
-      eavesReach: 1.1,         // over this many metres down from the cornice
-      window: 0.32,            // a soft dark ring round each window frame and under its sill
+      base: [0.3, 0.55],       // at the foot of a wall: in the open … in a narrow lane
+      baseReach: [3.0, 8.0],   // how high up that reaches (m): in the open … in a narrow lane
+      eaves: 0.4,              // under the eaves / cornice
+      eavesReach: 1.4,         // over this many metres down from the cornice
+      // Baked creases (v0.18): the wall mesh carries, per vertex, how open each spot is (1 open …
+      // 0 deep in a crease); `crease` is how much the deepest crease darkens. Each kind of crease
+      // starts at its own "from" (0 = as dark as it gets) and fades to open wall over its reach (m).
+      crease: 0.62,
+      warmth: 0.12,            // how warm the baked shade is (0 = grey): light in a crease has bounced off warm walls
+      reveal: { head: [0.3, 0.0], jamb: [0.5, 0.08], seat: [0.75, 0.3] },   // inside an opening: [at the wall face, at the back]
+      sillFrom: 0.25, sillReach: 0.6,         // on the wall under a window sill
+      balconyFrom: 0.1, balconyReach: 2.2,    // under a balcony slab (seen from above, the slab hides the first half metre)
+      slabFrom: 0.45, slabReach: 0.5,         // on the wall just above a balcony slab, where the two meet
+      cornerFrom: 0.1, cornerReach: 1.6,      // in the corner where a neighbour's wall stands out in front
+      // …and baked into the parts' own colours: undersides (balcony slabs, sills), consoles under a slab, frames in a recess
+      parts: { under: 0.6, console: 0.82, recess: 0.84 },
     },
     streakChance: 0.6,     // share of windows with grime streaks running down from the sill
     streakStrength: 0.2,   // how much those streaks darken the wall (0–1)

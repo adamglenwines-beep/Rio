@@ -1,7 +1,7 @@
 // Screenshot tool: opens the game headless, lays out and grows the demo town,
 // then saves one image per named view.
 //
-//   node tools/shot.cjs --out docs/progress/phase-b --tag before \
+//   node tools/shot.cjs --out docs/progress/phase-b --tag before [--js "code run in the page first"] \
 //        --views postcard,aerial,cliff --preset high --time midday --grow 700
 //
 // Views are camera positions relative to the harbour point (see VIEWS below);
@@ -60,6 +60,8 @@ function parseArgs() {
     return { houses: game.growth.live.length, version: document.getElementById('version').textContent };
   }, { grow: +(o.grow || 700), time: isNaN(+o.time) ? (o.time || 'midday') : +o.time, noDemo: !!o.nodemo });
   console.log(`loaded ${info.version}: ${info.houses} houses (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
+  // --js "code": run in the page before the pictures are taken (e.g. to switch a debug view on)
+  if (o.js) await page.evaluate(async (code) => { const f = new Function('game', 'return (async () => {' + code + '})()'); await f(game); }, o.js);
 
   for (const name of views) {
     let v = VIEWS[name], label = name;

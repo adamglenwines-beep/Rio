@@ -20,7 +20,7 @@ once at the very end. After each stage: commit, merge to `main`, publish, screen
 |---|---|---|
 | 1. Sunlight | `v0.16 · Sunlight` | **done, published** |
 | 2. Palette and shutter colour | `v0.17 · Palette` | **done, published** |
-| 3. Small-scale shading | `v0.18` | to do |
+| 3. Small-scale shading | `v0.18 · Shading` | **done, published** |
 | 4. Windows, shutters and doors | `v0.19` | to do |
 | 5. Plaster weathering | `v0.20` | to do |
 | 6. Break the procedural rhythm | `v0.21` | to do |
@@ -179,6 +179,58 @@ never share a colour (unit test, unchanged) and rarely a family.
 triangles as v0.16). Not re-profiled.
 
 Pictures: `docs/progress/v0.17/`.
+
+### Stage 3 · Small-scale shading (v0.18) — done
+
+All of it is **baked when a house is built** (no screen-space effect, nothing per frame), so it
+is the same on Low, Medium and High.
+
+**How it works.** The wall mesh now carries three extra numbers per corner point (`aBake`;
+`GeoBuilder.bake` in `src/buildings.js`). The first is "how open to the sky is this spot": 1 on
+open wall, 0 deep in a crease. The wall is cut into a few extra pieces round each crease
+(`GeoBuilder.wallHoles`, "patches") so that number can change across it, and the walls' shader
+darkens by it. The other two numbers are spare, for Stage 5's weathering.
+
+| Where | How |
+|---|---|
+| **Inside window and door reveals** | the four inner faces of every opening: darkest under the head and at the back, lighter on the seat |
+| **Under sills** | a patch on the wall below each stone sill, fading over 0.6 m |
+| **Under balconies** | a patch below each slab fading over 2.2 m (from the game's high cameras the slab hides the first half metre, so it has to reach further than a real one); a thin one on the wall just above the slab; slab undersides and consoles darkened in their own colours |
+| **Under the eaves** | the existing band, stronger and longer (0.3 over 1.1 m → 0.4 over 1.4 m); cornice underside darker |
+| **Wall bases** | the existing foot shade, reaching higher: in the open 0.22 over 1.8 m → 0.3 over 3 m; in a narrow lane 0.5 over 7 m → 0.55 over 8 m |
+| **Where a wall rises from a neighbour's roof** | that wall now treats the roof as its ground, so it gets a foot shade (and damp) there instead of none |
+| **Inside corners where houses meet** | where a neighbour's wall stands out in front of the end of a wall: a vertical patch 1.6 m wide, up to the neighbour's top |
+| **Frames in the recess, awning undersides** | darkened in their own colours |
+
+The shade is slightly **warm, not grey** (`ao.warmth`): what light reaches a crease has bounced
+off warm walls and paving. All numbers: `CONFIG.building.ao`.
+
+**A check view** (kept): `node tools/shot.cjs --js "game.growth.renderer.aoUniforms.uAOOnly.value = 1"`
+draws the houses white with only the baked shade (`docs/progress/v0.18/shade_only_*.jpg`).
+
+**What I learned on the way.** The first version (creases only, tight falloff) was correct but
+changed the Postcard picture by a few percent: from above, what lies *under* a balcony or sill
+is mostly hidden by it. What reads from the Postcard and Overview cameras is the broad shade:
+wall feet, lanes, corners, roof junctions, and long soft falloffs. So the falloffs are longer
+and straighter than a physically exact occlusion would be.
+
+**Measured.** Postcard picture, like the paint-overs: 32.5 / 59.8 / 79.6 → **31.0 / 58.6 / 79.4**
+(paint-overs 29–31 / 56–61 / 77–80): the shade got a little deeper, as the targets' is; sunlit
+walls unchanged.
+
+**Frame rate (High, Postcard, midday, software renderer):** 4.67 s a frame against v0.15's
+4.33 s (+8%, inside the run-to-run noise of ±10–20%); **0.61 M → 0.64 M triangles** (the extra
+cuts in the walls: +30,000), 122 draw calls (unchanged). No new textures, no new passes.
+Expect the same fps as v0.15, or a frame or two less.
+
+**Not done / limits.**
+- No shade on the *ground* where walls meet it (terrain is out of scope).
+- A house's side wall that is only partly covered by a set-back neighbour gets no corner patch
+  on that side (only the wall that is overlooked does).
+- The patches are straight-edged; right at a patch's corner the falloff follows the triangle
+  split. Not visible from the Postcard or Overview; faintly from very close.
+
+Pictures: `docs/progress/v0.18/`.
 
 ### Decisions that hold for the whole run
 - **CC0 models (windows, shutters, doors, railings): looked, not used.** Poly Haven is reachable
