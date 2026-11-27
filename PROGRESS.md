@@ -4,7 +4,117 @@ So a new session can pick up with "Read PROGRESS.md and continue". Read `CLAUDE.
 `DESIGN.md` first. Decisions made without the user (they asked not to be asked) are
 recorded here with the reason.
 
-## v0.15 · Lot sizes (short data-only run)
+## The current run: v0.16 → v0.21 · Buildings that look built and sunlit (unattended overnight run)
+
+Adam's brief (27 Nov 2026, he is asleep: no questions, decisions recorded here with reasons):
+make the buildings look individually built and sun-lit rather than generated, **judged from the
+Postcard and Overview cameras**. Quality of existing detail over quantity: no new decorative
+objects. Target: `Rio-reference/art-target-v2/` (paint-overs `target-v2-1…5`,
+`single-building-target-vs-game.png`). Out of scope: roofs, lane widths, lot/block layout,
+terrain, cliffs, vegetation, water. Frame rate is not a goal (report it on High after each
+stage); prefer baked or texture-based solutions. Unit tests after every stage; the browser suite
+once at the very end. After each stage: commit, merge to `main`, publish, screenshots in
+`docs/progress/<version>/`, then carry straight on. Dev branch: `claude/adoring-allen-h9ie8v`.
+
+| Stage | Version | State |
+|---|---|---|
+| 1. Sunlight | `v0.16 · Sunlight` | **done, published** |
+| 2. Palette and shutter colour | `v0.17` | to do |
+| 3. Small-scale shading | `v0.18` | to do |
+| 4. Windows, shutters and doors | `v0.19` | to do |
+| 5. Plaster weathering | `v0.20` | to do |
+| 6. Break the procedural rhythm | `v0.21` | to do |
+| Wrap-up: browser suite, final sheets in `docs/progress/final/`, summary | | to do |
+
+**To resume:** read this section, look at the table, and carry on with the first stage that is
+not "done". Each stage's notes below say what was changed and what was measured.
+
+### How things are measured in this run
+- `python3 tools/measure_image.py <picture> x0,y0,x1,y1` (new): lightness of warm-coloured pixels
+  in a crop of a picture. It works the same on a game screenshot and on a paint-over, so the two
+  are compared like for like. Town crop of the Postcard screenshot: `0.22,0.22,0.8,0.74`; of
+  the paint-overs `target-v2-1…4`: `0.12,0.02,0.85,0.85`. **The paint-overs measure: shade (10th
+  percentile) 29–31%, typical (median) 56–61%, brightest (90th) 77–80%.** v0.15 measured this
+  way: 36.5 / 67.5 / 87.6 (the brief's own figures: 32–47 / 68–72 / 85–91).
+- `node tools/measure_walls.cjs --scene town` measures the game itself more strictly (wall
+  pixels only, by a mask); it now also prints `all` = every warm wall pixel (10th / 50th / 90th
+  percentile = shade / typical / brightest).
+- Screenshots: `node tools/shot.cjs --views postcard,aerial,single --clean` (Postcard, Overview
+  and a facade close-up; High, Hand-painted, Neutral, Midday, 1600×900). The v0.15 set is in
+  `docs/progress/base-v0.15/`.
+- This sandbox has no graphics card (it renders in software, seconds per frame), so "fps on
+  High" is reported as the frame time relative to v0.15 measured back to back
+  (`tools/profile.cjs`), plus triangles and draw calls. Please read the real fps in ⚙️ Settings.
+
+### Stage 1 · Sunlight (v0.16) — done
+
+**What was wrong.** The tone curve (Khronos Neutral) leaves everything below 76% of full
+brightness alone, squeezes only the very top, and fades what it squeezes toward white. The sun
+was strong enough to push sunlit walls into that zone, so they came out pale and chalky.
+
+**What changed** (light only; no paint colour was touched):
+1. **A new tone curve** (`src/gfx.js`, numbers in `CONFIG.graphics.tone`). It starts bending
+   earlier (at 65% grey instead of 88%) and keeps each colour's own hue and saturation as it
+   brightens (the brightest colour channel is eased toward a ceiling, the other two follow in
+   proportion), so a sunlit yellow wall stays yellow instead of turning cream. Only things far
+   brighter than a wall (the sun, glints, lit windows) still burn out to white. Shade lies below
+   the bend, so it is drawn exactly as before. It replaces the body of three.js's Neutral curve,
+   which both the renderer (Low) and the output pass (Medium, High) call, so all three quality
+   levels get the same picture.
+2. **The sun is about a fifth weaker**: 5.4 → 4.4 at midday, 5.35 → 4.4 at golden hour
+   (`KEYS` in `gfx.js`). Sky fill and exposure (1.2) are unchanged: that is what keeps the shade
+   where it was.
+
+**Measured** (`tools/measure_walls.cjs --scene town`, Postcard view, warm wall pixels only;
+shade / typical / brightest = 10th / 50th / 90th percentile of lightness; JSON files in
+`docs/progress/v0.16/`):
+
+| | v0.15 | v0.16 | target (brief) |
+|---|---|---|---|
+| High, Neutral, midday | 38 / 68 / 88 | **38 / 61 / 81** | 37–46 / ~60 / ~76 |
+| Medium, Neutral, midday | (sun 73, shade 41) | 38 / 60 / 81 | |
+| Low, Neutral, midday | (sun 73, shade 41) | 38 / 60 / 81 | |
+| High, Warm, midday | 39 / 66 / 83 | 38 / 59 / 77 | |
+| High, Neutral, golden hour | (sun 70, shade 38) | 36 / 58 / 75 | |
+| Sunlit walls only, High midday: 10th / 50th / 90th | 60 / 73 / 88 | 53 / 62 / 79 | |
+| Shaded walls only, High midday: 10th | 32.4 | 34.3 | |
+| Same picture measured like the paint-overs (`measure_image.py`) | 36.5 / 67.5 / 87.6 | **35.5 / 60.8 / 80.6** | paint-overs: 29–31 / 56–61 / 77–80 |
+| Single ochre wall (#E2BC78, six-house scene): sun / shade | #EDC99D 75.5% / #9A7B5B 47% | #D8B282 67.5% / #A28363 48% | #F3C17B 72% / #9E794D 46% |
+
+So typical is on target and shade is where it was. **Brightest is 81%, not 76%**: what is left up
+there is the pale paints (cream, limewash, pale rose) in full sun, which cannot be brought lower
+by light without dulling every other wall; the palette stage deals with them. Measured the way
+the paint-overs measure, the brightest 10% is 80.6% against their own 77–80%.
+**The single ochre test wall is now a little under its target in sun** (67.5% against 72%): the
+town-wide figures and that one wall cannot both be hit with the v0.15 paints. I chose the
+town-wide figures, because the brief's complaint was about the whole view.
+
+**Tried:** the new curve alone, sun unchanged, ceiling at 100%: 38 / 64 / 85 (not enough). Bend
+at 65% grey with a 93% ceiling, sun unchanged: 38 / 62 / 81. Ceiling 86% instead of 93%: 38 / 60 /
+80, but the single wall dropped to 66.5% and whites (boats, foam) went grey, so the ceiling stays
+at 93%.
+
+**Frame rate (High, Postcard, midday, software renderer):** v0.15 4.33 s a frame, v0.16 4.44 s
+(+2.5%, inside the ±10–20% run-to-run noise); 122 draw calls, 0.61 M triangles, both unchanged.
+The new curve is a few instructions per pixel. **Expect the same fps as v0.15.**
+
+**Side effects, since light is shared by everything:** ground, rock, sea and sky are lit by the
+same weaker sun, so the whole picture is slightly less bright and less bleached (the sea a touch
+deeper). Nothing in terrain, water or sky code was edited.
+
+Pictures: `docs/progress/v0.16/` (`postcard_`, `overview_`, `facade_before_after.jpg`).
+
+### Decisions that hold for the whole run
+- **CC0 models (windows, shutters, doors, railings): looked, not used.** Poly Haven is reachable
+  but has only industrial roller-shutter windows, a castle door and modern apartment/factory
+  facade kits; kenney.nl is blocked (HTTP 403) from this sandbox; Quaternius has no Ligurian
+  louvred shutters or balconies. None is clearly better than the code-made parts, which already
+  match the houses' sizes and can vary per window, so parts stay code-made. Nothing new in
+  `ASSETS.md`.
+- Reference photos stay in `Rio-reference`; only the game's own screenshots and Adam's
+  paint-overs (in the final comparison sheets he asked for) go into `docs/progress/`.
+
+## Earlier run: v0.15 · Lot sizes (short data-only run)
 
 Brief: some lots were too big and became blocky houses, breaking the rhythm of narrow towers.
 Only `data/blocks.json` changed (no planner code, roofs, facades, lighting or terrain):
@@ -28,7 +138,7 @@ crossing lane; a wedge grows its back corners into leftover space). Lot width an
 don't limit those. **"Split any lot over that size" needs a small planner change**: cut corner or
 wedge lots over ~35 m² into two. I didn't make it, because this run was limited to data.
 
-## The current run: v0.14 · Footprints (how houses fill the land between paths)
+## Earlier run: v0.14 · Footprints (how houses fill the land between paths)
 
 Adam's brief: blocks enclosed by lanes should be nearly solid building (continuous fronts along
 every lane, shared side walls, interiors filled, at most a small courtyard), dense near the

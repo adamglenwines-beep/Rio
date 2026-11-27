@@ -328,6 +328,11 @@ export const CONFIG = {
     hazeDensity: 1.25,        // how thick it gets at hazeFar
     hazeFalloff: 45,         // it thins with height over this many metres…
     hazeHighFactor: 0.35,    // …to this fraction on the hilltops
+    // The tone curve (gfx.js): how scene brightness becomes screen brightness. Up to `knee`
+    // (linear light; 0.38 shows as 65% grey) nothing changes; above it the brightest colour
+    // channel eases toward `top` and the colour keeps its hue. Things brighter than `whiteFrom`
+    // start to burn out to white, fully by `whiteFull` (the sun, glints, lit windows).
+    tone: { knee: 0.38, top: 0.93, whiteFrom: 1.6, whiteFull: 6.0 },
     bloomThreshold: 2.2,     // brightness (before tone mapping) above which things glow: the sun, glints, lit windows
   },
 

@@ -68,6 +68,36 @@ import { CONFIG } from './config.js';
   #endif`;
 }
 
+// ---- tone curve (v0.16) ---------------------------------------------------------------
+// Replaces the body of three.js's Khronos Neutral curve (the renderer and the output pass both
+// call it, so every quality level gets the same picture). Neutral left everything under 76%
+// of full brightness alone, squeezed only the very top, and faded squeezed colours toward
+// white: sunlit walls washed out (lightness 85–91%, where the art targets top out at ~76%).
+// This curve bends earlier (`knee`) and keeps a colour's own hue and saturation as it
+// brightens: the brightest channel is eased toward `top`, the others follow in proportion.
+// So a sunlit yellow wall stays yellow instead of turning cream. Only things far brighter
+// than a sunlit wall (the sun, glints, lit windows) still burn out to white. Shade is below
+// the knee, so it is drawn exactly as before.
+{
+  const T = CONFIG.graphics.tone, f = (v) => Number(v).toFixed(4);
+  const before = THREE.ShaderChunk.tonemapping_pars_fragment;
+  THREE.ShaderChunk.tonemapping_pars_fragment = before.replace(/vec3 NeutralToneMapping\( vec3 color \) \{[\s\S]*?\n\}/, `vec3 NeutralToneMapping( vec3 color ) {
+    color *= toneMappingExposure;
+    float lo = min( color.r, min( color.g, color.b ) );
+    color -= lo < 0.08 ? lo - 6.25 * lo * lo : 0.04;                 // (Neutral's toe, unchanged: deep shade keeps its colour)
+    float peak = max( color.r, max( color.g, color.b ) );
+    const float knee = ${f(T.knee)}, top = ${f(T.top)};
+    if ( peak <= knee ) return color;
+    float d = top - knee;
+    float newPeak = knee + d * ( 1.0 - exp( - ( peak - knee ) / d ) );  // slope 1 at the knee, levelling off at top
+    float burn = smoothstep( ${f(T.whiteFrom)}, ${f(T.whiteFull)}, peak );     // far brighter than a sunlit wall
+    newPeak += ( 1.0 - top ) * burn;
+    color *= newPeak / peak;                                            // same hue, same saturation
+    return mix( color, vec3( newPeak ), burn );
+  }`);
+  if (THREE.ShaderChunk.tonemapping_pars_fragment === before) console.error('tone curve: three.js NeutralToneMapping not found (version changed?)');
+}
+
 // ---- quality presets ------------------------------------------------------------
 export const PRESETS = {
   low:    { label: 'Low',    pixelRatio: 1.0, post: false, msaa: 0, bloom: 0,   shadowSize: 1024, shadowSoft: false, ssao: false, reflection: 0,    haze: true, tex: 512, aniso: 1, macro: 0 },
@@ -90,11 +120,14 @@ const LADDER = [
 // Sun and sky strengths were calibrated on the six-house test scene (index.html?scene=six) so an
 // ochre wall (#E2BC78) shows about #EDC183 in sun and #A07A50 in shade at midday, against the art
 // target's #F3C17B / #9E794D (Rio-reference art-target-v2). The sky fill is cool, the sun warm.
+// v0.16: the sun is about a fifth weaker (5.4 → 4.4) and the tone curve (above) holds sunlit
+// walls back, so across the town warm walls run about 38% (shade) / 60% (typical) / 80%
+// (brightest) instead of 38 / 68 / 88; sky fill and exposure, and so the shade, are unchanged.
 export const TIMES = { midday: 12, golden: 18.6, dusk: 20.4, night: 23 };
 export const KEYS = [
-  { h: 12, elev: 42, az: -50, sun: '#fff4e2', sunI: 5.4, sky: '#dceaff', ground: '#9a8a70', hemiI: 2.0,
+  { h: 12, elev: 42, az: -50, sun: '#fff4e2', sunI: 4.4, sky: '#dceaff', ground: '#9a8a70', hemiI: 2.0,
     top: '#2a7fd0', hor: '#bcdcf4', glow: '#fff6e6', glowI: 0.6, fog: '#bcd6ec', exp: 1.2, lit: 0 },
-  { h: 18.6, elev: 14, az: -42, sun: '#ffd4a6', sunI: 5.35, sky: '#d6e0f0', ground: '#94806a', hemiI: 2.15,
+  { h: 18.6, elev: 14, az: -42, sun: '#ffd4a6', sunI: 4.4, sky: '#d6e0f0', ground: '#94806a', hemiI: 2.15,
     top: '#4f8fd6', hor: '#f6dcc6', glow: '#ffc79c', glowI: 2.0, fog: '#e4dad2', exp: 1.12, lit: 0.06 },
   { h: 20.4, elev: 7, az: -75, sun: '#ff9a7a', sunI: 0.35, sky: '#8a7fb8', ground: '#3d3550', hemiI: 0.95,
     top: '#1e2f5e', hor: '#e48a6f', glow: '#ff8a60', glowI: 1.4, fog: '#8f6f86', exp: 1.3, lit: 0.35 },

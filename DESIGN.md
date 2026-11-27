@@ -151,7 +151,12 @@ A **Manor Lords-style hybrid**:
 - **Target spread**: sunlit warm walls ~72% lightness, shaded ~46% (the art target's yellow
   wall #F3C17B / #9E794D); checked with `tools/measure_walls.cjs` on the six-house scene
   (`index.html?scene=six`), and the same on Low, Medium and High.
-- **Tone mapping: Khronos PBR Neutral**, exposure ~1.2.
+- **Tone curve (v0.16): the game's own**, exposure ~1.2. It bends earlier than Khronos Neutral
+  (which it replaces) and keeps a colour's hue and saturation as it brightens, so sunlit walls
+  don't wash out to cream; only the sun, glints and lit windows burn to white. Numbers:
+  `CONFIG.graphics.tone`. **Town-wide target for warm walls (Postcard view): shade ~37–46%,
+  typical ~60%, brightest ~76% lightness**; check with `tools/measure_walls.cjs --scene town`
+  (the game) and `tools/measure_image.py` (any picture, including the paint-overs).
 - **Ambient occlusion is baked**, on every quality level: wall feet (deeper in narrow lanes),
   under the eaves, a soft ring round every window and under its sill. No screen-space AO.
 - **Depth**: the camera's near plane moves out with distance; every wall-mounted part stands

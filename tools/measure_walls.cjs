@@ -11,6 +11,8 @@
 // > 0.2): the 10th / 50th / 90th percentiles in sun and in shade, and the median
 // colour of each. The art target: sun ~72% (#F3C17B), shade ~46% (#9E794D),
 // hue ~35°; across the paint-overs warm walls run ~37% (shade) to ~76% (sun).
+// `all` = every warm wall pixel: its p10 / p50 / p90 are the "shade / typical / brightest"
+// figures (targets, v0.16 brief: 37–46 / ~60 / ~76).
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
@@ -29,7 +31,7 @@ function parseArgs() {
   const times = (o.times || 'midday,golden').split(',');
   const [W, H] = (o.size || '960x600').split('x').map(Number);
   const query = scene === 'six' ? `index.html?scene=six${o.colours ? '&colours=' + o.colours : ''}` : 'index.html';
-  const h = await launch({ width: W, height: H, page: query, storage: { mode: 'high', style: o.style || 'painted', warmth: o.warmth || 'neutral' } });
+  const h = await launch({ width: W, height: H, page: query, storage: { mode: 'high', style: o.style || 'painted', warmth: o.warmth || 'neutral', ...(o.store ? JSON.parse(o.store) : {}) } });
   const { page } = h;
   await page.waitForFunction(() => !!window.game && (location.search.indexOf('six') < 0 || !!window.game.six), null, { timeout: 600000 });
   await page.evaluate(() => game.renderer.setAnimationLoop(null));
@@ -82,7 +84,7 @@ function parseArgs() {
         let hh2 = 0, s = 0; if (mx !== mn) { const d = mx - mn; s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
           hh2 = mx === r ? (gg - b) / d + (gg < b ? 6 : 0) : mx === gg ? (b - r) / d + 2 : (r - gg) / d + 4; hh2 *= 60; } return [hh2, s, l]; };
       const lum = (p, i) => 0.2126 * p[i] + 0.7152 * p[i + 1] + 0.0722 * p[i + 2];
-      const sets = { sun: [], shade: [] }, cols = { sun: [0, 0, 0, 0], shade: [0, 0, 0, 0] };
+      const sets = { sun: [], shade: [], all: [] }, cols = { sun: [0, 0, 0, 0], shade: [0, 0, 0, 0], all: [0, 0, 0, 0] };
       let wallPx = 0;
       for (let i = 0; i < full.length; i += 4) {
         if (mask[i] < 200) continue;
@@ -90,11 +92,11 @@ function parseArgs() {
         const [hu, s, l] = hsl(full[i], full[i + 1], full[i + 2]);
         if (hu < 10 || hu > 60 || s < 0.2) continue;
         const k = lum(full, i) - lum(amb, i) > 0.3 * lum(full, i) ? 'sun' : 'shade';
-        sets[k].push(l); const c = cols[k]; c[0] += full[i]; c[1] += full[i + 1]; c[2] += full[i + 2]; c[3]++;
+        for (const kk of [k, 'all']) { sets[kk].push(l); const c = cols[kk]; c[0] += full[i]; c[1] += full[i + 1]; c[2] += full[i + 2]; c[3]++; }
       }
       const pct = (a, p) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return +(s[Math.min(s.length - 1, Math.floor(p * s.length))] * 100).toFixed(1); };
       const out = { preset: gfx.presetName, time, wallPx };
-      for (const k of ['sun', 'shade']) {
+      for (const k of ['sun', 'shade', 'all']) {
         const c = cols[k], n = Math.max(c[3], 1);
         const hex = '#' + [c[0], c[1], c[2]].map((v) => Math.round(v / n).toString(16).padStart(2, '0')).join('');
         out[k] = { n: sets[k].length, p10: pct(sets[k], 0.1), p50: pct(sets[k], 0.5), p90: pct(sets[k], 0.9), mean: hex, hue: +hsl(c[0] / n, c[1] / n, c[2] / n)[0].toFixed(0) };

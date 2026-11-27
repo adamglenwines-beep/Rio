@@ -2,4 +2,4 @@
 // version.js — the version label shown in the title pill (top left).
 // Bump it at the end of every round, so the live site shows which round it is.
 // ---------------------------------------------------------------------------
-export const VERSION = 'v0.15 · Lot sizes';
+export const VERSION = 'v0.16 · Sunlight';
