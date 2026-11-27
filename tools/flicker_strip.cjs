@@ -8,6 +8,9 @@
 // "Popping" = the share of pixels whose brightness jumps by more than 40 (of 255)
 // between consecutive frames. Saves <tag>_<view>_strip.jpg (frames side by side,
 // cropped to the middle) and <tag>_<view>_pops.png (where pixels popped, white).
+// Also "depth-fighting": with the camera still, the far plane is nudged by 0.05–0.2 %; the
+// picture stays put but depth rounding changes, so a pixel that changes is two surfaces at
+// (nearly) the same depth. In the _pops image these are white, motion pops grey.
 // The views approximate the camera positions in Rio-reference/bug-reports.
 'use strict';
 const fs = require('node:fs');
@@ -58,6 +61,20 @@ function parseArgs() {
         g.rig.controls.update(); g.renderFrame(0);
         const px = new Uint8Array(w * hh * 4); gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, px); frames.push(px);
       }
+      // z-fighting: same camera, far plane nudged by 0.05–0.2 %. The picture is geometrically the
+      // same; only the depth rounding changes, so any pixel that changes is two surfaces fighting.
+      g.camera.position.copy(P); g.rig.controls.target.copy(Q); g.rig.controls.update();
+      const far0 = g.camera.far, zf = [];
+      for (const k of [1, 1.0005, 1.001, 1.0015, 1.002]) {
+        g.camera.far = far0 * k; g.camera.updateProjectionMatrix(); g.renderFrame(0);
+        const px = new Uint8Array(w * hh * 4); gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, px); zf.push(px);
+      }
+      g.camera.far = far0; g.camera.updateProjectionMatrix();
+      const zmask = new Uint8Array(w * hh); let zn = 0;
+      for (let i = 0; i < w * hh; i++) for (let f = 1; f < zf.length; f++) {
+        const a = zf[0], b = zf[f], j = i * 4;
+        if (Math.abs(a[j] - b[j]) + Math.abs(a[j + 1] - b[j + 1]) + Math.abs(a[j + 2] - b[j + 2]) > 30) { zmask[i] = 255; zn++; break; }
+      }
       const pops = new Uint8Array(w * hh);
       let n = 0;
       const L = (a, i) => a[i] * 0.21 + a[i + 1] * 0.72 + a[i + 2] * 0.07;
@@ -68,11 +85,11 @@ function parseArgs() {
       const crops = [0, 1, 2, 3].map((k) => { const f = frames[Math.min(frames.length - 1, k * 2)], c = new Uint8Array(cw * ch * 3);
         for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) { const si = ((hh - 1 - (cy0 + y)) * w + cx0 + x) * 4, di = (y * cw + x) * 3; c[di] = f[si]; c[di + 1] = f[si + 1]; c[di + 2] = f[si + 2]; }
         return Array.from(c); });
-      const mask = []; for (let y = 0; y < hh; y++) for (let x = 0; x < w; x++) mask.push(pops[(hh - 1 - y) * w + x]);
-      return { popping: +(100 * n / ((frames.length - 1) * w * hh)).toFixed(4), crops, cw, ch, mask, w, hh };
+      const mask = []; for (let y = 0; y < hh; y++) for (let x = 0; x < w; x++) mask.push(Math.max(pops[(hh - 1 - y) * w + x] >> 1, zmask[(hh - 1 - y) * w + x]));
+      return { popping: +(100 * n / ((frames.length - 1) * w * hh)).toFixed(4), zfight: +(100 * zn / (w * hh)).toFixed(4), crops, cw, ch, mask, w, hh };
     }, { v, steps });
-    report[name] = r.popping;
-    console.log(`${name.padEnd(9)} popping pixels ${r.popping}% per frame`);
+    report[name] = { popping: r.popping, zfight: r.zfight };
+    console.log(`${name.padEnd(9)} popping pixels ${r.popping}% per frame; depth-fighting pixels ${r.zfight}%`);
     // stitch with a tiny PPM → convert via python (PIL) to keep node dependency-free
     const base = path.join(out, `${o.tag || 'run'}_${name}`);
     const strip = Buffer.alloc(r.cw * 4 * r.ch * 3);

@@ -1,0 +1,244 @@
+[
+ {
+  "preset": "low",
+  "time": "midday",
+  "pixelRatio": 1,
+  "frame": 2792.7,
+  "stages": {
+   "reflection": 0.3,
+   "scene (direct)": 2940.8,
+   "shadow map redraw (only when dirty)": 76.4
+  },
+  "plainScene": 2882,
+  "info": {
+   "calls": 57,
+   "triangles": 1209686
+  },
+  "partCost": {
+   "wild plants (scenery)": 158.9,
+   "houses": 1085.8,
+   "infill": -101.9,
+   "terraces": 171.8,
+   "terrain": 858.5,
+   "far terrain": -28.4,
+   "sea": 179.7,
+   "paths": 50.7,
+   "fish": -32
+  },
+  "partTriangles": {
+   "wild plants (scenery)": 572556,
+   "houses": 403200,
+   "infill": 1092,
+   "terraces": 6354,
+   "terrain": 115200,
+   "far terrain": 50688,
+   "sea": 48130,
+   "paths": 11208,
+   "fish": 9
+  }
+ },
+ {
+  "preset": "low",
+  "time": "golden",
+  "pixelRatio": 1,
+  "frame": 3159.5,
+  "stages": {
+   "reflection": 0.3,
+   "scene (direct)": 2856.6,
+   "shadow map redraw (only when dirty)": 43.5
+  },
+  "plainScene": 3011.4,
+  "info": {
+   "calls": 57,
+   "triangles": 1209686
+  },
+  "partCost": {
+   "wild plants (scenery)": 239.7,
+   "houses": 1275,
+   "infill": 44.8,
+   "terraces": 2.1,
+   "terrain": 928.6,
+   "far terrain": 79.9,
+   "sea": 205.1,
+   "paths": 148.3,
+   "fish": 70.1
+  },
+  "partTriangles": {
+   "wild plants (scenery)": 572556,
+   "houses": 403200,
+   "infill": 1092,
+   "terraces": 6354,
+   "terrain": 115200,
+   "far terrain": 50688,
+   "sea": 48130,
+   "paths": 11208,
+   "fish": 9
+  }
+ },
+ {
+  "preset": "medium",
+  "time": "midday",
+  "pixelRatio": 1,
+  "frame": 5626.7,
+  "stages": {
+   "reflection": 209.7,
+   "RenderPass": 5082.2,
+   "UnrealBloomPass": 181.5,
+   "ShaderPass": 170.8,
+   "OutputPass": 34.6,
+   "shadow map redraw (only when dirty)": 635.2
+  },
+  "plainScene": 4726.8,
+  "info": {
+   "calls": 59,
+   "triangles": 2456558
+  },
+  "partCost": {
+   "wild plants (scenery)": 730,
+   "houses": 1375,
+   "infill": 646.2,
+   "terraces": 8.8,
+   "terrain": 1263.3,
+   "far terrain": -18,
+   "sea": -524.8,
+   "paths": -395.8,
+   "fish": -2127.7
+  },
+  "partTriangles": {
+   "wild plants (scenery)": 1103344,
+   "houses": 403200,
+   "infill": 717710,
+   "terraces": 5388,
+   "terrain": 115200,
+   "far terrain": 50688,
+   "sea": 48130,
+   "paths": 11208,
+   "fish": 9
+  }
+ },
+ {
+  "preset": "medium",
+  "time": "golden",
+  "pixelRatio": 1,
+  "frame": 5408.8,
+  "stages": {
+   "reflection": 191,
+   "RenderPass": 4789.1,
+   "UnrealBloomPass": 122.3,
+   "ShaderPass": 121.1,
+   "OutputPass": 26.2,
+   "shadow map redraw (only when dirty)": 516
+  },
+  "plainScene": 4758.6,
+  "info": {
+   "calls": 59,
+   "triangles": 2456558
+  },
+  "partCost": {
+   "wild plants (scenery)": 789.9,
+   "houses": 1565.7,
+   "infill": 780.7,
+   "terraces": 5.7,
+   "terrain": 1214.3,
+   "far terrain": 15.6,
+   "sea": 320,
+   "paths": -103.2,
+   "fish": -37.6
+  },
+  "partTriangles": {
+   "wild plants (scenery)": 1103344,
+   "houses": 403200,
+   "infill": 717710,
+   "terraces": 5388,
+   "terrain": 115200,
+   "far terrain": 50688,
+   "sea": 48130,
+   "paths": 11208,
+   "fish": 9
+  }
+ },
+ {
+  "preset": "high",
+  "time": "midday",
+  "pixelRatio": 1,
+  "frame": 7243.9,
+  "stages": {
+   "reflection": 311,
+   "RenderPass": 5304.4,
+   "GTAOPass": 1428.7,
+   "UnrealBloomPass": 190.5,
+   "ShaderPass": 125.6,
+   "OutputPass": 26.5,
+   "shadow map redraw (only when dirty)": 632.2
+  },
+  "plainScene": 5053.8,
+  "info": {
+   "calls": 59,
+   "triangles": 2851190
+  },
+  "partCost": {
+   "wild plants (scenery)": 911.8,
+   "houses": 1173.3,
+   "infill": 572.5,
+   "terraces": -271.4,
+   "terrain": 1069.2,
+   "far terrain": 27.5,
+   "sea": 59.1,
+   "paths": -63.1,
+   "fish": -350.6
+  },
+  "partTriangles": {
+   "wild plants (scenery)": 1497544,
+   "houses": 403200,
+   "infill": 717710,
+   "terraces": 5388,
+   "terrain": 115200,
+   "far terrain": 50688,
+   "sea": 48130,
+   "paths": 11208,
+   "fish": 9
+  }
+ },
+ {
+  "preset": "high",
+  "time": "golden",
+  "pixelRatio": 1,
+  "frame": 7852.7,
+  "stages": {
+   "reflection": 351.7,
+   "RenderPass": 5371.2,
+   "GTAOPass": 1415.7,
+   "UnrealBloomPass": 223.8,
+   "ShaderPass": 148.3,
+   "OutputPass": 27.3,
+   "shadow map redraw (only when dirty)": 715.9
+  },
+  "plainScene": 5183.4,
+  "info": {
+   "calls": 59,
+   "triangles": 2851190
+  },
+  "partCost": {
+   "wild plants (scenery)": 1128.8,
+   "houses": 1692.9,
+   "infill": 438.2,
+   "terraces": 41.8,
+   "terrain": 1270.7,
+   "far terrain": 46.2,
+   "sea": 138.8,
+   "paths": -100.3,
+   "fish": -255.3
+  },
+  "partTriangles": {
+   "wild plants (scenery)": 1497544,
+   "houses": 403200,
+   "infill": 717710,
+   "terraces": 5388,
+   "terrain": 115200,
+   "far terrain": 50688,
+   "sea": 48130,
+   "paths": 11208,
+   "fish": 9
+  }
+ }
+]
