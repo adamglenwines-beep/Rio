@@ -4,7 +4,42 @@ So a new session can pick up with "Read PROGRESS.md and continue". Read `CLAUDE.
 `DESIGN.md` first. Decisions made without the user (they asked not to be asked) are
 recorded here with the reason.
 
-## The current run: v0.13 · Facades (facade detail and colour)
+## The current run: v0.14 · Footprints (how houses fill the land between paths)
+
+Adam's brief: blocks enclosed by lanes should be nearly solid building (continuous fronts along
+every lane, shared side walls, interiors filled, at most a small courtyard), dense near the
+harbour, looser up the hill. Not touched: palette, lighting, facade styles, trees, terrain, water.
+Dev branch: `claude/nice-planck-k467qs`.
+
+### How zoning and house placement worked before this run (v0.13)
+
+- **Zoning** (`zones.js`): a 2 m grid of cells painted RES (homes) or COM (shops). The demo
+  (`demo.js`) paints a broad band 5–44 m either side of the main street, the waterfront, and
+  shops round the harbour floor. Walking effort from every cell to the harbour (`access.js`)
+  says how central each place is.
+- **Lanes** (`lanes.js`): every path (and the quay) has two *frontage lines*, the centreline
+  offset by half the paving + a 0.25 m setback (1.25 m). The hard rule: no ordinary wall within
+  that distance of a lane, the quay, piazza or slipway (`clearOf`, an exact test), plus a 4.5 m
+  band along each lane reserved for houses that front it.
+- **Growth** (`growth.js`), one house per step at most: each step tries 70 random *candidates*
+  from templates and builds the best-scoring valid one (near the harbour, touching neighbours,
+  fronting a lane, a bit of randomness):
+  - *frontage* lots along a frontage line (front flush, sides square to the lane, extending a
+    row so neighbours share side walls, depth 3.2–8 m or to the middle of the block);
+  - *back* lots behind a house (continuing its side lines), *side* lots continuing a row,
+    *wedges* joining two differently aligned neighbours, *corners* at junctions, pointed
+    *fork* (flatiron) buildings, *archway* houses over side stairs and *covered passages*.
+  - A candidate must be a convex quad, zoned, reachable, not on cliff or in the sea, under 9 m
+    of fall, not overlap a house (since v0.12: by more than 5 mm), and clear of the lanes.
+- **Why blocks end up loose**: nothing plans a block as a whole; templates are tried at random
+  and many fail (ray-measured back and wedge lots overshoot their neighbours by centimetres and
+  are rejected by the 5 mm overlap rule), so gaps that no template fits stay open. Infill
+  (`infill.js`) then dresses every leftover with orti, patios, paving and pots, which is what the
+  screenshot of the shore–piazza block shows.
+- **Facade builder**: footprints are any convex quadrilateral (trapezoids and wedges already
+  work); each of the four walls gets its own facade, openings, bands and party-wall checks.
+
+## Earlier run: v0.13 · Facades (facade detail and colour)
 
 Adam's buildings brief, narrowed by his addendum after reviewing v0.12: building shapes and massing
 are fine (not reworked), roofs low priority; the gap is facade detail and colour. Worked in his
