@@ -92,11 +92,11 @@ window.game = game; // handy for poking at things from the browser console
 const clock = new THREE.Clock();
 let elapsed = 0, seenRebuilds = -1, seenSceneryPaths = -1, infillTimer = 0;
 function frame() {
-  const dt = Math.min(clock.getDelta(), 0.1);
-  game.renderFrame(dt);
+  const raw = clock.getDelta();
+  game.renderFrame(Math.min(raw, 0.1), raw);
 }
 /** One frame: simulate, update, draw (also used by tests to time frames). */
-game.renderFrame = (dt) => {
+game.renderFrame = (dt, rawDt = dt) => {
   elapsed += dt;
   game.refreshAccess();
   game.growth.update(dt * game.speed);
@@ -111,9 +111,10 @@ game.renderFrame = (dt) => {
   }
   if (game.infill.busy && game.infill.work(CONFIG.infill.frameBudgetMs)) scenery.refresh(game.growth, game.infill);
   rig.update(dt);
+  camera.updateMatrixWorld();   // everything drawn this frame uses this frame's camera
   sea.update(elapsed);
   game.ui.update(dt);
-  game.gfx.update(dt);
+  game.gfx.update(dt, rawDt);
   game.gfx.render();
 };
 renderer.setAnimationLoop(frame);

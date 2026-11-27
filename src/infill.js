@@ -129,6 +129,7 @@ export class Infill {
       K.mesh.instanceColor.needsUpdate = true;
     }
     this.count = total;
+    this.version = (this.version || 0) + 1;
   }
 
   // ---- the grid ------------------------------------------------------------------

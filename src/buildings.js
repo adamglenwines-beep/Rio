@@ -660,6 +660,9 @@ export class BuildingRenderer {
       .map((k) => this.parts[k].mesh).filter(Boolean);
   }
 
+  /** Flat overlays drawn on top of walls (not solid surfaces): left out of the ambient-occlusion pass. */
+  overlayParts() { return ['streak'].map((k) => this.parts[k].mesh).filter(Boolean); }
+
   /** Forget every cached house (the next rebuild redraws the whole town). */
   invalidateAll() { this.cache.clear(); }
 

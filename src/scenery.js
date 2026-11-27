@@ -36,6 +36,8 @@ export class Scenery {
 
   _mesh(geo, material, n, shadow) {
     const m = new THREE.InstancedMesh(geo, material, Math.max(n, 1));
+    m.frustumCulled = false;   // instances span the whole map (a cached bounding sphere would go stale)
+    m.count = 0;               // nothing to draw until the first refresh
     m.castShadow = shadow;
     m.receiveShadow = true;
     m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(n, 1) * 3).fill(1), 3);
@@ -140,5 +142,6 @@ export class Scenery {
     const set = (mesh, n) => { mesh.count = n; mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; };
     set(this.meshes.wall, nw); set(this.meshes.vine, nv);
     set(this.meshes.trunk, nt); set(this.meshes.crown, nt);
+    this.version = (this.version || 0) + 1;
   }
 }

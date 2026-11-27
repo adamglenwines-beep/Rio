@@ -1,44 +1,13 @@
 // Browser smoke + regression test (Playwright + headless Chromium, software WebGL).
 // Usage: node tests/browser/run.cjs [--update-baseline]
 'use strict';
-const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const { execSync } = require('node:child_process');
+const { launch, ROOT } = require('../../tools/harness.cjs');
 
-const ROOT = path.resolve(__dirname, '..', '..');
 const BASELINE = path.join(__dirname, 'baseline.json');
 const UPDATE = process.argv.includes('--update-baseline');
 const SLOWDOWN_LIMIT = 2.0;
-
-function loadPlaywright() {
-  try { return require('playwright'); } catch (e) { /* fall through */ }
-  return require(path.join(execSync('npm root -g').toString().trim(), 'playwright'));
-}
-const { chromium } = loadPlaywright();
-
-const TYPES = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
-  '.json': 'application/json', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.png': 'image/png', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
-};
-
-/** Serve the repo under /Rio/, like GitHub Pages. */
-function startServer() {
-  const server = http.createServer((req, res) => {
-    let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    if (!p.startsWith('/Rio/')) { res.writeHead(404); return res.end('not under /Rio/'); }
-    p = p.slice('/Rio/'.length) || 'index.html';
-    if (p.endsWith('/')) p += 'index.html';
-    const file = path.resolve(ROOT, p);
-    if (!file.startsWith(ROOT + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
-      res.writeHead(404); return res.end('not found');
-    }
-    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream' });
-    fs.createReadStream(file).pipe(res);
-  });
-  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)));
-}
 
 const results = [];
 function check(name, ok, detail = '') {
@@ -47,40 +16,11 @@ function check(name, ok, detail = '') {
 }
 
 (async () => {
-  const server = await startServer();
-  const port = server.address().port;
-  const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-  page.setDefaultTimeout(300000);
-  page.setDefaultNavigationTimeout(300000);
-
-  // This sandbox blocks the CDN: serve jsdelivr npm files from node_modules when they exist.
-  await page.route('https://cdn.jsdelivr.net/npm/**', (route) => {
-    const m = new URL(route.request().url()).pathname.match(/^\/npm\/((?:@[^/@]+\/)?[^/@]+)@[^/]+\/(.+)$/);
-    if (m) {
-      const file = path.join(ROOT, 'node_modules', m[1], m[2]);
-      if (file.startsWith(path.join(ROOT, 'node_modules')) && fs.existsSync(file) && fs.statSync(file).isFile()) {
-        return route.fulfill({ status: 200, contentType: TYPES[path.extname(file)] || 'application/octet-stream', body: fs.readFileSync(file) });
-      }
-    }
-    return route.continue();
-  });
-
-  const errors = [];
-  const badAssets = [];
-  const ignorable = (t) => /GPU stall|GL Driver Message|Performance|performance|ReadPixels/i.test(t);
-  page.on('pageerror', (e) => errors.push('pageerror: ' + (e.stack || e.message)));
-  page.on('console', (m) => {
-    if (m.type() === 'error' && !ignorable(m.text())) errors.push('console.error: ' + m.text());
-  });
-  page.on('requestfailed', (r) => { if (/\/Rio\/assets\//.test(r.url())) badAssets.push('FAILED ' + r.url()); });
-  page.on('response', (r) => { if (r.url().includes('/Rio/assets/') && r.status() !== 200) badAssets.push(r.status() + ' ' + r.url()); });
+  const h = await launch({ width: 1280, height: 800 });
+  const { page, errors, badAssets } = h;
 
   const timings = {};
   try {
-    await page.goto(`http://127.0.0.1:${port}/Rio/`, { waitUntil: 'load' });
-    await page.waitForFunction(() => !!window.game, null, { timeout: 300000 });
-
     // c. textures
     const texOn = await page.evaluate(async () => {
       await game.gfx.texturesReady;
@@ -113,6 +53,55 @@ function check(name, ok, detail = '') {
         }, p);
       } catch (e) { check(`frame time [${p}]`, false, e.message); }
     }
+
+    // g. no flashing: with nothing moving, consecutive frames are identical; and a frame
+    //    depends only on where the camera is, not on the frames before it
+    for (const p of ['medium', 'high']) {
+      try {
+        const r = await page.evaluate(async (preset) => {
+          game.gfx.setPreset(preset);
+          await game.gfx.texturesReady;
+          game.speed = 0;
+          const T = game.THREE, hb = game.terrain.harbour, gl = game.renderer.getContext();
+          const w = gl.drawingBufferWidth, hh = gl.drawingBufferHeight;
+          const pose = (dx) => { game.rig.tween = null; game.rig.controls.enableDamping = false;
+            game.rig.flyTo(new T.Vector3(hb.x + 66 + dx, 40, hb.z + 40), new T.Vector3(hb.x - 12, 16, hb.z - 35), 0); };
+          const grab = () => { game.renderFrame(0); const px = new Uint8Array(w * hh * 4); gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
+          const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 6) n++; return n / (a.length / 4); };
+          pose(0);
+          for (let i = 0; i < 40 && (game.infill.busy || i < 4); i++) game.renderFrame(0.05);   // let infill and shadows settle
+          const a1 = grab(), a2 = grab(), a3 = grab();
+          pose(6); const b1 = grab();
+          pose(0); const a4 = grab();
+          game.rig.controls.enableDamping = true;
+          return { still: Math.max(diff(a1, a2), diff(a2, a3)), moved: diff(a1, b1), back: diff(a1, a4) };
+        }, p);
+        check(`no flashing at rest [${p}]`, r.still === 0, `${(r.still * 100).toFixed(3)}% of pixels changed between identical frames`);
+        check(`a frame depends only on the camera [${p}]`, r.back === 0 && r.moved > 0.01, `after moving away and back ${(r.back * 100).toFixed(3)}% differ (moving changed ${(r.moved * 100).toFixed(1)}%)`);
+      } catch (e) { check(`no flashing [${p}]`, false, e.message); }
+    }
+
+    // h. one render path: every frame draws the scene the same number of times, and
+    //    Auto quality never changes level inside a short run of frames
+    try {
+      const r = await page.evaluate(async () => {
+        game.gfx.setPreset('auto');
+        await game.gfx.texturesReady;
+        const start = game.gfx.presetName, R = game.renderer, orig = R.render.bind(R);
+        let calls = 0; const perFrame = [], presets = new Set();
+        R.render = (s, c) => { if (s === game.scene) calls++; return orig(s, c); };
+        for (let i = 0; i < 8; i++) {
+          calls = 0;
+          game.rig.controls._rotateLeft ? game.rig.controls._rotateLeft(0.02) : 0;
+          game.renderFrame(0.05, 0.5);     // pretend every frame took half a second
+          perFrame.push(calls); presets.add(game.gfx.presetName);
+        }
+        R.render = orig;
+        return { perFrame, presets: [...presets], start };
+      });
+      check('every frame takes the same render path', new Set(r.perFrame).size === 1, 'scene draws per frame: ' + r.perFrame.join(','));
+      check('Auto quality does not change level within a few frames', r.presets.length === 1, r.presets.join(' → '));
+    } catch (e) { check('one render path', false, e.message); }
 
     // f. art styles
     for (const s of ['clean', 'soft', 'painted']) {
@@ -158,7 +147,6 @@ function check(name, ok, detail = '') {
   console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
   for (const f of failed) console.log('  FAILED: ' + f.name);
 
-  await browser.close();
-  server.close();
+  await h.close();
   process.exit(failed.length ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

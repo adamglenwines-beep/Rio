@@ -92,7 +92,7 @@ export class UI {
       panel.querySelectorAll('[data-s]').forEach((b) => b.classList.toggle('on', b.dataset.s === gfx.styleName));
       panel.querySelectorAll('[data-w]').forEach((b) => b.classList.toggle('on', b.dataset.w === gfx.warmth));
       this.$('set-auto-note').textContent = gfx.mode === 'auto' ? `Auto is using ${gfx.preset.label}` : '';
-      this.$('set-fps').textContent = `${Math.round(gfx._fps.fps)} fps · rendering at ${Math.round(gfx.pixelRatio * 100)}% pixel density`;
+      this.$('set-fps').textContent = `${Math.round(gfx._fps.fps)} fps · ${gfx._fps.ms.toFixed(1)} ms a frame (slowest ${Math.round(gfx._fps.worst)} ms) · ${Math.round(gfx.pixelRatio * 100)}% pixel density`;
     };
     gfx.onChange(sync);
     gfx.timeName = gfx.timeName || 'midday';

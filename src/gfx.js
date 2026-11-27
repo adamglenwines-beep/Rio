@@ -17,6 +17,7 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { STYLES } from './style.js';
 import { loadTextures, matUniforms } from './materials.js';
+import { AutoQuality } from './autoquality.js';
 
 // Colour grade (linear HDR, before tone mapping): white balance for Warmth,
 // and per-style saturation and contrast.
@@ -73,7 +74,11 @@ export const PRESETS = {
   medium: { label: 'Medium', pixelRatio: 1.5, post: true,  msaa: 4, bloom: 0.5, shadowSize: 2048, shadowSoft: true,  ssao: false, reflection: 0.25, haze: true, tex: 1024, aniso: 4, macro: 1 },
   high:   { label: 'High',   pixelRatio: 2.0, post: true,  msaa: 4, bloom: 1.0, shadowSize: 4096, shadowSoft: true,  ssao: true,  reflection: 0.5,  haze: true, tex: 1024, aniso: 8, macro: 1 },
 };
-const ORDER = ['low', 'medium', 'high'];
+// Auto's ladder, best first: each rung is a preset plus an extra resolution scale.
+const LADDER = [
+  { preset: 'high', scale: 1 }, { preset: 'medium', scale: 1 }, { preset: 'low', scale: 1 },
+  { preset: 'low', scale: 0.85 }, { preset: 'low', scale: 0.7 }, { preset: 'low', scale: 0.6 },
+];
 
 // ---- time of day ------------------------------------------------------------------
 // Keyframes by hour; everything in between is interpolated.
@@ -97,7 +102,9 @@ export class Graphics {
     this.warmth = this._loadSetting('warmth', 'neutral');   // 'cool' | 'neutral' | 'warm'
     this.style = STYLES[this._loadSetting('style', 'painted')] || STYLES.painted;   // default: closest to the art target
     this.styleName = Object.keys(STYLES).find((k) => STYLES[k] === this.style);
-    this.resolution = 1;           // extra scale on top of the preset (Auto lowers it if needed)
+    this.resolution = 1;           // the player's resolution setting (scale on top of the preset)
+    this.autoScale = 1;            // extra scale Auto applies on its lowest rungs
+    this.auto = new AutoQuality(LADDER.length, 0, CONFIG.graphics.auto);
     this.mode = 'auto';            // 'auto' or a preset name
     this.preset = null;
     this.listeners = [];
@@ -150,8 +157,15 @@ export class Graphics {
     scene.background = null;
     scene.fog = new THREE.Fog('#cfe7f2', CONFIG.graphics.hazeNear, CONFIG.graphics.hazeFar);
 
-    this._fps = { t: 0, frames: 0, slow: 0, cooldown: 3, fps: 60 };
+    this._fps = { t: 0, frames: 0, fps: 60, ms: 16.7, worst: 16.7, w: 0 };
     this._shadowTimer = 0;
+    this._shadowSig = '';
+    this._camPos = new THREE.Vector3(); this._camQuat = new THREE.Quaternion();
+    this.cameraMoving = false;
+    // the shadow map only needs redrawing when something that casts a shadow changes
+    // (see _shadowsIfDirty), not every frame and never twice in one frame
+    renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.needsUpdate = true;
     this.setPreset(this._loadSetting('mode', 'auto'));
     this.resolution = +this._loadSetting('res', 1) || 1;
     this._applyTime(this.hour);
@@ -177,7 +191,9 @@ export class Graphics {
     this.mode = PRESETS[mode] ? mode : 'auto';
     this._saveSetting('mode', this.mode);
     const name = this.mode === 'auto' ? this.autoGuess() : this.mode;
-    if (this.mode !== 'auto') this._fps.slow = 0;
+    const rung = LADDER.findIndex((l) => l.preset === name);
+    this.auto.reset(rung, rung);
+    this.autoScale = 1;
     this._use(name);
   }
 
@@ -208,9 +224,12 @@ export class Graphics {
     }
     this._applySize();
     this._buildPipeline();
-    this._fps.cooldown = 3;
+    this.shadowsDirty();
     this._emit();
   }
+
+  /** Ask for the shadow map to be redrawn on the next frame. */
+  shadowsDirty() { this.renderer.shadowMap.needsUpdate = true; }
 
   /**
    * The post-processing chain for this preset. Low draws straight to the screen
@@ -233,6 +252,8 @@ export class Graphics {
     this.grade = new ShaderPass(GradeShader);
     c.addPass(this.grade);
     c.addPass(new OutputPass());
+    // remember which buffer the scene is drawn into, so every frame uses the same one (see render)
+    this._sceneBuffer = c.readBuffer;
     this._applyGrade();
   }
 
@@ -246,6 +267,15 @@ export class Graphics {
       ao.updateGtaoMaterial({ radius: G.ssaoRadius, distanceExponent: 1.5, thickness: 2, scale: 1, samples: 12 });
       ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
       ao.blendIntensity = G.ssaoIntensity;
+      // its depth-and-normals pass draws the whole scene again: skip overlays that are not
+      // solid surfaces (shadows are not redrawn: the shadow map updates only when dirty)
+      const aoRender = ao.render.bind(ao);
+      ao.render = (...args) => {
+        const g = this.game, hide = [g.zones && g.zones.mesh, ...(g.growth ? g.growth.renderer.overlayParts() : [])].filter((o) => o && o.visible);
+        hide.forEach((o) => (o.visible = false));
+        aoRender(...args);
+        hide.forEach((o) => (o.visible = true));
+      };
       c.addPass(ao);
       this.ssao = ao;
     }
@@ -260,7 +290,7 @@ export class Graphics {
   }
 
   _applySize() {
-    const pr = Math.min(window.devicePixelRatio || 1, this.preset.pixelRatio) * this.resolution;
+    const pr = Math.min(window.devicePixelRatio || 1, this.preset.pixelRatio) * this.resolution * this.autoScale;
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(innerWidth, innerHeight);
     this.pixelRatio = pr;
@@ -344,6 +374,7 @@ export class Graphics {
     if (zm) zm.color.setScalar(THREE.MathUtils.clamp(L('sunI') / 3.2 * 0.75 + L('hemiI') / 1.5 * 0.25, 0.12, 1));
     this.renderer.toneMappingExposure = L('exp');
     this._fitShadow(true);
+    this.shadowsDirty();
     for (const fn of this.listeners) if (fn.onTime) fn.onTime(this.tod);
   }
 
@@ -376,43 +407,52 @@ export class Graphics {
     }
     Object.assign(cam, { left: l, right: r, bottom: b, top: tp, near: Math.max(1, n - 60), far: f + 60 });
     cam.updateProjectionMatrix();
-    this.sun.shadow.needsUpdate = true;
+    this.shadowsDirty();
+  }
+
+  /** Redraw the shadow map only when a shadow caster changed (town, trees, infill, paths). */
+  _shadowsIfDirty() {
+    const g = this.game;
+    const sig = [g.growth && g.growth.rebuilds, g.scenery && g.scenery.version, g.infill && g.infill.version,
+      g.paths && g.paths.version, g.terraces && g.terraces.version, g.flora && g.flora.version].join(',');
+    if (sig !== this._shadowSig) { this._shadowSig = sig; this.shadowsDirty(); }
   }
 
   // ---- per frame ----------------------------------------------------------------------
 
-  update(dt) {
+  update(dt, rawDt = dt) {
     // glide toward the target time
     if (Math.abs(this.targetHour - this.hour) > 1e-3) {
       const step = Math.sign(this.targetHour - this.hour) * Math.max(dt * 4.5, Math.abs(this.targetHour - this.hour) * dt * 2.2);
       this.hour = Math.abs(step) >= Math.abs(this.targetHour - this.hour) ? this.targetHour : this.hour + step;
       this._applyTime(this.hour);
     }
-    this.sky.position.copy(this.camera.position);
+    const cam = this.camera;
+    this.cameraMoving = this._camPos.distanceToSquared(cam.position) > 1e-8 || Math.abs(this._camQuat.dot(cam.quaternion)) < 1 - 1e-9;
+    this._camPos.copy(cam.position); this._camQuat.copy(cam.quaternion);
+    this.sky.position.copy(cam.position);
     this._shadowTimer -= dt;
     if (this._shadowTimer <= 0) { this._shadowTimer = 0.5; this._fitShadow(); }
-    this._autoQuality(dt);
+    this._shadowsIfDirty();
+    this._autoQuality(rawDt);
   }
 
-  /** Auto: if the frame rate stays low, step down a preset, then lower the resolution. */
+  /**
+   * Frame-rate read-out, and Auto: the watchdog in autoquality.js decides (patiently)
+   * when to move down or up a rung of the ladder; this applies its decision.
+   */
   _autoQuality(dt) {
     const F = this._fps;
-    if (dt <= 0 || dt > 0.5 || document.hidden) return;
-    F.t += dt; F.frames++;
-    if (F.t < 2) return;
-    F.fps = F.frames / F.t; F.t = 0; F.frames = 0;
-    this._emit();
+    if (dt <= 0 || document.hidden) { this.auto.tick(0, false, true); return; }
+    F.t += dt; F.frames++; F.w = Math.max(F.w, dt * 1000);
+    if (F.t >= 1) { F.fps = F.frames / F.t; F.ms = (F.t / F.frames) * 1000; F.worst = F.w; F.t = 0; F.frames = 0; F.w = 0; this._emit(); }
     if (this.mode !== 'auto') return;
-    if (F.cooldown > 0) { F.cooldown -= 2; return; }
-    F.slow = F.fps < CONFIG.graphics.autoMinFps ? F.slow + 1 : 0;
-    if (F.slow < 2) return;
-    F.slow = 0;
-    const i = ORDER.indexOf(this.presetName);
-    if (i > 0) this._use(ORDER[i - 1]);
-    else if (this.resolution > CONFIG.graphics.autoMinResolution + 0.01) {
-      this.resolution = Math.max(CONFIG.graphics.autoMinResolution, +(this.resolution - 0.15).toFixed(2));
-      this._applySize(); this._emit(); F.cooldown = 3;
-    }
+    const level = this.auto.tick(dt, this.cameraMoving, false);
+    if (level === null) return;
+    const rung = LADDER[level];
+    this.autoScale = Math.max(CONFIG.graphics.autoMinResolution, rung.scale);
+    if (rung.preset !== this.presetName) this._use(rung.preset);
+    else { this._applySize(); this._emit(); }
   }
 
   // ---- harbour reflections: a mirrored render of the town, sampled by the sea ----
@@ -429,6 +469,7 @@ export class Graphics {
       this.reflCam.layers.enableAll();
     }
     const cam = this.camera, vc = this.reflCam, y0 = CONFIG.graphics.reflectionPlane;
+    cam.updateMatrixWorld();   // this frame's camera, not last frame's (the mirror must match the main view)
     // mirror the camera in the sea plane (as three.js's Reflector does)
     const cp = new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld);
     if (cp.y < y0 + 0.2) { U.uReflStrength.value = 0; return; }
@@ -453,8 +494,8 @@ export class Graphics {
     const hide = [g.sea.water, g.infill.group, g.scenery.group, g.zones.mesh, ...g.growth.renderer.smallParts()];
     const was = hide.map((o) => o.visible);
     hide.forEach((o) => (o.visible = false));
-    const prevTarget = r.getRenderTarget(), prevShadow = r.shadowMap.autoUpdate;
-    r.shadowMap.autoUpdate = false;
+    const prevTarget = r.getRenderTarget(), dirty = r.shadowMap.needsUpdate;
+    r.shadowMap.needsUpdate = false;   // never draw shadows from this pass: some casters are hidden in it
     r.setRenderTarget(this.reflRT);
     r.clear();
     // textures barely show in a rippled reflection: skip them in this pass (a uniform, no recompile)
@@ -463,15 +504,25 @@ export class Graphics {
     r.render(this.scene, vc);
     matUniforms.uTexOn.value = texOn;
     r.setRenderTarget(prevTarget);
-    r.shadowMap.autoUpdate = prevShadow;
+    r.shadowMap.needsUpdate = dirty;
     hide.forEach((o, i) => (o.visible = was[i]));
     U.uRefl.value = this.reflRT.texture;
     U.uReflStrength.value = CONFIG.graphics.reflectionStrength;
   }
 
+  /**
+   * The one and only place a frame is drawn. Every frame takes the same route:
+   * mirror pass (if on) → scene → effects → screen.
+   */
   render() {
     this._renderReflection();
-    if (this.composer) this.composer.render();
-    else this.renderer.render(this.scene, this.camera);
+    if (this.composer) {
+      const c = this.composer;
+      // the composer swaps its two buffers as it goes; start every frame from the same
+      // one, so consecutive frames are processed identically
+      if (c.readBuffer !== this._sceneBuffer) c.swapBuffers();
+      c.render();
+    } else this.renderer.render(this.scene, this.camera);
+    this.frameCount = (this.frameCount || 0) + 1;
   }
 }

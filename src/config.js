@@ -120,8 +120,16 @@ export const CONFIG = {
   // ---- Graphics ---------------------------------------------------------------
   // (presets and time-of-day keyframes live in gfx.js)
   graphics: {
-    autoMinFps: 40,          // Auto steps down if the frame rate stays below this
-    autoMinResolution: 0.6,  // …and on Low, lowers the resolution no further than this
+    // Auto quality (see autoquality.js): patient on purpose, so it can never make the picture flicker
+    auto: {
+      windowSeconds: 2.5,    // frame times are judged over windows this long
+      slowMs: 28,            // a window slower than this (mean ms per frame, ≈ 36 fps) counts as slow
+      goodMs: 18,            // faster than this (≈ 55 fps) counts as smooth; in between, nothing changes
+      slowWindows: 3,        // slow windows in a row before stepping down a level
+      goodSeconds: 30,       // smooth seconds in a row before stepping back up
+      dwellSeconds: 10,      // after any change, wait this long before judging again
+    },
+    autoMinResolution: 0.6,  // on Low, Auto lowers the resolution no further than this
     bloomStrength: 0.22,     // keep it subtle
     bloomRadius: 0.5,
     ssaoRadius: 1.6,         // metres (High only)
