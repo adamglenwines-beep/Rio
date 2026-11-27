@@ -39,6 +39,7 @@ import { ZONE } from './zones.js';
 import { PathNetwork } from './paths.js';
 import { Lanes, laneRadius } from './lanes.js';
 import { BuildingRenderer } from './buildings.js';
+import { findBlocks, planLots } from './blocks.js';
 import {
   sub, add, mul, dot, norm, dist, signedArea, isConvex, quadPoint, centroid, edgeNormal, convexOverlap,
 } from './geom.js';
@@ -75,6 +76,8 @@ export class Growth {
     this._rebuildTimer = 0;
     this._pathsSeen = -1;
     this.rebuilds = 0;           // bumps every time the meshes are rebuilt
+    this.plan = null;            // blocks and lots (blocks.js), redone when paths or zones change
+    this._planDirty = true;
   }
 
   clear() {
@@ -85,6 +88,8 @@ export class Growth {
     this.frontLive = [];
     this.front.clear();
     this._pathsSeen = -1;
+    this.plan = null;
+    this._planDirty = true;
     this.dirty = true;
   }
 
@@ -186,7 +191,71 @@ export class Growth {
         if (b && !b.arch && !this.lanes.clearOf(b.corners)) this._remove(id);
       }
     }
+    this._planDirty = true;      // blocks and lots are redrawn (lazily, at the next growth step)
     this.dirty = true;
+  }
+
+  // ---- Blocks and lots (v0.14, rules in blocks.js) ----------------------------
+
+  /** What blocks.js may ask about the map. */
+  _world() {
+    const t = this.terrain, g = this.game, L = this.lanes;
+    const cell = (x, z) => t.cellIndex(x, z);
+    return {
+      half: t.half,
+      zoned: (x, z) => { const i = cell(x, z); if (i < 0) return false; const zv = g.zones.grid[i]; return zv === ZONE.RES || zv === ZONE.COM; },
+      buildable: (x, z) => {
+        if (!t.inside(x, z, 3)) return false;
+        const i = cell(x, z), band = t.band[i];
+        if (band === BAND.SEA || band === BAND.CLIFF || t.heightAt(x, z) < B.minGround) return false;
+        const o = this.occAt(x, z);
+        return o !== PATH && o !== HARBOUR && isFinite(g.access.cellEffort[i]);
+      },
+      clearPoint: (x, z) => L.clearOf([[x - 0.05, z - 0.05], [x + 0.05, z - 0.05], [x, z + 0.05]]),
+      clear: (q) => L.clearOf(q),
+      existing: this.live.map((id) => this.buildings[id].corners),
+      taken: Object.fromEntries(this.front),
+      lanes: L.lanes,
+      at: (line, s) => L.at(line, s),
+      rayToFrontage: (p, d, a, b, ex) => L.rayToFrontage(p, d, a, b, ex),
+      nearestFrontage: (p, d, ex) => L.nearestFrontage(p, d, ex),
+      effortAt: (x, z) => { const i = cell(x, z); return i < 0 ? Infinity : g.access.cellEffort[i]; },
+      steepAt: (x, z) => t.bandAt(x, z) === BAND.STEEP,
+      heightAt: (x, z) => t.heightAt(x, z),
+      rng: makeRng(CONFIG.seed * 977 + 13),
+    };
+  }
+
+  /** Redo the blocks and lots for the current paths and zones (houses already standing stay). */
+  _replan() {
+    const t0 = performance.now();
+    const world = this._world(), grid = findBlocks(world);
+    const lots = planLots(world, grid);
+    for (const lot of lots) { lot.built = -1; lot.fails = 0; }
+    // the order they are built in: near the harbour first, each rear house after its front house
+    const order = lots.filter((l) => l.kind === 'front').sort((a, b) => a.effort - b.effort);
+    this.plan = { grid, lots, order, rear: lots.filter((l) => l.kind === 'rear'), ms: performance.now() - t0 };
+    this._planDirty = false;
+  }
+
+  /** Candidates from the plan: a few open lots nearest the harbour (front lots first, then rear lots). */
+  _planVariants() {
+    if (this._planDirty || !this.plan) this._replan();
+    const P = this.plan, out = [];
+    const open = (l) => l.built < 0 && l.fails < 4;
+    for (const l of P.order) { if (open(l)) out.push(l); if (out.length >= 5) break; }
+    // interiors fill later: a rear lot once its front house stands
+    if (out.length < 5) for (const l of P.rear) {
+      if (!open(l) || P.lots[l.parent].built < 0) continue;
+      out.push(l); if (out.length >= 5) break;
+    }
+    return out.map((lot) => ({
+      corners: lot.corners.map((p) => [p[0], p[1]]),
+      type: lot.kind === 'rear' ? 'back' : 'front',
+      planned: true, lot, corner: lot.corner,
+      frontage: lot.frontage ? { ...lot.frontage } : undefined,
+      rankNorm: lot.frontage ? (this.lanes.byName.get(lot.frontage.name)?.rankNorm ?? 0.5) : 0,
+    }));
   }
 
   // ---- Candidate construction -----------------------------------------------
@@ -569,7 +638,7 @@ export class Growth {
     });
     if (!free) return (c.why = 'occupied', false);
     // sharp fork tips are kept for pointed buildings (or for infill)
-    if (!c.flatiron) for (const f of this.lanes.forks || []) {
+    if (!c.flatiron && !c.planned) for (const f of this.lanes.forks || []) {
       if (convexOverlap(q, f.tip) > 0.05) return (c.why = 'fork tip', false);
     }
     // exact check against nearby houses (the grid can miss thin slivers)
@@ -581,7 +650,7 @@ export class Growth {
     c.arch = null;
     if (c.type === 'arch') {
       if (!lane.length || !this._fitArch(c, lane)) return (c.why = 'no archway fit', false);   // only straddling ones
-    } else if (!this.lanes.clearOf(q, this._reserveFor(c), this._ownLane(c))) {
+    } else if (!this.lanes.clearOf(q, c.planned ? 0 : this._reserveFor(c), this._ownLane(c))) {
       return (c.why = 'too close to a lane', false);                                                 // THE HARD RULE
     }
     // 2. land: zoned, reachable, not sea/cliff. Sample a 3x3 grid in the footprint.
@@ -606,12 +675,15 @@ export class Growth {
       gMin = Math.min(gMin, h); gMax = Math.max(gMax, h);
     }
     if (bad > 1) return (c.why = 'on a cliff', false);                      // (one corner on a rocky bit is ok)
-    if (zonedRes + zonedCom < 7 || effN < 7) return (c.why = 'not zoned or unreachable', false);
+    if (zonedRes + zonedCom < (c.planned ? 5 : 7) || effN < (c.planned ? 5 : 7)) return (c.why = 'not zoned or unreachable', false);
     if (gMin < B.minGround) return (c.why = 'too low', false);           // keep feet dry
     if (gMax - gMin > 9) return (c.why = 'slope too great', false);              // absurd stilts
     c.kind = zonedCom > zonedRes ? ZONE.COM : ZONE.RES;
     c.band = steep >= 4 ? BAND.STEEP : flat >= 5 ? BAND.FLAT : BAND.MODERATE;
-    if (c.kind === ZONE.COM && c.band === BAND.STEEP) return (c.why = 'no shops on steep land', false); // no shops on steep land
+    if (c.kind === ZONE.COM && c.band === BAND.STEEP) {
+      if (!c.planned) return (c.why = 'no shops on steep land', false);   // no shops on steep land
+      c.kind = ZONE.RES;
+    }
     if (c.arch) {
       if (c.kind === ZONE.COM) return (c.why = 'no shops over archways', false);
       // enough storeys to put rooms above the arch
@@ -619,7 +691,7 @@ export class Growth {
       if (c.minFloors > 6) return (c.why = 'archway too tall', false);
     }
     // only small houses on steep ground (wedges are gap-fillers, so exempt)
-    if (c.band === BAND.STEEP && c.type !== 'wedge' && !c.flatiron && (c.w > B.width.steep[1] + 0.8 || c.d > B.depth.steep[1] + 0.8)) return (c.why = 'too big for steep ground', false);
+    if (c.band === BAND.STEEP && !c.planned && c.type !== 'wedge' && !c.flatiron && (c.w > B.width.steep[1] + 0.8 || c.d > B.depth.steep[1] + 0.8)) return (c.why = 'too big for steep ground', false);
     c.gMin = gMin; c.gMax = gMax;
     c.effort = effSum / effN;
     return true;
@@ -741,6 +813,14 @@ export class Growth {
       this.front.get(F.key).push({ s0: F.s0, s1: F.s1, id });
     }
     if (b.frontage) this.frontLive.push(id);
+    if (b.lot) {
+      b.lot.built = id;
+      // a rear house is reached through an arched passage in the house in front of it
+      if (b.lot.kind === 'rear') {
+        const f = this.buildings[this.plan.lots[b.lot.parent].built];
+        if (f) { f.passage = true; b.via = f.id; if (f.plan) f.plan.arched = f.plan.passage = true; f.ver++; }
+      }
+    }
     this._forCells(b.corners, RASTER_INSET, (k) => { if (k >= 0 && this.occ[k] === EMPTY) this.occ[k] = id; });
     // the colour is chosen once the house is on the map, so neighbours are found both ways round
     b.colourKey = this._pickColour(b);
@@ -831,6 +911,16 @@ export class Growth {
     for (let k = 0; k < tries; k++) {
       let variants, parent = null;
       const roll = r();
+      if (CONFIG.sim.plannedLots) {
+        // v0.14: houses fill the lots of the block plan (blocks.js), fronts first
+        variants = this._planVariants();
+        if (!variants.length) break;
+        const c = variants[Math.min(variants.length - 1, (r() * r() * variants.length) | 0)];
+        if (this._evaluate(c)) { const sc = this._score(c); if (sc > bestScore) { bestScore = sc; best = c; } }
+        else c.lot.fails++;
+        if (k >= 2) break;
+        continue;
+      }
       if (roll < 0.04) {
         variants = this._forkVariants();
       } else if (!this.live.length || roll < 0.4) {

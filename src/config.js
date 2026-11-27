@@ -355,6 +355,9 @@ export const CONFIG = {
     stepsPerSecond: 3,     // growth steps per second at 1x speed
     candidatesPerStep: 70, // how many spots are evaluated before building one
     floorGrowthsPerStep: 4,
+    // v0.14: houses fill the lots of a block plan (src/blocks.js, data/blocks.json) instead of
+    // being placed one at a time by templates. false = the v0.13 growth, for comparison.
+    plannedLots: true,
   },
 };
 

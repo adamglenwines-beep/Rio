@@ -5,6 +5,7 @@
 //   data/palette.json   facade, shutter and door colours
 //   data/facades.json   window, shutter, balcony, ground-floor and trim variants
 //   data/houses.json    floor uses and the condition spread of houses
+//   data/blocks.json    blocks and lots: density by land value, lot sizes
 //
 // Loaded once at start-up (top-level await), in the browser with fetch and in Node (unit
 // tests) from disk.
@@ -23,6 +24,7 @@ async function load(name) {
 export const PALETTE = await load('palette');
 export const FACADES = await load('facades');
 export const HOUSES = await load('houses');
+export const BLOCKS = await load('blocks');
 
 /** [value, weight] pairs from a list of { …, weight } objects (for rng.weighted). */
 export const weighted = (list, key = 'name') => list.map((o) => [o[key] ?? o, o.weight ?? 1]);

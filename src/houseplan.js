@@ -26,16 +26,18 @@ export function planHouse(b, floors, nearHarbour) {
   const c = H.condition;
   const condition = b.plan ? b.plan.condition : Math.min(c.max, Math.max(c.min, bell(rng, c.mean, c.spread)));
   const groundUse = b.plan ? b.plan.floors[0].use : rng.weighted(H.groundUse[nearHarbour ? 'harbour' : 'town']);
-  const arched = b.plan ? b.plan.arched : rng() < H.archedEntry;
+  // a house with a rear house behind it is entered through an arched passage (v0.14)
+  const arched = !!b.passage || (b.plan ? b.plan.arched : rng() < H.archedEntry);
   const list = [{ use: b.kind === 2 ? 'shop' : groundUse }];
   for (let k = 1; k < floors; k++) list.push({ use: (b.plan && b.plan.floors[k]) ? b.plan.floors[k].use : 'family' });
-  b.plan = { condition, floors: list, arched };
+  b.plan = { condition, floors: list, arched, passage: !!b.passage };
   return b.plan;
 }
 
 /** The ground-floor look for a use: 'shop' | 'workshop' | 'arched' | 'door'. */
 export function groundLook(plan) {
   const use = plan.floors[0].use;
+  if (plan.passage) return 'arched';          // the way through to a rear house
   if (use === 'shop') return 'shop';
   if (use === 'workshop') return plan.arched ? 'arched' : 'workshop';
   return plan.arched ? 'arched' : 'door';

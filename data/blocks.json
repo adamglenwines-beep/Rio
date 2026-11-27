@@ -1,0 +1,20 @@
+{
+  "_about": "Blocks and lots (v0.14, src/blocks.js). A block is zoned land enclosed by lanes, the shore, the piazza and unbuildable ground. Its lane edges are cut into lots: fronts exactly along the lane, sides square to it, as deep as the middle of the block or the band's maximum. Bands by land value (walking effort to the harbour): dense near the shore, looser up the hill.",
+  "cell": 1.0,
+  "bands": [
+    { "name": "harbour", "maxEffort": 75, "coverage": 0.85, "lotWidth": [3.4, 5.2], "maxDepth": 13, "rear": true },
+    { "name": "town", "maxEffort": 140, "coverage": 0.7, "lotWidth": [3.6, 5.6], "maxDepth": 11, "rear": true },
+    { "name": "edge", "maxEffort": 1000000, "coverage": 0.4, "lotWidth": [4.0, 6.0], "maxDepth": 8, "rear": false }
+  ],
+  "_coverage": "share of a block's land covered by houses once it has filled (tests check the harbour band)",
+  "steep": { "lotWidth": [3.3, 4.6], "maxDepth": 7.5 },
+  "maxFall": 7.5,
+  "_maxFall": "a lot whose ground falls more than this (m) is cut into a front and a rear house",
+  "minLotWidth": 2.4,
+  "minLotArea": 8,
+  "minDepth": 3.0,
+  "rearMin": 3.2,
+  "rearMax": 9,
+  "cornerDepth": [4.5, 8],
+  "sample": 0.25, "wedgePasses": 2, "wedgeReach": 5, "maxOverlap": 0.004
+}

@@ -191,7 +191,7 @@ export class Lanes {
 
   /**
    * Nearest point on any frontage line other than `excludeName`'s, within maxD:
-   * { p, lane, side } or null. Used to fill corners where a row meets another lane.
+   * { p, lane, side, d (the line's direction there) } or null. Used to fill corners where a row meets another lane.
    */
   nearestFrontage(p, maxD, excludeName) {
     let best = null, bd = maxD;
@@ -206,7 +206,7 @@ export class Lanes {
           u = u < 0 ? 0 : u > 1 ? 1 : u;
           const q = [a[0] + u * dx, a[1] + u * dz];
           const d = dist(p, q);
-          if (d < bd) { bd = d; best = { p: q, lane, side }; }
+          if (d < bd) { bd = d; best = { p: q, lane, side, d: norm([dx, dz]) }; }
         }
       }
     }
