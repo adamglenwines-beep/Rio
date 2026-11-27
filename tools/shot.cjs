@@ -70,6 +70,25 @@ function parseArgs() {
       const [p, t] = spec.split(':').map((s) => s.split('/').map(Number));
       v = [p, t]; label = n;
     }
+    // "door", "arched", "workshop", "shop" (+ a number: "door3"): stand in front of the n-th such ground-floor opening
+    const dm = name.match(/^(door|arched|workshop|shop|window)(\d*)$/);
+    if (dm) {
+      v = await page.evaluate(({ kind, nth }) => {
+        const G = game.growth, found = [];
+        for (const id of G.live) {
+          const b = G.buildings[id];
+          for (const op of b.openings || []) if (op.kind === kind) {
+            const q = b.corners, A = q[op.wall], B = q[(op.wall + 1) % 4], L = Math.hypot(B[0] - A[0], B[1] - A[1]);
+            const e = [(B[0] - A[0]) / L, (B[1] - A[1]) / L], n = [e[1], -e[0]], c = [(q[0][0] + q[2][0]) / 2, (q[0][1] + q[2][1]) / 2];
+            if (n[0] * (A[0] - c[0]) + n[1] * (A[1] - c[1]) < 0) { n[0] = -n[0]; n[1] = -n[1]; }
+            const u = (op.u0 + op.u1) / 2, x = A[0] + e[0] * u, z = A[1] + e[1] * u, y = (op.y0 + op.y1) / 2;
+            if (n[1] > 0.3) found.push([[x + n[0] * 5.5 + e[0] * 1.6, y + 1.6, z + n[1] * 5.5 + e[1] * 1.6], [x, y, z]]);
+          }
+        }
+        return found.length ? found[Math.min(nth, found.length - 1)] : null;
+      }, { kind: dm[1], nth: +(dm[2] || 0) });
+      if (v) v.abs = true;
+    }
     if (name === 'six') { await page.evaluate(() => { game.rig.controls.enableDamping = false; for (let i = 0; i < 3; i++) game.renderFrame(0.05); }); }
     else if (!v) { console.log('unknown view ' + name); continue; }
     if (v) await page.evaluate(async ({ v, frames, abs }) => {
@@ -81,7 +100,7 @@ function parseArgs() {
       const gl = game.renderer.getContext(), px = new Uint8Array(4);
       // a few frames so infill, LOD fades and shadow fitting settle
       for (let i = 0; i < frames; i++) { game.renderFrame(0.05); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
-    }, { v, frames: +(o.frames || 3), abs: !!o.abs });
+    }, { v, frames: +(o.frames || 3), abs: !!o.abs || !!v.abs });
     const file = path.join(out, `${tag}${label}.jpg`);
     if (o.clean) await page.addStyleTag({ content: '#topbar,#speed,#hint,#stats,#side,#pathbar,#toolbar,#settings,#toast{display:none !important}' }).catch(() => {});
     await page.screenshot({ path: file, type: 'jpeg', quality: 88 });

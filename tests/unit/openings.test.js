@@ -76,11 +76,21 @@ test('openings are recessed; wall-mounted parts stand clear of the wall', () => 
   const T = FACADES.windows.types.standard;
   const frameFront = front(R.parts.frame_standard.geo, (x, y) => Math.abs(x) < T.w / 2 && Math.abs(y) < T.h / 2 - 0.01);
   assert.ok(frameFront <= -0.08, 'frame front ' + frameFront.toFixed(3));
+  assert.ok(FACADES.windows.recess >= 0.2, 'openings are at least 20 cm deep: a thick wall');
+  // shutter leaves (v0.19) hinge on the corner of the reveal: shut, every face lies inside the reveal, clear of
+  // the frame behind and at least the gap behind the wall face; folded right back, the same distance in front
+  for (const k of ['leafL', 'leafR', 'leafShutL', 'leafShutR', 'leafFarL', 'leafFarR', 'leafFarShutL', 'leafFarShutR']) {
+    const P = R.parts[k].geo.attributes.position;
+    let zMin = Infinity, zMax = -Infinity;
+    for (let i = 0; i < P.count; i++) { zMin = Math.min(zMin, P.getZ(i)); zMax = Math.max(zMax, P.getZ(i)); }
+    assert.ok(zMax <= -gap + 1e-6, `${k}: a shut leaf's face is ${(-zMax * 100).toFixed(1)} cm behind the wall face`);
+    assert.ok(zMin >= frameFront + 0.02, `${k}: a shut leaf comes within ${((zMin - frameFront) * 100).toFixed(1)} cm of the window frame`);
+  }
   // every part's faces parallel to the wall are buried (< -1.5 cm) or stand clear (>= the gap). Shutter leaves are
   // placed at their hinge, which stands gap + thickness out, so they are checked at placement, not here. Arch
   // spandrels fill the top corners of an arched opening in the wall's own plane, where there is no wall.
   for (const [k, p] of Object.entries(R.parts)) {
-    if (['bar', 'pot', 'blob', 'cloth', 'cone', 'chimney', 'awning', 'awningStripe', 'storeRoom', 'flowerbox', 'balcony', 'balconySolid', 'leafL', 'leafR', 'archSpandrel'].includes(k)) continue;
+    if (['bar', 'pot', 'blob', 'cloth', 'cone', 'chimney', 'awning', 'awningStripe', 'storeRoom', 'flowerbox', 'balcony', 'balconySolid', 'archSpandrel'].includes(k) || k.startsWith('leaf')) continue;
     const P = p.geo.attributes.position, N = p.geo.attributes.normal;
     for (let i = 0; i < P.count; i++) {
       if (N.getZ(i) < 0.99) continue;
@@ -88,6 +98,8 @@ test('openings are recessed; wall-mounted parts stand clear of the wall', () => 
       assert.ok(z < -0.015 || z >= gap - 1e-6, `${k}: a face ${(z * 100).toFixed(1)} cm from the wall`);
     }
   }
-  // the painted far opening stands in front of the painted surround
-  assert.ok(front(R.parts.paint_closed.geo) - front(R.parts.sur_standard.geo) >= 0.015);
+  // far away as near, the glass sits at the back of the recess (no painted panel in front of the wall)
+  assert.ok(!Object.keys(R.parts).some((k) => k.startsWith('paint_')), 'no painted far openings');
+  assert.equal(R.parts.glass.lod ?? null, null, 'the glass is drawn at every distance');
+  assert.ok(front(R.parts.glass.geo) <= -0.15, 'glass ' + front(R.parts.glass.geo).toFixed(3));
 });

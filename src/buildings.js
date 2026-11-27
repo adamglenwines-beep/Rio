@@ -23,7 +23,7 @@ import { STYLES, registerStyled } from './style.js';
 import { LAYERS } from './materials.js';
 import { PALETTE, FACADES } from './data.js';
 import { planHouse, groundLook } from './houseplan.js';
-import { frameGeometry, leafGeometry, surroundGeometry, paintedOpeningMaterial, doorGeometries, balconyGeometries, chairGeometry, shopfrontGeometry, signGeometry, archGeometries, awningGeometry, awningMaterial, WINDOW_TYPES, GLASS_Z } from './facade.js';
+import { frameGeometry, sillGeometry, leafGeometry, surroundGeometry, doorGeometries, balconyGeometries, chairGeometry, shopfrontGeometry, signGeometry, archGeometries, awningGeometry, awningMaterial, WINDOW_TYPES, GLASS_Z } from './facade.js';
 
 const FH = CONFIG.building.floorHeight;
 const WHITE = new THREE.Color(1, 1, 1);
@@ -403,8 +403,6 @@ export class BuildingRenderer {
     this.layers = { surround: GAP, frame: GAP + 0.04, pane: GAP + 0.07, glass: GAP + 0.09, shutterOpen: GAP + 0.06, shutterShut: GAP + 0.12 };
     const Ly = this.layers;
     this.parts = {
-      window:  { geo: mergeColoured([[box(1.0, 1.5, 0.1, 0, 0, zb(Ly.frame, 0.1)), '#f1e9d6'], [box(0.74, 1.24, 0.04, 0, 0, zb(Ly.pane, 0.04)), '#3a3d44'],
-                                     [box(1.14, 0.06, 0.2, 0, -0.78, 0.1), stoneTrim]]), mat: vc, shadow: false },
       pediment: { geo: mergeColoured([[box(1.52, 0.12, 0.12, 0, 1.03, zb(GAP + 0.07, 0.12)), '#ffffff'], [box(1.4, 0.06, 0.08, 0, 0.95, zb(GAP + 0.03, 0.08)), '#e6e6e6']]), mat: lambert({ vertexColors: true }), shadow: false, far: 260 },
       // a window painted on the plaster (see _fakeMaterial)
       fake:    { geo: new THREE.PlaneGeometry(1.36, 1.9).translate(0, 0.02, GAP), mat: this._fakeMaterial(), shadow: false },
@@ -412,7 +410,9 @@ export class BuildingRenderer {
       streak:  { geo: new THREE.PlaneGeometry(1.1, 1.9).translate(0, -0.95, GAP + 0.02), mat: this._streakMaterial(), shadow: false },
       // the glass: an interior-mapped fake room behind every window (see _glassMaterial)
       // (v0.13: at the back of the recess; scaled to each opening)
-      glass:   { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, GLASS_Z), mat: this._glassMaterial(), shadow: false, lod: 'near' },
+      // (v0.19: drawn at every distance, and it draws the frame and glazing bars itself, so far-away windows are
+      // the same dark panes set back in the wall as near ones; near, the modelled frame stands in front of it)
+      glass:   { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, GLASS_Z), mat: this._glassMaterial(), shadow: false },
       balcony: { geo: shift(0.02, [[box(1.56, 0.12, 0.86, 0, -0.78, 0.42), pale], [box(0.1, 0.22, 0.6, -0.6, -0.92, 0.3), stoneTrim], [box(0.1, 0.22, 0.6, 0.6, -0.92, 0.3), stoneTrim],
                                      [box(1.52, 0.05, 0.05, 0, 0.21, 0.8), iron], [box(1.52, 0.03, 0.03, 0, -0.68, 0.8), iron],
                                      [box(0.05, 0.05, 0.8, -0.74, 0.21, 0.42), iron], [box(0.05, 0.05, 0.8, 0.74, 0.21, 0.42), iron], ...bars]), mat: vc, shadow: true },
@@ -441,21 +441,26 @@ export class BuildingRenderer {
       storeRoom: { geo: new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0), mat: this._storeMaterial(), shadow: false },
     };
     this.parts.streak.far = 140;
-    // v0.13 openings (src/facade.js, data/facades.json): a frame + sill + lintel per window kind,
-    // louvred shutter leaves (near) or boards (far), painted surrounds, and for distant houses
-    // a flat painted opening in place of the recess and slats (detail by distance)
+    // Openings (src/facade.js, data/facades.json). v0.19: a window is a hole in a thick wall at every
+    // distance: the reveal is part of the wall mesh, the stone sill and the dark glass at the back are
+    // always drawn; near, the frame is modelled and the shutter leaves are louvred; far, the leaves are
+    // framed boards. (v0.13–v0.18 covered far-away openings with a flat painted panel.)
     const frameMat = lambert({ vertexColors: true });
     for (const k of WINDOW_TYPES) {
       this.parts['frame_' + k] = { geo: frameGeometry(k), mat: frameMat, shadow: true, lod: 'near' };
+      this.parts['sill_' + k] = { geo: sillGeometry(k), mat: lambert(), shadow: true };
       this.parts['sur_' + k] = { geo: surroundGeometry(k), mat: lambert(), shadow: false };
     }
     const leafMat = lambert({ vertexColors: true });
-    this.parts.leafL = { geo: leafGeometry(false, true), mat: leafMat, shadow: true, lod: 'near' };
-    this.parts.leafR = { geo: leafGeometry(true, true), mat: leafMat, shadow: true, lod: 'near' };
-    this.parts.cellarGlass = { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, Ly.glass), mat: this.parts.glass.mat, shadow: false };
-    const paintGeo = new THREE.PlaneGeometry(2, 1.06).translate(0, -0.03, GAP + 0.02);
-    // the back of every window opening: a dark plate behind the frame, always drawn and casting a
-    // shadow, so the sun never shines through a house's openings whatever the detail level
+    // shutter leaves: L / R = hinged left / right; Shut = only the face seen when shut; Far = the framed board
+    for (const [name, right] of [['L', false], ['R', true]]) {
+      this.parts['leaf' + name] = { geo: leafGeometry(right, true), mat: leafMat, shadow: true, lod: 'near' };
+      this.parts['leafShut' + name] = { geo: leafGeometry(right, true, true), mat: leafMat, shadow: true, lod: 'near' };
+      this.parts['leafFar' + name] = { geo: leafGeometry(right, false), mat: leafMat, shadow: true, lod: 'far' };
+      this.parts['leafFarShut' + name] = { geo: leafGeometry(right, false, true), mat: leafMat, shadow: true, lod: 'far' };
+    }
+    // the back of every window opening: a dark plate behind the glass, always drawn and casting a
+    // shadow, so the sun never shines through a house's openings
     this.parts.holeBack = { geo: new THREE.PlaneGeometry(1, 1).translate(0, 0, -FACADES.windows.recess - 0.01), mat: lambert({ color: '#2b2a28' }), shadow: true };
     // balconies: a slab (stone, consoles) and a railing per variant in data/facades.json
     for (const v of FACADES.balconies.variants) {
@@ -469,9 +474,11 @@ export class BuildingRenderer {
     const wd = doorGeometries(GF.workshopDoor.w, GF.workshopDoor.h, GF.workshopDoor.recess);
     this.parts.wsJambs = { geo: wd.surround, mat: lambert({ vertexColors: true }), shadow: true };
     this.parts.wsLeaf = { geo: wd.leaf, mat: lambert({ vertexColors: true }), shadow: true };
+    this.parts.wsTrim = { geo: wd.trim, mat: lambert({ vertexColors: true }), shadow: false, lod: 'near' };
     const ad = doorGeometries(GF.archedEntry.w, GF.archedEntry.h, GF.archedEntry.recess, true), ag = archGeometries(GF.archedEntry.w, GF.archedEntry.h, GF.archedEntry.recess);
     this.parts.archJambs = { geo: ad.surround, mat: lambert({ vertexColors: true }), shadow: true };
     this.parts.archLeaf = { geo: ad.leaf, mat: lambert({ vertexColors: true }), shadow: true };
+    this.parts.archTrim = { geo: ad.trim, mat: lambert({ vertexColors: true }), shadow: false, lod: 'near' };
     this.parts.archSpandrel = { geo: ag.spandrel, mat: lambert(), shadow: true };
     this.parts.archRing = { geo: ag.voussoirs, mat: lambert(), shadow: false };
     this.parts.shopFront = { geo: shopfrontGeometry(GF.shopfront.w, GF.shopfront.h, GF.shopfront.recess), mat: lambert({ vertexColors: true }), shadow: true };
@@ -480,13 +487,16 @@ export class BuildingRenderer {
     const D = GF.door, dg = doorGeometries(D.w, D.h, D.recess);
     this.parts.doorJambs = { geo: dg.surround, mat: lambert({ vertexColors: true }), shadow: true };
     this.parts.doorLeaf = { geo: dg.leaf, mat: lambert({ vertexColors: true }), shadow: true };
-    // (shut or shutterless windows need only the opening's width; folded-back leaves twice that)
-    const paintNarrow = new THREE.PlaneGeometry(1.12, 1.06).translate(0, -0.03, GAP + 0.02);
-    for (const st of ['closed', 'open', 'half', 'none']) this.parts['paint_' + st] = { geo: st === 'open' || st === 'half' ? paintGeo : paintNarrow, mat: paintedOpeningMaterial(st), shadow: false, lod: 'far' };
+    this.parts.doorTrim = { geo: dg.trim, mat: lambert({ vertexColors: true }), shadow: false, lod: 'near' };
     for (const p of Object.values(this.parts)) { p.mesh = null; p.cap = 0; }
     registerStyled(this.massMat, 'surface', { mode: 'face', layer: 'attr', weather: true, trueMean: true });
-    const surf = { leafL: 'woodPaint', leafR: 'woodPaint', door: 'woodPaint', chimney: 'plaster', doorFrame: 'stoneDressed', doorLeaf: 'planks', doorJambs: 'stoneDressed', wsLeaf: 'planks', wsJambs: 'stoneDressed', archLeaf: 'planks', archJambs: 'stoneDressed', archRing: 'stoneDressed', archSpandrel: 'plaster',
-      sur_standard: 'plaster', sur_french: 'plaster', sur_small: 'plaster' };
+    const surf = { door: 'woodPaint', chimney: 'plaster', doorFrame: 'stoneDressed', doorLeaf: 'planks', doorTrim: 'planks', doorJambs: 'stoneDressed', wsLeaf: 'planks', wsTrim: 'planks', wsJambs: 'stoneDressed',
+      archLeaf: 'planks', archTrim: 'planks', archJambs: 'stoneDressed', archRing: 'stoneDressed', archSpandrel: 'plaster' };
+    for (const k of Object.keys(this.parts)) {
+      if (k.startsWith('leaf')) surf[k] = 'woodPaint';
+      if (k.startsWith('sur_')) surf[k] = 'plaster';
+      if (k.startsWith('sill_')) surf[k] = 'stoneDressed';
+    }
     // detail by distance: a part with `far` shrinks away beyond that many metres (× the quality's reach)
     this.detailReach = { value: 1 };
     const fadeFar = (mat, far) => {
@@ -511,10 +521,11 @@ export class BuildingRenderer {
     // (one always drawn, one only near: frames and louvred leaves) instead of one instanced batch
     // per kind per chunk: far fewer draw calls. Parts with their own shaders or a fade with
     // distance (glass, painted openings, awnings, plants, pots, washing) stay instanced.
-    this.mergeNear = new Set(['leafL', 'leafR', ...WINDOW_TYPES.map((k) => 'frame_' + k)]);
+    this.mergeNear = new Set(['leafL', 'leafR', 'leafShutL', 'leafShutR', 'doorTrim', 'wsTrim', 'archTrim', ...WINDOW_TYPES.map((k) => 'frame_' + k)]);
+    this.mergeFar = new Set(['leafFarL', 'leafFarR', 'leafFarShutL', 'leafFarShutR']);
     this.mergeAlways = new Set(['doorJambs', 'doorLeaf', 'wsJambs', 'wsLeaf', 'archJambs', 'archLeaf', 'archSpandrel', 'archRing', 'shopFront', 'shopSign',
-      'chimney', 'pediment', 'door', 'doorFrame', 'shop', 'awning', 'awningStripe', 'balcony', 'balconySolid', 'holeBack', 'window',
-      ...Object.keys(this.parts).filter((k) => k.startsWith('balSlab_') || k.startsWith('balRail_') || k.startsWith('sur_'))]);
+      'chimney', 'pediment', 'door', 'doorFrame', 'shop', 'awning', 'awningStripe', 'balcony', 'balconySolid', 'holeBack',
+      ...Object.keys(this.parts).filter((k) => k.startsWith('balSlab_') || k.startsWith('balRail_') || k.startsWith('sur_') || k.startsWith('sill_'))]);
     this.partLayer = {};
     for (const k of Object.keys(this.parts)) this.partLayer[k] = surf[k] ? (LAYERS[surf[k]] ?? -1) : -1;
     this._flats = {};
@@ -907,29 +918,32 @@ export class BuildingRenderer {
    * to bloom. Unlit (MeshBasic) so it costs only the window pixels.
    */
   _glassMaterial() {
-    this._gc = new THREE.Color(); this._c = new THREE.Color();
+    this._gc = new THREE.Color(); this._c = new THREE.Color(); this._c2 = new THREE.Color();
     this.glassUniforms = {
       uLit: { value: 0 }, uDay: { value: 1 }, uSky: { value: new THREE.Color('#bcd6ea') }, uWarm: { value: new THREE.Color('#ffc07a') },
     };
     const m = new THREE.MeshBasicMaterial({ color: '#ffffff' });
     m.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.glassUniforms);
-      sh.vertexShader = 'varying vec3 vPosL;\nvarying vec3 vCamL;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      sh.vertexShader = 'varying vec3 vPosL;\nvarying vec3 vCamL;\nvarying vec4 vWinM;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         mat4 mI = modelMatrix;
+        vec2 gSc = vec2(1.0);
         #ifdef USE_INSTANCING
           mI = modelMatrix * instanceMatrix;
+          gSc = vec2(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz));
         #endif
         vCamL = (inverse(mI) * vec4(cameraPosition, 1.0)).xyz;
-        vPosL = position;`);
+        vPosL = position;
+        vWinM = vec4(position.xy * gSc, vec2(0.37, 0.62) * gSc);   // metres from the middle of the opening; its half-size`);
       sh.fragmentShader = `uniform float uLit, uDay; uniform vec3 uSky, uWarm;
-        varying vec3 vPosL; varying vec3 vCamL;
+        varying vec3 vPosL; varying vec3 vCamL; varying vec4 vWinM;
         ` + sh.fragmentShader.replace('#include <color_fragment>', `
         vec3 rnd = vec3(1.0);
         #if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )
           rnd = vColor.rgb;
         #endif
         // the room, in window space: the glass plane, room behind it
-        vec3 o = vPosL - vec3(0.0, 0.0, ${(CONFIG.building.facadeGap + 0.09).toFixed(3)});
+        vec3 o = vPosL - vec3(0.0, 0.0, ${GLASS_Z.toFixed(3)});
         vec3 d = normalize(vPosL - vCamL);
         const vec3 R = vec3(1.3, 1.45, 3.0);       // half-width, half-height (around the window), depth
         float floorY = -1.55, ceilY = 1.45;
@@ -960,7 +974,7 @@ export class BuildingRenderer {
         // light: dim daylight inside, or a warm lamp once this room's light is on
         float lit = smoothstep(rnd.r, rnd.r + 0.04, uLit);
         float depthFall = 1.0 - 0.5 * clamp(-p.z / R.z, 0.0, 1.0);
-        vec3 dayL = col * (0.07 + 0.11 * uDay) * depthFall;   // rooms are dim by day (glass reads dark)
+        vec3 dayL = col * (0.035 + 0.065 * uDay) * depthFall;   // rooms are dim by day: from outside the glass reads dark
         // lamplight falls off from a ceiling lamp; the lamp itself is bright enough to bloom
         vec3 lampPos = vec3((rnd.g - 0.5) * 0.8, ceilY - 0.25, -1.4);
         float near = 1.0 / (1.0 + 0.35 * dot(p - lampPos, p - lampPos));
@@ -969,7 +983,19 @@ export class BuildingRenderer {
         vec3 inside = mix(dayL, lampL, lit);
         // the glass: a faint sky sheen, stronger at grazing angles
         float fres = pow(1.0 - abs(d.z), 3.0);
-        diffuseColor.rgb = mix(inside, uSky * (0.15 + 0.35 * uDay), (0.08 + 0.45 * fres) * (1.0 - lit * 0.8));`);
+        diffuseColor.rgb = mix(inside, uSky * (0.15 + 0.35 * uDay), (0.05 + 0.35 * fres) * (1.0 - lit * 0.8));
+        // the window frame and its glazing bars, drawn on the pane (near the camera a modelled frame
+        // stands in front of this). Thinner than a pixel, a bar fades by its share of the pixel
+        // instead of flickering on and off.
+        {
+          vec2 am = abs(vWinM.xy), hf = vWinM.zw;
+          float px = max(fwidth(vWinM.x) + fwidth(vWinM.y), 1e-4);
+          float cov = clamp(${(2 * FACADES.windows.frame.mullion).toFixed(3)} / px, 0.0, 1.0);
+          float fr = clamp((${FACADES.windows.frame.bar.toFixed(3)} + 0.5 * px - min(hf.x - am.x, hf.y - am.y)) / px, 0.0, 1.0) * clamp(${(1.3 * FACADES.windows.frame.bar).toFixed(3)} / px, 0.0, 1.0);
+          float mu = hf.x > 0.4 ? clamp((${(FACADES.windows.frame.mullion / 2).toFixed(3)} + 0.5 * px - am.x) / px, 0.0, 1.0) * cov : 0.0;
+          float tr = (hf.y > 0.75 && hf.y < 1.05) ? clamp((${(FACADES.windows.frame.mullion / 2).toFixed(3)} + 0.5 * px - abs(vWinM.y - (hf.y - ${FACADES.windows.frame.transomAt.toFixed(2)}))) / px, 0.0, 1.0) * cov : 0.0;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.21, 0.2, 0.175) * (0.2 + 0.8 * uDay), max(fr, max(mu, tr)));
+        }`);
     };
     return m;
   }
@@ -1033,52 +1059,71 @@ export class BuildingRenderer {
   }
 
   /**
-   * One window (v0.13): the frame, glass, sill and lintel in the recess cut through the
-   * wall, a painted surround on decorated houses, and two louvred shutter leaves on their
-   * hinges, each shut, folded back flat against the wall (where there is room) or standing
-   * part open, a little irregular. Far away, all of it becomes one painted opening. Then
-   * whatever hangs off the window: a balcony, a flower box or a washing line.
+   * One window. v0.19: a hole in a thick wall at every distance. The reveal is cut into the
+   * wall mesh; here come the stone sill, the dark glass at the back (it draws its own frame;
+   * near, a modelled frame stands in front of it), a thin painted surround on decorated
+   * houses, and two louvred shutter leaves hinged on the corners of the reveal: shut (lying
+   * inside the reveal), folded back flat against the wall (where there is room), standing
+   * part open, or missing; some houses' leaves are sun-bleached. Then whatever hangs off the
+   * window: a flower box or a washing line (a balcony is added per floor).
    * `o` = { u, w, h, y0, y1, yc, type, px, pz, inset, balcony, ground, roomLeft, roomRight }.
    * Returns true if the right-hand leaf is folded back (it then takes wall space).
    */
   _opening(put, b, rng, F, W, o) {
-    const WIN = FACADES.windows, SH = FACADES.shutters, K = CONFIG.building.look, GAPm = CONFIG.building.facadeGap;
+    const WIN = FACADES.windows, SH = FACADES.shutters, K = CONFIG.building.look;
     const { A, e, n, rot, sgn } = W, T = WIN.types[o.type], ky = o.h / T.h;
-    put('frame_' + o.type, o.px, o.yc, o.pz, rot, 1, ky, 1, WHITE);
-    // per-window randoms (packed in the instance colour): when its light comes on, the room's wall colour, the curtain
-    this._gc.setRGB(rng(), rng(), rng());
-    const fb = WIN.frame.bar;
-    put('glass', o.px, o.yc, o.pz, rot, (o.w - 2 * fb) / 0.74, (o.h - 2 * fb) / 1.24, 1, this._gc);
+    if (T.sill !== false) put('sill_' + o.type, o.px, o.yc, o.pz, rot, 1, ky, 1, F.sillCol);
     put('holeBack', o.px, o.yc, o.pz, rot, o.w, o.h, 1, WHITE);
     if (F.deco === 'surrounds' || F.deco === 'full') {
       put('sur_' + o.type, o.px, o.yc, o.pz, rot, 1, ky, 1, F.trimSoft);
       if (F.deco === 'full' && o.type !== 'small') put('pediment', o.px, o.y1 + WIN.lintel.height + 0.04 - 0.92, o.pz, rot, (o.w + 0.4) / 1.52, 1, 1, F.trimSoft);
     }
     if (!o.balcony && rng() < CONFIG.building.streakChance) put('streak', o.px, o.y0 - WIN.sill.height, o.pz, rot, (o.w / 1.1) * (0.85 + rng() * 0.3), 0.6 + rng() * 0.5, 1, WHITE);
-    // shutters
-    if (!b.shutterShades) b.shutterShades = [-0.025, 0, 0.025].map((d) => b.shutter.clone().offsetHSL(0, 0, d));
-    const shade = b.shutterShades[(rng() * 3) | 0];
+    // ---- shutters: what each leaf is doing ('shut' | 'flat' | an angle in radians | null = missing) ----
+    if (!b.shutterShades) b.shutterShades = [-0.03, 0, 0.03].map((d) => b.shutter.clone().offsetHSL(0, 0, d));
     let state = rng.weighted(SH.states.map((s) => [s.name, s.weight * (s.name === 'closed' ? F.shutMul.closed : s.name === 'open' ? F.shutMul.open : 1)]));
     if (o.balcony && state === 'none') state = 'closed';
     b.shutterStates = b.shutterStates || {}; b.shutterStates[state] = (b.shutterStates[state] || 0) + 1;
-    put('paint_' + state, o.px, o.yc, o.pz, rot, o.w, o.h, 1, shade);
+    const side = rng() < 0.5 ? -1 : 1;                    // which leaf is the odd one out
+    const ajar = () => SH.ajarAngle[0] + rng() * (SH.ajarAngle[1] - SH.ajarAngle[0]);
+    const half = () => SH.halfAngle[0] + rng() * (SH.halfAngle[1] - SH.halfAngle[0]);
+    const leaves = {};                                    // by side (-1 = low u, +1 = high u)
+    for (const s of [-1, 1]) {
+      const room = s < 0 ? o.roomLeft : o.roomRight, odd = s === side;
+      let what;
+      if (state === 'none') what = null;
+      else if (state === 'closed') what = 'shut';
+      else if (state === 'open') what = room ? 'flat' : half();
+      else if (state === 'oneOpen') what = odd ? (room ? 'flat' : half()) : 'shut';
+      else if (state === 'half') what = odd ? half() : 'shut';
+      else if (state === 'ajar') what = ajar();
+      else what = odd ? null : (room && rng() < 0.5 ? 'flat' : 'shut');   // 'lost': one leaf gone
+      leaves[s] = what;
+    }
+    const bothShut = leaves[-1] === 'shut' && leaves[1] === 'shut';
+    // the glass (and near, the frame) show unless both leaves are shut in front of them
+    if (!bothShut) {
+      put('frame_' + o.type, o.px, o.yc, o.pz, rot, 1, ky, 1, WHITE);
+      // per-window randoms (packed in the instance colour): when its light comes on, the room's wall colour, the curtain
+      this._gc.setRGB(rng(), rng(), rng());
+      put('glass', o.px, o.yc, o.pz, rot, o.w / 0.74, o.h / 1.24, 1, this._gc);
+    }
     let foldRight = false;
-    if (state !== 'none') {
-      const lw = o.w / 2, lh = o.h - 0.03, t = SH.thickness;
-      const halfSide = rng() < 0.5 ? -1 : 1;
-      for (const s of [-1, 1]) {
-        const key = (s < 0) === (sgn > 0) ? 'leafL' : 'leafR', openSign = key === 'leafL' ? -1 : 1;
-        const room = s < 0 ? o.roomLeft : o.roomRight;
-        const half = SH.halfAngle[0] + rng() * (SH.halfAngle[1] - SH.halfAngle[0]);
-        let ang;
-        if (state === 'closed' || (state === 'half' && s !== halfSide)) ang = rng() * SH.closedJitter;
-        else if (state === 'open' && room) ang = Math.PI - rng() * SH.openJitter;
-        else ang = half;
-        if (s > 0 && ang > 2.5) foldRight = true;
-        const hu = o.u + s * o.w / 2, out = o.inset + GAPm + t;
-        const hx = A[0] + e[0] * hu + n[0] * out, hz = A[1] + e[1] * hu + n[1] * out;
-        put(key, hx, o.yc + (rng() - 0.5) * 2 * SH.sag, hz, rot + openSign * ang, lw, lh, 1, shade);
-      }
+    const lw = o.w / 2 - 0.004, lh = o.h - 0.02;
+    for (const s of [-1, 1]) {
+      const what = leaves[s];
+      if (what === null) continue;
+      const name = (s < 0) === (sgn > 0) ? 'L' : 'R', openSign = name === 'L' ? -1 : 1;
+      const ang = what === 'shut' ? rng() * SH.closedJitter : what === 'flat' ? Math.PI - rng() * SH.openJitter : what;
+      if (s > 0 && what === 'flat') foldRight = true;
+      // each leaf its own shade of the house's shutter colour; on some houses, bleached by the sun
+      let col = b.shutterShades[(rng() * 3) | 0];
+      if (F.shutFade > 0) col = this._c2.copy(col).lerp(F.shutFadeCol, F.shutFade * (0.5 + 0.5 * rng()));
+      // the hinge: on the corner of the reveal, on the wall's face
+      const hu = o.u + s * o.w / 2, hx = A[0] + e[0] * hu + n[0] * o.inset, hz = A[1] + e[1] * hu + n[1] * o.inset;
+      const y = o.yc + (rng() - 0.5) * 2 * SH.sag, r = rot + openSign * ang, shutNow = what === 'shut';
+      put((shutNow ? 'leafShut' : 'leaf') + name, hx, y, hz, r, lw, lh, 1, col);
+      put((shutNow ? 'leafFarShut' : 'leafFar') + name, hx, y, hz, r, lw, lh, 1, col);
     }
     const at = (along, out) => [o.px + e[0] * along + n[0] * out, o.pz + e[1] * along + n[1] * out];
     if (o.balcony) return foldRight;                      // (the balcony is added per floor, see _balcony)
@@ -1275,8 +1320,8 @@ export class BuildingRenderer {
 
   /** Detail meshes too small to matter in a ripply reflection. */
   smallParts() {
-    const keep = (k) => ['window', 'glass', 'storeRoom'].includes(k) || k.startsWith('frame_');
-    return [...this.chunks.values()].flatMap((ch) => [ch.det, ch.detN, ...Object.entries(ch.parts).filter(([k]) => !keep(k)).map(([, m]) => m)]).filter(Boolean);
+    const keep = (k) => ['glass', 'storeRoom'].includes(k);
+    return [...this.chunks.values()].flatMap((ch) => [ch.det, ch.detN, ch.detF, ...Object.entries(ch.parts).filter(([k]) => !keep(k)).map(([, m]) => m)]).filter(Boolean);
   }
 
   /** Flat overlays drawn on top of walls (not solid surfaces): left out of the ambient-occlusion pass. */
@@ -1327,7 +1372,7 @@ export class BuildingRenderer {
   /** (Re)fill one chunk's meshes from its houses' cached pieces. */
   _fillChunk(key, list) {
     let ch = this.chunks.get(key);
-    if (!ch) { ch = { key, mass: null, det: null, detN: null, parts: {}, sphere: new THREE.Sphere(), ids: '' }; this.chunks.set(key, ch); }
+    if (!ch) { ch = { key, mass: null, det: null, detN: null, detF: null, parts: {}, sphere: new THREE.Sphere(), ids: '' }; this.chunks.set(key, ch); }
     ch.ids = list.map((b) => b.id).join(',');
     // its bounding sphere: every house's footprint, from its lowest ground to its roof (plus balconies and awnings)
     const box = new THREE.Box3(), v = new THREE.Vector3();
@@ -1338,6 +1383,7 @@ export class BuildingRenderer {
     this._fillMerged(ch, 'mass', list, (c) => c);
     this._fillMerged(ch, 'det', list, (c) => c.det);
     this._fillMerged(ch, 'detN', list, (c) => c.detN);
+    this._fillMerged(ch, 'detF', list, (c) => c.detF);
     // --- instance batches ---
     for (const k of Object.keys(this.parts)) {
       let n = 0;
@@ -1386,7 +1432,7 @@ export class BuildingRenderer {
       else {
         const m = new THREE.Mesh(geo, this.massMat);
         m.castShadow = true; m.receiveShadow = true;
-        m.userData = { houseMass: slot === 'mass', merged: slot, lod: slot === 'detN' ? 'near' : null };
+        m.userData = { houseMass: slot === 'mass', merged: slot, lod: slot === 'detN' ? 'near' : slot === 'detF' ? 'far' : null };
         ch[slot] = m;
         this.group.add(m);
       }
@@ -1405,7 +1451,7 @@ export class BuildingRenderer {
   }
 
   _disposeChunk(ch) {
-    for (const slot of ['mass', 'det', 'detN']) if (ch[slot]) { this.group.remove(ch[slot]); ch[slot].geometry.dispose(); }
+    for (const slot of ['mass', 'det', 'detN', 'detF']) if (ch[slot]) { this.group.remove(ch[slot]); ch[slot].geometry.dispose(); }
     for (const m of Object.values(ch.parts)) { this.group.remove(m); m.dispose(); }
   }
 
@@ -1427,6 +1473,7 @@ export class BuildingRenderer {
         m.visible = m.count > 0 && (!lod || (lod === 'near') === near);
       }
       if (ch.detN) ch.detN.visible = near && ch.detN.geometry.drawRange.count > 0;
+      if (ch.detF) ch.detF.visible = !near && ch.detF.geometry.drawRange.count > 0;
     }
     return changed;
   }
@@ -1533,8 +1580,12 @@ export class BuildingRenderer {
       flowers: K.flowerBox * (rng() < 0.6 ? 0.4 : 2.2),
       flowerCol: new THREE.Color(rng.pick(K.flowerColours)),
     };
+    // (drawn last, so houses keep the look they had before these were added)
+    F.sillCol = new THREE.Color(rng.weighted(FACADES.windows.sill.colours));
+    F.shutFade = rng() < FACADES.shutters.fadedHouses ? FACADES.shutters.fade[0] + rng() * (FACADES.shutters.fade[1] - FACADES.shutters.fade[0]) : 0;
+    F.shutFadeCol = new THREE.Color(FACADES.shutters.fadeColour);
     F.shutMul = { closed: F.shut[0] / K.shutClosed, open: F.shut[2] / K.shutOpen };
-    F.trimSoft = F.trim.clone().lerp(b.facade, 0.35);       // surrounds a little closer to the wall colour (lower contrast)
+    F.trimSoft = F.trim.clone().lerp(b.facade, 0.5);        // painted surrounds and bands: half way to the wall colour (thin and low in contrast)
     F.ridge = F.ridgeTerracotta ? new THREE.Color(rng.pick(['#ae7055', '#b6775d', '#a2643f'])) : new THREE.Color('#dcd8cf');
     return F;
   }
@@ -1545,9 +1596,10 @@ export class BuildingRenderer {
     const lists = {};
     for (const k of Object.keys(this.parts)) lists[k] = [];
     // instance = [x, y, z, rotY, sx, sy, sz, colour]
-    const gbA = new GeoBuilder(), gbN = new GeoBuilder(), counts = {};   // merged facade detail: always / near only
+    const gbA = new GeoBuilder(), gbN = new GeoBuilder(), gbF = new GeoBuilder(), counts = {};   // merged facade detail: always / near only / far only
     const put = (k, x, y, z, rot, sx, sy, sz, col) => {
-      if (this.mergeAlways.has(k) || this.mergeNear.has(k)) { this._bake(this.mergeNear.has(k) ? gbN : gbA, k, x, y, z, rot, sx, sy, sz, col); counts[k] = (counts[k] || 0) + 1; }
+      const gbX = this.mergeAlways.has(k) ? gbA : this.mergeNear.has(k) ? gbN : this.mergeFar.has(k) ? gbF : null;
+      if (gbX) { this._bake(gbX, k, x, y, z, rot, sx, sy, sz, col); counts[k] = (counts[k] || 0) + 1; }
       else lists[k].push(x, y, z, rot, sx, sy, sz, col.r, col.g, col.b);
     };
     const cream = CREAM, stone = STONE, awnCols = AWN_COLS;
@@ -1733,7 +1785,7 @@ export class BuildingRenderer {
         const D = kind === 'shop' ? GF.shopfront : kind === 'workshop' ? GF.workshopDoor : kind === 'arched' ? GF.archedEntry : GF.door;
         const u = clamp(us[midCol], D.w / 2 + 0.45, L - D.w / 2 - 0.45), dx = A[0] + e[0] * u, dz = A[1] + e[1] * u;
         const g = t.heightAt(dx + n[0] * 0.5, dz + n[1] * 0.5);
-        let y0 = g + (kind === 'shop' ? 0.05 : 0.15);
+        let y0 = g + (kind === 'shop' ? 0.05 : kind === 'workshop' ? 0.15 : GF.doorRise);   // a house door stands on two stone steps
         const clear = L > D.w + 0.9 && !covered(A, e, n, u - D.w / 2 - 0.3, u + D.w / 2 + 0.3, g - 0.2, g + D.h + 0.5, front ? 1.0 : FACADES.windows.clearInFront) && y0 + D.h + 0.6 < b.top
           && t.heightAt(dx + n[0] * 1.6, dz + n[1] * 1.6) < g + 0.5 && Math.abs(t.heightAt(A[0] + n[0] * 0.5, A[1] + n[1] * 0.5) - t.heightAt(Bc[0] + n[0] * 0.5, Bc[1] + n[1] * 0.5)) < (front ? 9 : 1.5)
           && !(b.arch && g < b.arch.y - 0.2 && front === false);
@@ -1755,14 +1807,17 @@ export class BuildingRenderer {
             } else if (kind === 'workshop') {
               put('wsJambs', px, y0, pz, srot, 1, 1, 1, F.doorStone);
               put('wsLeaf', px, y0, pz, srot, 1, 1, 1, this._c.set(rng.pick(['#7d6b55', '#6e5f4e', '#8a7a64', '#5f6e5f', '#5d6b78'])));
+              put('wsTrim', px, y0, pz, srot, 1, 1, 1, this._c);
             } else if (kind === 'arched') {
               put('archJambs', px, y0, pz, srot, 1, 1, 1, F.doorStone);
               put('archLeaf', px, y0, pz, srot, 1, 1, 1, leafCol);
+              put('archTrim', px, y0, pz, srot, 1, 1, 1, leafCol);
               put('archSpandrel', px, y0, pz, srot, 1, 1, 1, b.facade);
               put('archRing', px, y0, pz, srot, 1, 1, 1, F.doorStone);
             } else {
               put('doorJambs', px, y0, pz, srot, 1, 1, 1, F.doorStone);
               put('doorLeaf', px, y0, pz, srot, 1, 1, 1, leafCol);
+              put('doorTrim', px, y0, pz, srot, 1, 1, 1, leafCol);
             }
             // an awning over a shop or workshop: striped (stripes made in the shader) or plain cream
             if (awn > 0 && rng() < awn) {
@@ -1818,11 +1873,14 @@ export class BuildingRenderer {
           if (b.vaultEdge === i && inStone) continue;         // the boat store is this wall's ground floor
           if (inStone) {
             // the cellar: at most a small grated window, no shutters
-            if (rng() < 0.3 && floorBottom + 1.8 > ground + 0.9) {
+            if (rng() < 0.3 && floorBottom + WIN.types.cellar.sillAt > ground + 0.5 && floorBottom + WIN.types.cellar.sillAt + WIN.types.cellar.h < stoneTop - 0.25) {
               any = true;
-              const sk = skin(floorBottom);
-              this._window(put, wx + n[0] * sk, floorBottom + 1.8, wz + n[1] * sk, b, rng, F, W, { cellar: true });
-              b.openings.push({ kind: 'cellar', wall: i, u0: u - 0.4, u1: u + 0.4, y0: floorBottom + 1.4, y1: floorBottom + 2.2 });
+              // a small barred opening through the stone and the wall behind it
+              const C = WIN.types.cellar, cy0 = floorBottom + C.sillAt, cy1 = cy0 + C.h, ins = lean(cy0), sk = skin(cy0);
+              holes[i].push({ u0: u - C.w / 2, u1: u + C.w / 2, y0: cy0, y1: cy1, depth: WIN.recess });
+              put('holeBack', wx + n[0] * ins, (cy0 + cy1) / 2, wz + n[1] * ins, srot, C.w, C.h, 1, WHITE);
+              for (const du of [-C.w / 6, C.w / 6]) put('bar', wx + e[0] * du + n[0] * (sk - 0.05), cy0, wz + e[1] * du + n[1] * (sk - 0.05), srot, 0.03, C.h, 0.03, IRON);
+              b.openings.push({ kind: 'cellar', wall: i, u0: u - C.w / 2, u1: u + C.w / 2, y0: cy0, y1: cy1 });
             }
             continue;
           }
@@ -1912,7 +1970,7 @@ export class BuildingRenderer {
     }
     const g = gb.arrays((x, z, nx, nz) => this._enclosure(b, x, z, nx, nz), t, (b.seed % 997) / 997, b.top - this.style.cornice);
     const rnd = (b.seed % 997) / 997;
-    return { ver: b.ver, pos: g.pos, nor: g.nor, col: g.col, ao: g.ao, wall: g.wall, bake: g.bake, parts, det: gbA.arraysPlain(rnd), detN: gbN.arraysPlain(rnd), counts };
+    return { ver: b.ver, pos: g.pos, nor: g.nor, col: g.col, ao: g.ao, wall: g.wall, bake: g.bake, parts, det: gbA.arraysPlain(rnd), detN: gbN.arraysPlain(rnd), detF: gbF.arraysPlain(rnd), counts };
   }
 
   /** A part's triangles (non-indexed positions and vertex colours), made once. */
@@ -1941,15 +1999,6 @@ export class BuildingRenderer {
       n[0] /= l; n[1] /= l; n[2] /= l;
       gbX._triVC([...v[0]], [...v[1]], [...v[2]], [...n], [...vc[0]], [...vc[1]], [...vc[2]]);
     }
-  }
-
-  /** A small grated cellar window on a stone ground floor (no recess: the stone stands proud). */
-  _window(put, x, y, z, b, rng, F, W) {
-    const k = this.style.detailScale * 0.72, ky = this.style.detailScale * 0.5;
-    put('window', x, y, z, W.rot, k, ky, 1, WHITE);
-    this._gc.setRGB(rng(), rng(), rng());
-    put('cellarGlass', x, y, z, W.rot, k, ky, 1, this._gc);
-    put('bar', x + W.nx * 0.12, y - 0.3 * ky, z + W.nz * 0.12, W.rot, 0.03, 0.6 * ky, 0.03, IRON);
   }
 
   /** Terracotta pots with geraniums and greenery clustered by a door. */

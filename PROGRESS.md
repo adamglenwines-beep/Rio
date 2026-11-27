@@ -21,7 +21,7 @@ once at the very end. After each stage: commit, merge to `main`, publish, screen
 | 1. Sunlight | `v0.16 · Sunlight` | **done, published** |
 | 2. Palette and shutter colour | `v0.17 · Palette` | **done, published** |
 | 3. Small-scale shading | `v0.18 · Shading` | **done, published** |
-| 4. Windows, shutters and doors | `v0.19` | to do |
+| 4. Windows, shutters and doors | `v0.19 · Windows` | **done, published** |
 | 5. Plaster weathering | `v0.20` | to do |
 | 6. Break the procedural rhythm | `v0.21` | to do |
 | Wrap-up: browser suite, final sheets in `docs/progress/final/`, summary | | to do |
@@ -231,6 +231,89 @@ Expect the same fps as v0.15, or a frame or two less.
   split. Not visible from the Postcard or Overview; faintly from very close.
 
 Pictures: `docs/progress/v0.18/`.
+
+### Stage 4 · Windows, shutters and doors (v0.19) — done
+
+**The main fault found.** From the Postcard and Overview cameras every window was drawn at its
+"far" level of detail (anything beyond 55 m): one flat painted rectangle standing *in front of*
+the wall, with painted green stripes for shutters. The recessed openings and louvred leaves of
+v0.13 only ever showed close up. That is why windows read as panels on the wall's face.
+
+**Now a window is a hole in a thick wall at every distance.**
+- **The opening** is cut through the wall mesh as before, but **26 cm deep** (was 18), with the
+  reveal's shade from Stage 3. Doors 32 cm, arched entries 38 cm, workshop doors 30 cm,
+  shopfronts 26 cm.
+- **Always drawn:** a **stone sill** (its own part now: pale limestone to grey slate, one stone
+  per house, 7 cm thick, 6 cm proud) and the **dark glass at the back of the recess**. The glass
+  draws its own pale frame, mullion and transom, softened when they get thinner than a pixel,
+  so the far view is the same pane as the near one. Rooms behind the glass are about half as
+  bright by day as before. *(This also means lit windows at dusk now show from the Postcard
+  view; before, far windows could not light up.)*
+- **No lintel boxes.** The plaster runs to the edge of the opening. Decorated houses keep a
+  **painted surround, 9 cm wide (was 13), half way to the wall colour** (was a third).
+- **Near (within 55 m on High):** the modelled frame with its glazing bars.
+- The flat painted "far" openings (`paint_*`) are gone, with their four materials.
+
+**Shutters** (`data/facades.json` → `shutters`).
+- A leaf is **hinged on the outer corner of the reveal**, as real persiane are. Shut, it lies
+  *inside* the reveal, 3 cm behind the wall face, in the reveal's shadow; folded back, it lies
+  flat against the wall. It is **4.5 cm thick**, with stiles, top, bottom and middle rails.
+- **Near:** 14 tilted slats per leaf on both faces; under each slat the shaded gap is a dark
+  strip, so the slats show at any distance they are drawn at. **Far:** a framed board: paler
+  stiles and rails round a darker louvred panel (20 triangles; 10 when shut).
+- **States** (demo town, 2,492 windows): both shut 35%, both folded back 26%, one folded back
+  and one shut 12%, one shut and one standing part open 9%, both pushed ajar 9%, one leaf
+  missing 5%, no shutters 4%. Each leaf takes one of three shades of its house's shutter colour;
+  **on about one house in five the leaves are sun-bleached** toward grey-green, each by a
+  different amount.
+- Shutter greens moved a little toward the paint-overs after measuring them (they came out
+  darker, yellower and more saturated than the paint-overs' at first): now `#335d49`,
+  `#2c5747`, `#386654`, `#285147`, `#446b52`, faded `#647e6c`, grey `#838f86`, brown `#6b4a38`,
+  slate `#39505a`. Green pixels in the Postcard town: lightness 12 / 17 / 27% (10th / 50th /
+  90th) against the paint-overs' 14 / 20 / 29% and v0.15's 17 / 31 / 41%; they cover 4% of the
+  town picture (paint-overs 3.4–3.9%, v0.15 7.3%).
+
+**Doors.**
+- Deeper recess (32 cm); the **timber door is two leaves** with a dark joint, and near the
+  camera raised stiles and rails round sunk panels, and a knob.
+- **Two stone steps**: house doors and arched entries now stand 30 cm above the lane on a
+  threshold and a wider step below it (the lower one sinks into the ground where the lane
+  climbs). Jambs a little slimmer (15 cm).
+- **Cellar windows** on stone ground floors are real barred holes through the stone now (they
+  were a flat frame-and-pane sticker on the stone).
+
+**Kept:** no openings on covered walls, and its test (`tests/unit/openings.test.js`, unchanged
+check; 60/60 pass). The same test now also checks: openings at least 20 cm deep; a shut leaf lies
+wholly inside the reveal, at least 3 cm behind the wall face and clear of the frame; no painted
+far openings; the glass is drawn at every distance.
+
+**Decisions.**
+- *CC0 models:* see "Decisions that hold for the whole run": none suitable; built in code.
+- *Far leaves are boards, not slats.* From the Postcard a leaf is about 5 pixels wide, so 14
+  slats would be noise. The board's darker panel stands in for the slats' shade.
+- *When both leaves are shut, the frame and glass behind them are not built* (never seen).
+- *Lintels removed rather than restyled:* the brief asked for thin, low-contrast surrounds, and
+  the photos show plaster straight to the opening on most houses.
+- *Shut leaves 3 cm inside the reveal, not flush:* the gap rule (`CONFIG.building.facadeGap`)
+  that stopped the v0.11 flicker still holds for every face.
+
+**Frame rate (High, Postcard, midday, software renderer):** 4.83 s a frame against v0.15's
+4.33 s (**+11%**; run-to-run noise is ±10–20%, but this one is probably real). **Draw calls 122
+→ 107** (the four painted-opening batches per chunk are gone). **Triangles 0.64 M → 0.76 M**:
+shutter boards, sills and glass are now drawn for every far window, where one painted
+rectangle stood before. On a real graphics card I'd expect a few percent, not a visible drop;
+please check ⚙️ Settings.
+
+**What got worse / still differs.**
+- Close to a house the shutters' wood texture is strong (streaky), most of all on sun-bleached
+  leaves.
+- "Ajar" and "part open" leaves swing through the corner of the reveal by a centimetre or two
+  (they pivot on a point, not on real hinges). Not visible beyond a few metres.
+- No tilted lower shutter panels (the Ligurian *gelosia*) and no curtains or people in windows.
+- The single-building target's shutters are a brighter emerald in sun; ours are a touch darker
+  and bluer.
+
+Pictures: `docs/progress/v0.19/`.
 
 ### Decisions that hold for the whole run
 - **CC0 models (windows, shutters, doors, railings): looked, not used.** Poly Haven is reachable

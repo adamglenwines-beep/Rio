@@ -1,19 +1,61 @@
 {
   "_about": "Facade parts as data (v0.13). Sizes in metres. The generator (src/buildings.js, src/facade.js) reads these; weights are relative odds. Change a number here to change every house.",
-
   "windows": {
-    "_about": "Openings are cut through the wall and recessed: the frame and glass sit `recess` behind the wall face, with a stone sill below and a lintel above.",
-    "recess": 0.18,
-    "frame": { "bar": 0.07, "depth": 0.07, "mullion": 0.045, "colour": "#efe6d2" },
-    "sill": { "height": 0.06, "proud": 0.07, "overhang": 0.07, "colour": "#d2cabb" },
-    "lintel": { "height": 0.13, "overhang": 0.05, "colour": "#d8d0c0" },
-    "types": {
-      "standard": { "w": 1.15, "h": 1.85, "sillAt": 0.75, "transom": true },
-      "french":   { "w": 1.15, "h": 2.35, "sillAt": 0.14, "transom": false, "sill": false },
-      "small":    { "w": 0.85, "h": 1.15, "sillAt": 0.85, "transom": false },
-      "cellar":   { "w": 0.7,  "h": 0.55, "sillAt": 1.25, "transom": false }
+    "_about": "Openings are cut through the wall and recessed: the frame and glass sit `recess` behind the wall face (v0.19: 26 cm, a thick stone wall), with a stone sill below. No lintel is drawn: the plaster runs to the edge of the opening, or a thin painted surround does (on decorated houses).",
+    "recess": 0.26,
+    "frame": {
+      "bar": 0.055,
+      "depth": 0.06,
+      "mullion": 0.04,
+      "transomAt": 0.45,
+      "colour": "#e9e1cf"
     },
-    "columns": { "front": 1.85, "side": 2.6 },
+    "sill": {
+      "height": 0.07,
+      "proud": 0.06,
+      "overhang": 0.06,
+      "colours": [
+        ["#b9b4aa", 4],
+        ["#a3a19b", 3],
+        ["#cfc8ba", 2],
+        ["#8e8f8c", 2]
+      ]
+    },
+    "lintel": {
+      "height": 0.13
+    },
+    "types": {
+      "standard": {
+        "w": 1.15,
+        "h": 1.85,
+        "sillAt": 0.75,
+        "transom": true
+      },
+      "french": {
+        "w": 1.15,
+        "h": 2.35,
+        "sillAt": 0.14,
+        "transom": false,
+        "sill": false
+      },
+      "small": {
+        "w": 0.85,
+        "h": 1.15,
+        "sillAt": 0.85,
+        "transom": false
+      },
+      "cellar": {
+        "w": 0.7,
+        "h": 0.5,
+        "sillAt": 1.45,
+        "transom": false,
+        "sill": false
+      }
+    },
+    "columns": {
+      "front": 1.85,
+      "side": 2.6
+    },
     "_columns": "one window column per this many metres of wall (front = the wall on the house's lane)",
     "edgeMargin": 0.55,
     "pairChance": 0.35,
@@ -23,28 +65,43 @@
     "fakeWindow": 0.55,
     "smallTopFloor": 0.25,
     "clearInFront": 2.0,
-    "_clearInFront": "no openings or wall detail on a wall with a neighbour or the hillside closer than this in front"
+    "_clearInFront": "no openings or wall detail on a wall with a neighbour or the hillside closer than this in front",
+    "_sill": "sill stone, picked per house: pale limestone to grey slate (ardesia)",
+    "_lintel": "clear wall kept above an opening (no lintel is drawn since v0.19)",
+    "surround": 0.09,
+    "_surround": "width of the painted band round an opening on decorated houses (m)"
   },
-
   "shutters": {
-    "_about": "Two louvred leaves hung on the wall face, each half the opening wide. Built from slats near the camera, a flat painted board far away.",
-    "slats": 12,
-    "slatAngle": 0.6,
-    "thickness": 0.04,
+    "_about": "Two louvred leaves, each half the opening wide, hinged on the outer corner of the reveal: shut, they lie inside the reveal, `inset` behind the wall face; folded back, flat against the wall. Slats near the camera, a framed board far away. Each window draws a state; each leaf may also be faded (per house) .",
+    "slats": 14,
+    "thickness": 0.045,
     "stile": 0.055,
     "rail": 0.07,
     "states": [
-      { "name": "closed", "weight": 0.42 },
-      { "name": "open", "weight": 0.36 },
-      { "name": "half", "weight": 0.16 },
-      { "name": "none", "weight": 0.06 }
+      { "name": "closed", "weight": 0.34, "_": "both leaves shut" },
+      { "name": "open", "weight": 0.26, "_": "both folded back flat against the wall" },
+      { "name": "oneOpen", "weight": 0.12, "_": "one folded back, one shut" },
+      { "name": "half", "weight": 0.1, "_": "one shut, one standing part open" },
+      { "name": "ajar", "weight": 0.09, "_": "both pushed a little open" },
+      { "name": "lost", "weight": 0.04, "_": "one leaf missing; the other shut or folded back" },
+      { "name": "none", "weight": 0.05, "_": "no shutters" }
     ],
     "openJitter": 0.14,
     "halfAngle": [0.55, 1.45],
     "closedJitter": 0.03,
-    "sag": 0.012
+    "sag": 0.012,
+    "inset": 0.03,
+    "slatGap": 0.36,
+    "_slatGap": "share of each slat's height that is its shaded gap (drawn as a dark strip)",
+    "slatShadow": 0.38,
+    "farPanel": 0.7,
+    "_farPanel": "far away a leaf is a framed board; its louvred panel is this much darker than the stiles",
+    "ajarAngle": [0.15, 0.5],
+    "fadedHouses": 0.22,
+    "fade": [0.25, 0.7],
+    "fadeColour": "#9aa598",
+    "_faded": "share of houses whose shutters are sun-bleached, how far each leaf fades toward the bleached colour"
   },
-
   "balconies": {
     "_about": "Balconies on upper floors, mostly on the lane-facing (harbour-facing) wall. depth = how far the slab stands out.",
     "chanceHarbourFront": 0.8,
@@ -63,9 +120,13 @@
     "flowers": 0.75,
     "washing": 0.2,
     "chair": 0.18,
-    "railColours": [["#262d28", 4], ["#2f5a44", 2], ["#e9e6de", 1.5], ["#6b6a66", 1]]
+    "railColours": [
+      ["#262d28", 4],
+      ["#2f5a44", 2],
+      ["#e9e6de", 1.5],
+      ["#6b6a66", 1]
+    ]
   },
-
   "groundFloors": {
     "_about": "What the ground floor of a house shows on its lane. `where`: harbour = by the harbour and piazza, town = elsewhere.",
     "height": 3.6,
@@ -79,18 +140,55 @@
       { "name": "door", "weight": 6, "where": "town", "awning": 0.0 }
     ],
     "harbourRadius": 34,
-    "shopfront": { "w": 2.3, "h": 2.6, "recess": 0.22 },
-    "workshopDoor": { "w": 1.5, "h": 2.4, "recess": 0.22 },
-    "archedEntry": { "w": 1.6, "h": 2.7, "recess": 0.32 },
-    "door": { "w": 1.05, "h": 2.15, "recess": 0.22 },
-    "steps": 0.5,
-    "awning": { "depth": 1.5, "drop": 0.3, "stripe": 0.2, "plain": 0.35 },
-    "stoneBase": { "height": [0.55, 1.0], "out": 0.06 }
+    "shopfront": {
+      "w": 2.3,
+      "h": 2.6,
+      "recess": 0.26
+    },
+    "workshopDoor": {
+      "w": 1.5,
+      "h": 2.4,
+      "recess": 0.3
+    },
+    "archedEntry": {
+      "w": 1.6,
+      "h": 2.7,
+      "recess": 0.38
+    },
+    "door": {
+      "w": 1.05,
+      "h": 2.15,
+      "recess": 0.32
+    },
+    "steps": {
+      "step": 0.15,
+      "tread": 0.34,
+      "_": "two stone steps at a house door: each this high; the lower one this much deeper"
+    },
+    "awning": {
+      "depth": 1.5,
+      "drop": 0.3,
+      "stripe": 0.2,
+      "plain": 0.35
+    },
+    "stoneBase": {
+      "height": [0.55, 1.0],
+      "out": 0.06
+    },
+    "doorRise": 0.3,
+    "_doorRise": "a house door's threshold stands this far above the lane (two steps)"
   },
-
   "trim": {
     "_about": "Horizontal trim: a cornice under the eaves on every house, and on some a band at each floor line.",
-    "cornice": { "height": 0.34, "proud": 0.16, "steps": 2 },
-    "bands": { "chance": 0.4, "height": 0.16, "proud": 0.04 }
+    "cornice": {
+      "height": 0.34,
+      "proud": 0.16,
+      "steps": 2
+    },
+    "bands": {
+      "chance": 0.4,
+      "height": 0.16,
+      "proud": 0.04
+    }
   }
 }

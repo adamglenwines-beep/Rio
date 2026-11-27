@@ -6,12 +6,12 @@
 // generator (buildings.js) cuts the opening through the wall and places these as
 // instances (one draw call per kind of part).
 //
-//   frameGeometry(type)     window frame at the back of the recess, glazing bars,
-//                           stone sill and lintel (vertex-coloured)
-//   leafGeometry(side, near) one shutter leaf, 1 m × 1 m (scaled per window): near =
-//                           louvred slats in a frame; far = a plain board
+//   frameGeometry(type)     window frame at the back of the recess, with its glazing bars
+//   sillGeometry(type)      the stone sill under the opening
+//   leafGeometry(...)       one shutter leaf, 1 m × 1 m (scaled per window), hinged on the
+//                           corner of the reveal: near = louvred slats in a frame; far = a
+//                           framed board; `shut` = only the face seen when it is closed
 //   surroundGeometry(type)  a thin painted band round the opening (trompe-l'oeil)
-//   paintedOpening material a flat painted window for distant houses (no recess, no slats)
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { FACADES } from './data.js';
@@ -20,6 +20,7 @@ import { CONFIG } from './config.js';
 const WIN = FACADES.windows, SH = FACADES.shutters;
 // Baked shade on parts (v0.18): undersides that see no sky, consoles under a slab, the frame at the back of a recess.
 const SHADE = CONFIG.building.ao.parts;
+const DOOR = FACADES.groundFloors.steps;
 export const GAP = CONFIG.building.facadeGap;
 
 /** Accumulate boxes and quads into one vertex-coloured, non-indexed geometry. */
@@ -72,9 +73,9 @@ class Parts {
 /** Window kinds with an opening cut through the wall (cellar windows are small grilles on the stone). */
 export const WINDOW_TYPES = Object.keys(WIN.types).filter((k) => k !== 'cellar');
 
-/** The frame at the back of the recess, glazing bars, sill and lintel, for a window kind. */
+/** The frame at the back of the recess and its glazing bars, for a window kind (drawn near only). */
 export function frameGeometry(type) {
-  const T = WIN.types[type], F = WIN.frame, S = WIN.sill, Li = WIN.lintel, R = WIN.recess;
+  const T = WIN.types[type], F = WIN.frame, R = WIN.recess;
   const w = T.w, h = T.h, b = F.bar, zb = -R, zf = -R + F.depth, p = new Parts();
   const inRecess = '#' + new THREE.Color(F.colour).multiplyScalar(SHADE.recess).getHexString();   // the frame sits back in the wall's shade
   // the frame ring fills the back of the opening edge to edge (so it can never be seen through)
@@ -85,13 +86,19 @@ export function frameGeometry(type) {
   // glazing bars: a mullion between the two casements, and a transom light on tall windows
   const m = F.mullion;
   if (w > 0.8) p.box(-m / 2, -h / 2 + b, zf - 0.03, m / 2, h / 2 - b, zf + 0.012, inRecess);
-  if (T.transom) p.box(-w / 2 + b, h / 2 - 0.45 - m / 2, zf - 0.03, w / 2 - b, h / 2 - 0.45 + m / 2, zf + 0.012, inRecess);
-  // the stone sill: from the frame out past the wall face, a little wider than the opening
-  const s0 = p.count;
-  if (T.sill !== false) p.box(-w / 2 - S.overhang, -h / 2 - S.height, zb, w / 2 + S.overhang, -h / 2, S.proud, S.colour);
-  p.shadeUnder(s0, SHADE.under);
-  // the lintel: a pale band over the opening, standing just clear of the wall
-  p.box(-w / 2 - Li.overhang, h / 2, GAP - 0.01, w / 2 + Li.overhang, h / 2 + Li.height, GAP + 0.03, Li.colour);
+  if (T.transom) p.box(-w / 2 + b, h / 2 - F.transomAt - m / 2, zf - 0.03, w / 2 - b, h / 2 - F.transomAt + m / 2, zf + 0.012, inRecess);
+  return p.geometry();
+}
+
+/**
+ * The stone sill: a slab the full depth of the wall, standing a little proud of it and a
+ * little wider than the opening (vertex colour white: tinted per house). Its underside is
+ * in its own shade (baked).
+ */
+export function sillGeometry(type) {
+  const T = WIN.types[type], S = WIN.sill, p = new Parts();
+  p.box(-T.w / 2 - S.overhang, -T.h / 2 - S.height, -WIN.recess, T.w / 2 + S.overhang, -T.h / 2, S.proud, '#ffffff');
+  p.shadeUnder(0, SHADE.under);
   return p.geometry();
 }
 
@@ -99,28 +106,57 @@ export function frameGeometry(type) {
 export const GLASS_Z = -WIN.recess + WIN.frame.depth * 0.45;
 
 /**
- * One shutter leaf, 1 m wide and 1 m tall (instances scale it to half the opening),
- * hinged at x = 0 and reaching to x = +1 (a left leaf; `right` mirrors it), front at
- * z = +thickness. Near: stiles, rails and angled louvre slats, a plain back. Far: a board.
+ * One shutter leaf, 1 m wide and 1 m tall (instances scale it to half the opening). It is
+ * hinged at x = 0, z = 0: the outer corner of the reveal, on the wall's face. Shut, it lies
+ * inside the reveal, its face `inset` behind the wall face (as real persiane close into the
+ * opening); swung right round on that hinge it lies flat against the wall, standing the same
+ * `inset` clear of it. `right` mirrors it (a leaf hinged on the right).
+ *   near: stiles, three rails and tilted louvre slats on both faces; under each slat the
+ *         shaded gap is a dark strip, so the slats read from any distance they are drawn at
+ *   far:  a framed board: paler stiles and rails round a darker louvred panel
+ *   shut: only the face that shows when the leaf is shut (the rest is hidden in the reveal)
  */
-export function leafGeometry(right, near) {
-  const t = SH.thickness, p = new Parts(), white = '#ffffff', shade = '#dcdcdc';
+export function leafGeometry(right, near, shut = false) {
+  const t = SH.thickness, zF = -SH.inset, zB = -SH.inset - t, p = new Parts(), white = '#ffffff';
+  const gapCol = '#' + new THREE.Color(1, 1, 1).multiplyScalar(SH.slatShadow).getHexString();     // the shaded gap under a slat
+  const panelCol = '#' + new THREE.Color(1, 1, 1).multiplyScalar(SH.farPanel).getHexString();     // slats and gaps averaged, for the far board
+  const st = SH.stile, ra = SH.rail;   // in metres, on a ~0.58 × 1.85 leaf: scaled with the leaf, so a touch thinner on small windows
+  const sx = st / 0.58, ry = ra / 1.85, mid = -0.07;           // the middle rail sits a little below half height
+  // one face of the leaf, looking along +z (front) or -z (back)
+  const faceQuad = (x0, y0, x1, y1, z, front, hex) => (front
+    ? p.quad([x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z], hex)
+    : p.quad([x1, y0, z], [x0, y0, z], [x0, y1, z], [x1, y1, z], hex));
+  const frameFace = (z, front) => {
+    faceQuad(0, -0.5, sx, 0.5, z, front, white); faceQuad(1 - sx, -0.5, 1, 0.5, z, front, white);
+    faceQuad(sx, 0.5 - ry, 1 - sx, 0.5, z, front, white); faceQuad(sx, -0.5, 1 - sx, -0.5 + ry, z, front, white);
+    faceQuad(sx, mid, 1 - sx, mid + ry, z, front, white);
+  };
+  const edges = () => {
+    p.quad([0, -0.5, zB], [0, -0.5, zF], [0, 0.5, zF], [0, 0.5, zB], white);           // hinge edge
+    p.quad([1, -0.5, zF], [1, -0.5, zB], [1, 0.5, zB], [1, 0.5, zF], white);           // meeting edge
+    p.quad([0, 0.5, zF], [1, 0.5, zF], [1, 0.5, zB], [0, 0.5, zB], white);             // top
+    p.quad([0, -0.5, zB], [1, -0.5, zB], [1, -0.5, zF], [0, -0.5, zF], white);         // bottom
+  };
+  const panels = [[-0.5 + ry, mid], [mid + ry, 0.5 - ry]];
   if (!near) {
-    p.box(0, -0.5, 0, 1, 0.5, t, white);
+    frameFace(zF, true);
+    for (const [y0, y1] of panels) faceQuad(sx, y0, 1 - sx, y1, zF, true, panelCol);
+    if (!shut) { edges(); faceQuad(0, -0.5, 1, 0.5, zB, false, panelCol); }
   } else {
-    const st = SH.stile, ra = SH.rail;   // in metres, on a ~0.58 × 1.85 leaf: scaled with the leaf, so a touch thinner on small windows
-    const sx = st / 0.58, ry = ra / 1.85;
-    p.box(0, -0.5, 0, sx, 0.5, t, white);
-    p.box(1 - sx, -0.5, 0, 1, 0.5, t, white);
-    p.box(sx, 0.5 - ry, 0, 1 - sx, 0.5, t, white);
-    p.box(sx, -0.5, 0, 1 - sx, -0.5 + ry, t, white);
-    p.box(sx, -0.5 + ry, 0.2 * t, 1 - sx, 0.5 - ry, 0.35 * t, shade);   // the back of the louvres (seen when folded open)
-    // louvre slats: each tilted out at the bottom (they shed rain), overlapping the one below
-    const n = SH.slats, y0 = -0.5 + ry, y1 = 0.5 - ry, s = (y1 - y0) / n;
-    for (let i = 0; i < n; i++) {
-      const yb = y0 + i * s, yt = yb + s * 1.08;
-      p.quad([sx, yb, t * 0.95], [1 - sx, yb, t * 0.95], [1 - sx, yt, t * 0.35], [sx, yt, t * 0.35], white);   // the slat face
-      p.quad([sx, yb - 0.004, t * 0.35], [1 - sx, yb - 0.004, t * 0.35], [1 - sx, yb, t * 0.95], [sx, yb, t * 0.95], shade);   // its underside lip
+    frameFace(zF, true);
+    if (!shut) { edges(); frameFace(zB, false); }
+    // louvre slats: each tilted out at the bottom (they shed rain); the strip under it is the shaded gap
+    const n = SH.slats, total = panels[0][1] - panels[0][0] + panels[1][1] - panels[1][0];
+    for (const [y0, y1] of panels) {
+      const k = Math.max(2, Math.round(n * (y1 - y0) / total)), sH = (y1 - y0) / k, zo = zF - 0.004, zi = zB + 0.004, g = SH.slatGap;
+      for (let i = 0; i < k; i++) {
+        const yb = y0 + i * sH, ym = yb + sH * g, yt = yb + sH;
+        p.quad([sx, ym, zo], [1 - sx, ym, zo], [1 - sx, yt, zo - t * 0.55], [sx, yt, zo - t * 0.55], white);   // the slat, seen from outside
+        faceQuad(sx, yb, 1 - sx, ym, zo - t * 0.55, true, gapCol);
+        if (shut) continue;
+        p.quad([1 - sx, yb, zi + t * 0.55], [sx, yb, zi + t * 0.55], [sx, yt - sH * g, zi], [1 - sx, yt - sH * g, zi], white);   // …and from inside (it shows when the leaf is folded back)
+        faceQuad(sx, yt - sH * g, 1 - sx, yt, zi + t * 0.55, false, gapCol);
+      }
     }
   }
   if (right) p.mirrorX();
@@ -130,7 +166,7 @@ export function leafGeometry(right, near) {
 /** A thin painted band round the opening (window surrounds on decorated houses). */
 export function surroundGeometry(type) {
   // (front faces and outer edges only: the band is a few centimetres thick, its inner edges hidden by the reveal)
-  const T = WIN.types[type], w = T.w / 2, h = T.h / 2, b = 0.13, p = new Parts(), z = GAP, c = '#ffffff';
+  const T = WIN.types[type], w = T.w / 2, h = T.h / 2, b = WIN.surround, p = new Parts(), z = GAP, c = '#ffffff';
   const W = w + b, Hh = h + b;
   p.quad([-W, h, z], [W, h, z], [W, Hh, z], [-W, Hh, z], c);             // head
   p.quad([-W, -Hh, z], [W, -Hh, z], [W, -h, z], [-W, -h, z], c);         // foot
@@ -144,62 +180,35 @@ export function surroundGeometry(type) {
 }
 
 /**
- * Painted openings for distant houses: one flat quad per window instead of a recess,
- * frame, glass and slatted leaves. The plane spans the opening (|x| < 0.5) and, for open
- * shutters, a leaf's width either side (|x| < 1); y covers the opening and the sill.
- * Instance scale = (window width, window height); instance colour = shutter colour.
- * `state`: 'closed' | 'open' | 'half' | 'none'.
- */
-export function paintedOpeningMaterial(state) {
-  const m = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 });
-  const code = { closed: 0, open: 1, half: 2, none: 3 }[state];
-  m.onBeforeCompile = (sh) => {
-    sh.vertexShader = 'varying vec2 vPo;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-      vPo = position.xy;`);
-    sh.fragmentShader = 'varying vec2 vPo;\n' + sh.fragmentShader.replace('#include <color_fragment>', `
-      vec3 shut = vec3(0.2, 0.45, 0.3);
-      #if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )
-        shut = vColor.rgb;
-      #endif
-      float x = vPo.x, y = vPo.y, ax = abs(x);
-      float louvre = 0.86 + 0.14 * step(0.5, fract(y * 13.0));
-      vec3 c = vec3(0.0); bool hit = false;
-      if (y < -0.5) { if (ax < 0.56) { c = vec3(0.80, 0.77, 0.71); hit = true; } }           // the sill
-      else if (ax < 0.5) {
-        hit = true;
-        bool leaf = ${code === 0 ? 'true' : code === 2 ? 'x < 0.0' : 'false'};
-        if (leaf) c = shut * louvre;
-        else {
-          c = vec3(0.10, 0.11, 0.12);                                                    // dark glass in the shadow of the recess
-          if (ax > 0.44 || abs(y) > 0.465 || ax < 0.02) c = vec3(0.62, 0.6, 0.55);         // frame and mullion, in shade
-        }
-      } else if (${code === 1 ? 'true' : code === 2 ? 'x > 0.0' : 'false'}) { c = shut * louvre * 0.92; hit = true; }   // leaves folded back
-      if (!hit) discard;
-      diffuseColor.rgb = c;`);
-  };
-  return m;
-}
-
-/**
  * A recessed doorway of width w and height h (origin at the threshold, middle of the
- * opening, on the wall face): `surround` = dressed-stone jambs and lintel standing just
- * proud of the wall, with a stone step in front; `leaf` = the timber door at the back of
- * the recess (vertex colour white: tinted per house by the instance colour).
+ * opening, on the wall face). `surround` = dressed-stone jambs and lintel standing just
+ * proud of the wall, and two stone steps: the threshold, and a wider one below it (it
+ * sinks into the ground where the lane is higher). `leaf` = the timber door at the back of
+ * the recess: two leaves meeting in the middle. `trim` (drawn near only) = their raised
+ * stiles and rails round sunk panels, and a knob. Vertex colour white = tinted per house.
  */
 export function doorGeometries(w, h, recess, arched = false) {
-  const st = 0.17, s = new Parts(), l = new Parts(), stone = '#ffffff';
-  s.box(-w / 2 - st, 0, -0.02, -w / 2, h, 0.08, stone);
-  s.box(w / 2, 0, -0.02, w / 2 + st, h, 0.08, stone);
-  if (!arched) s.box(-w / 2 - st, h, -0.02, w / 2 + st, h + 0.2, 0.08, '#f4f4f4');
-  s.box(-w / 2 - 0.12, -0.16, -recess, w / 2 + 0.12, 0.0, 0.42, '#e2e2e2');          // threshold step
-  // the leaf: vertical planks with a dark gap between the two halves, and a handle
-  const z = -recess, t = 0.06;
-  l.box(-w / 2, 0, z, w / 2, arched ? h - w / 2 : h, z + t, '#ffffff');
-  if (arched) l.box(-w / 2, h - w / 2, z, w / 2, h - 0.04, z + t * 0.5, '#2a2622');   // the dark fanlight
-  l.box(-0.012, 0.02, z + t, 0.012, (arched ? h - w / 2 : h) - 0.02, z + t + 0.01, '#5e5e5e');
-  for (const x of [-w / 4, w / 4]) l.box(x - 0.005, 0.05, z + t, x + 0.005, (arched ? h - w / 2 : h) - 0.05, z + t + 0.006, '#c8c8c8');
-  l.box(0.07, h * 0.45, z + t, 0.12, h * 0.45 + 0.05, z + t + 0.05, '#3a3a3a');
-  return { surround: s.geometry(), leaf: l.geometry() };
+  const st = 0.15, s = new Parts(), l = new Parts(), tr = new Parts(), stone = '#ffffff';
+  s.box(-w / 2 - st, 0, -0.02, -w / 2, h, 0.06, stone);
+  s.box(w / 2, 0, -0.02, w / 2 + st, h, 0.06, stone);
+  if (!arched) s.box(-w / 2 - st, h, -0.02, w / 2 + st, h + 0.18, 0.06, '#f4f4f4');
+  const s0 = s.count;
+  s.box(-w / 2 - 0.1, -DOOR.step, -recess, w / 2 + 0.1, 0.0, 0.34, '#e6e6e6');                          // threshold
+  s.box(-w / 2 - 0.3, -2 * DOOR.step, 0.02, w / 2 + 0.3, -DOOR.step, 0.34 + DOOR.tread, '#dcdcdc');     // the step below it
+  s.shadeUnder(s0, 1, 0.92);
+  // the leaves: a timber slab at the back of the recess, a dark joint where the two meet
+  const z = -recess, t = 0.05, H = arched ? h - w / 2 : h;
+  l.box(-w / 2, 0, z, w / 2, H, z + t, '#d9d9d9');
+  if (arched) l.box(-w / 2, H, z, w / 2, h - 0.04, z + t * 0.5, '#2a2622');   // the dark fanlight
+  l.box(-0.01, 0.02, z + t, 0.01, H - 0.02, z + t + 0.004, '#4a4a4a');
+  // raised stiles and rails (the panels are the slab showing between them), and a knob
+  const zt = z + t, zp = zt + 0.022, sw = 0.085;
+  for (const [x0, x1] of [[-w / 2, -0.012], [0.012, w / 2]]) {
+    tr.box(x0, 0, zt, x0 + sw, H, zp, '#ffffff'); tr.box(x1 - sw, 0, zt, x1, H, zp, '#ffffff');
+    for (const [y0, y1] of [[0, 0.18], [H * 0.44, H * 0.44 + 0.11], [H - 0.11, H]]) tr.box(x0 + sw, y0, zt, x1 - sw, y1, zp, '#ffffff');
+  }
+  tr.box(0.05, H * 0.47, zp, 0.1, H * 0.47 + 0.05, zp + 0.04, '#b9a468');
+  return { surround: s.geometry(), leaf: l.geometry(), trim: tr.geometry() };
 }
 
 /**

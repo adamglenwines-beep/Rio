@@ -74,7 +74,7 @@ function check(name, ok, detail = '') {
         out.chunks = R.chunks.size;
         return out;
       });
-      const need = ['frame_standard', 'frame_french', 'glass', 'leafL', 'leafR', 'paint_closed', 'paint_open', 'doorJambs', 'doorLeaf', 'shopFront', 'archSpandrel', 'awningCloth',
+      const need = ['frame_standard', 'frame_french', 'glass', 'leafL', 'leafR', 'leafFarL', 'leafFarShutL', 'sill_standard', 'doorJambs', 'doorLeaf', 'shopFront', 'archSpandrel', 'awningCloth',
         'balSlab_single', 'balRail_single', 'chimney', 'sur_standard', 'bar', 'pot', 'blob', 'cloth', 'flowerbox'];
       const missing = need.filter((k) => !(r.parts[k] > 0));
       const bal = Object.keys(r.parts).filter((k) => k.startsWith('balSlab_')).reduce((t, k) => t + r.parts[k], 0);

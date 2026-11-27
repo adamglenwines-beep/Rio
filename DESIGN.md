@@ -126,12 +126,17 @@ A **Manor Lords-style hybrid**:
 
 - **Facade content is data** (`data/facades.json`): window kinds and sizes, shutter states,
   balcony variants, ground-floor variants by place, awnings, trim. Shapes in `src/facade.js`.
-- **Openings are cut through the walls** and recessed 18 cm (doors 22 cm, arches 32 cm), with a
-  frame, glass, stone sill and lintel inside, so they catch real shadow. Windows are big (about
-  1.15 × 1.85 m; French windows to the floor behind balconies), paired now and then, with few
-  blank bays. Stone bases, dados and string courses are cut by the openings too.
-- **Louvred shutters** built from slats, hinged on the wall: shut, folded back flat (only where
-  there is room), or half open, each a little irregular.
+- **A window is a hole in a thick wall, at every distance (v0.19).** Openings are cut through
+  the walls and recessed 26 cm (doors 32 cm, arches 38 cm), with baked shade in the reveal. A
+  stone sill and the dark glass at the back are always drawn (the glass draws its own frame and
+  glazing bars); near the camera the frame is modelled. No lintels: plaster to the edge of the
+  opening, or a thin low-contrast painted surround on decorated houses. Windows are big (about
+  1.15 × 1.85 m; French windows to the floor behind balconies), paired now and then. Stone bases,
+  dados and string courses are cut by the openings too; cellar windows are barred holes.
+- **Louvred shutters hinged on the corner of the reveal**, 4.5 cm thick: shut (inside the reveal,
+  in its shadow), folded back flat on the wall, one of each, part open, ajar, a leaf missing, or
+  none; sun-bleached on about one house in five. Slats near, framed boards far.
+- **Doors**: two-leaf panelled timber doors set back 32 cm, on two stone steps.
 - **Balconies** on most upper floors of harbour-facing houses: slab on consoles, iron railings or
   a rendered parapet, pots and geraniums, now and then a chair or washing.
 - **Ground floors** show their use: shopfronts with signs and striped awnings, workshop doors,
@@ -142,9 +147,9 @@ A **Manor Lords-style hybrid**:
   condition 0–1 (paint fade, plaster loss below 0.35, tidiness) and a use per floor (family,
   shop, workshop). Later gameplay sets them (floor uses, household wealth); the renderer reads.
 - **Drawn in 48 m chunks** of the town (each with its walls mesh and instanced parts), so
-  off-screen chunks are skipped; **detail by distance per chunk**: recessed openings with
-  frames, glass and louvred leaves near, flat painted openings far (55 m on High). Static
-  facade parts are merged into two meshes per chunk (always / near only).
+  off-screen chunks are skipped; **detail by distance per chunk** (55 m on High): near, modelled
+  window frames, slatted shutter leaves and door panels; far, shutter boards. Static facade parts
+  are merged into three meshes per chunk (always / near only / far only).
 
 ## Light (v0.12)
 
