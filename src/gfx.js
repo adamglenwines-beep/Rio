@@ -457,7 +457,11 @@ export class Graphics {
     r.shadowMap.autoUpdate = false;
     r.setRenderTarget(this.reflRT);
     r.clear();
+    // textures barely show in a rippled reflection: skip them in this pass (a uniform, no recompile)
+    const texOn = matUniforms.uTexOn.value;
+    matUniforms.uTexOn.value = 0;
     r.render(this.scene, vc);
+    matUniforms.uTexOn.value = texOn;
     r.setRenderTarget(prevTarget);
     r.shadowMap.autoUpdate = prevShadow;
     hide.forEach((o, i) => (o.visible = was[i]));
