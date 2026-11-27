@@ -135,9 +135,37 @@ export const CONFIG = {
     maxFloors: { flat: 5, moderate: 6, steep: 3 },
     commercialMaxFloors: 4,
     // footprint sizes [min, max] by slope band (width = along the contour)
-    width:  { flat: [4.5, 6.5], moderate: [3.8, 5.2], steep: [3.4, 4.2] },
-    depth:  { flat: [6.0, 8.5], moderate: [6.5, 8.5], steep: [4.8, 6.0] },
-    roofPitch: 0.07,       // roof rise per metre of span (0.07 ≈ 8°: nearly flat, like Ligurian slate)
+    // tower houses: narrow fronts on small footprints
+    width:  { flat: [4.0, 6.0], moderate: [3.5, 5.0], steep: [3.3, 4.2] },
+    depth:  { flat: [5.5, 8.0], moderate: [5.5, 8.0], steep: [4.6, 6.0] },
+    floorBonus: [[0, 4], [1, 3], [2, 1.2], [-1, 2]],   // each house's own leaning: storeys above or below what its site suggests
+    roofPitch: 0.07,       // (old flat roofs; each house now draws its pitch from look.roofPitch)
+    detailReach: { low: 0.5, medium: 0.8, high: 1.0 },   // how far small facade details are drawn (× each detail's own distance)
+    // The look of a house: shares (0–1) of houses or windows that get each thing.
+    look: {
+      wearNone: 0.58, wearSome: 0.3,         // plaster wear: most houses are sound, 3 in 10 worn, about 1 in 8 badly worn
+      decoNone: 0.45, decoBand: 0.25, decoFull: 0.1,   // painted trim: none / one string course / window surrounds (the remainder) / the full treatment
+      trim: ['#f1eadb', '#efe9dc', '#f3ead0'], trimOnPale: ['#cdb98c', '#bfb7a8', '#d6c08a'],
+      groundStone: 0.38, groundDado: 0.42,   // rough stone ground floor / rough render dado / (rest) plaster to the ground
+      stoneStorey: [2.7, 3.3], dado: [1.0, 1.7],
+      stoneColours: ['#9a9186', '#8d857a', '#a39a8c', '#948a7a', '#86807a'],
+      dadoColours: ['#948c80', '#8a8378', '#9d968c', '#7f7a72'],
+      taper: [0.02, 0.07],                   // how far walls lean in from foot to eaves (m)
+      roofPitch: [0.24, 0.42],               // roof rise per metre of half-span (about 13°–23°)
+      ridgeTerracotta: 0.6,                  // slate roofs with a terracotta ridge (the rest: pale lime mortar)
+      secondChimney: 0.45, chimneyPot: 0.3,
+      shutClosed: 0.42, shutTilt: 0.16, shutOpen: 0.27, shutHalf: 0.15,
+      smallTopFloor: 0.33, blindBay: 0.18, skipWindow: 0.05, fakeWindow: 0.55,
+      balconySolid: 0.13, balconyPots: 0.6, balconyWashing: 0.2,
+      washing: 0.1, flowerBox: 0.1,
+      drainpipe: 0.5, bougainvillea: 0.14, doorPots: 0.62,
+      terraceRailing: 0.6, terracePergola: 0.28, terraceParasol: 0.25, terraceWashing: 0.3,
+      doorColours: [['#1f5a3a', 4.5], ['#8a6844', 3], ['#4a2f22', 1.5], ['#2a5a5a', 0.6], ['#6e6558', 1]],
+      flowerColours: ['#d23c4a', '#e0507a', '#f0f0e6', '#e8a0b4', '#d8452f'],
+      bougainvilleaColours: ['#c2408f', '#b02a7c', '#d55aa6', '#9b1f6b'],
+      washColours: ['#f2efe6', '#f2efe6', '#f4f1ea', '#9bc1d8', '#3a6ea5', '#e0667a', '#d8463b', '#e9c34a'],
+      parasolColours: ['#ece6d6', '#ece6d6', '#c9a593', '#e6cf8a'],
+    },
     roofOverhang: 0.2,     // eaves overhang (m); kept below path.setback so eaves never reach the steps
     minGround: 0.5,        // lowest ground (m above sea) a house may stand on
     streakChance: 0.6,     // share of windows with grime streaks running down from the sill
@@ -207,6 +235,12 @@ export const CONFIG = {
     coverRadius: 0.8,      // an item counts as covering the ground this far around it
     // per wall-side cell: chances of bougainvillea, a washing line, a cistern, a flower pot
     bougainvillea: 0.06, washing: 0.05, cistern: 0.03, pots: 0.22,
+    // the two quarters and their clutter
+    fishingRadius: 42,     // the fishing quarter: within this distance of the harbour point (m)…
+    fishingMaxHeight: 9,   // …and no higher than this above the sea (m)
+    farmingMinHeight: 17,  // the farming quarter: ground higher than this (m)
+    quarterClutter: 0.16,  // per wall-side cell: chance of a boat, nets, crates / barrels, stakes, baskets
+    boatYard: 0.65,        // share of yards in the fishing quarter given over to boats and nets
   },
 
   // ---- Graphics ---------------------------------------------------------------
@@ -244,17 +278,35 @@ export const CONFIG = {
   },
 };
 
-// Pastel facade palette (weights favour the warm Riomaggiore colours).
+// Facade palette: [colour, weight, family]. Between the real town (pale: cream, pink,
+// salmon) and the art targets (saturated gold and coral), and a little cooler than the
+// targets: less yellow, more pink and cream. Two houses that touch never share a colour,
+// and avoid sharing a family where they can.
 export const FACADE_COLOURS = [
-  ['#e9b44c', 4], ['#f2cd5d', 3], ['#e57a3c', 3], ['#d6533f', 3],
-  ['#f0a39a', 3], ['#e98d6c', 2], ['#f4e2bc', 2], ['#f6c98b', 3],
-  ['#e8c4a4', 2], ['#cfdcc4', 1], ['#c3d6de', 1], ['#e7d36f', 2],
+  ['#f1dfa8', 16, 'yellow'],   // cream
+  ['#eecb72', 8, 'yellow'],    // straw
+  ['#e2b455', 6, 'yellow'],    // ochre
+  ['#f0ad82', 12, 'orange'],   // peach
+  ['#e88f68', 11, 'orange'],   // salmon
+  ['#e27b48', 7, 'orange'],    // orange
+  ['#eea39c', 12, 'pink'],     // pink
+  ['#e08681', 8, 'pink'],      // rose
+  ['#d2574a', 7, 'red'],       // Genoa red
+  ['#f1ede2', 4, 'pale'],      // off-white
+  ['#b0a898', 2, 'pale'],      // unpainted grey render
+  ['#c6d6b0', 2, 'cool'],      // sage
+  ['#c3d4dc', 2, 'cool'],      // pale blue-grey
 ];
-export const SHUTTER_COLOURS = ['#2f6b46', '#3c7a50', '#285c3d', '#43835a'];
-// Roofs: mostly grey slate (ardesia), with the occasional terracotta.
+// Shutters: green on nine windows in ten, one colour per house.
+export const SHUTTER_COLOURS = [
+  ['#1c4332', 3], ['#1f5237', 2.5], ['#27623f', 2], ['#2b6e48', 1], ['#2a6a5c', 0.8], ['#7d8a82', 0.4], ['#6e3a2c', 0.3],
+];
+// Roofs: mostly weathered grey slate (pale from above, some with a lichen cast), about one
+// in six terracotta.
 export const ROOF_COLOURS = [
-  ['#6e6b69', 5], ['#7c7874', 5], ['#5f5d5c', 3], ['#8a8580', 3], ['#696460', 3],
-  ['#b4553b', 2], ['#c2683f', 1],
+  ['#a09a8e', 5, 'slate'], ['#aca598', 5, 'slate'], ['#b5ab9c', 4, 'slate'], ['#958f86', 3, 'slate'], ['#bdb2a2', 3, 'slate'],
+  ['#9c9a82', 2, 'slate'], ['#a8977c', 1.5, 'slate'],
+  ['#c2603f', 2.4, 'terracotta'], ['#cf6a45', 1.4, 'terracotta'], ['#b9573b', 1, 'terracotta'],
 ];
 
 // Ground and rock colours (average colours: the textures add detail around them).

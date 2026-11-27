@@ -61,6 +61,24 @@ function check(name, ok, detail = '') {
       check('no bushes on lanes or in houses', r.onTown === 0, r.onTown + ' found');
     } catch (e) { check('landscape checks', false, e.message); }
 
+    // d3. facades and clutter: every kind of detail is present, and far details follow the quality setting
+    try {
+      const r = await page.evaluate(() => {
+        const R = game.growth.renderer, I = game.infill, out = { parts: {}, reach: {}, infill: {} };
+        for (const k of Object.keys(R.parts)) out.parts[k] = R.parts[k].mesh ? R.parts[k].mesh.count : 0;
+        for (const q of ['low', 'medium', 'high']) { R.setQuality(q); out.reach[q] = R.detailReach.value; }
+        for (const k of Object.keys(I.kinds)) out.infill[k] = I.kinds[k].mesh ? I.kinds[k].mesh.count : 0;
+        const A = game.growth.renderer.mass.geometry.attributes;
+        out.wall = !!A.aWall && A.aWall.count === A.position.count;
+        return out;
+      });
+      const need = ['window', 'glass', 'shutterOpen', 'shutterClosed', 'shutterHalf', 'shutterTilt', 'balcony', 'doorFrame', 'door', 'chimney', 'surround', 'fake', 'bar', 'pot', 'blob', 'cloth', 'flowerbox'];
+      const missing = need.filter((k) => !(r.parts[k] > 0));
+      check('facade details are all present', missing.length === 0 && r.wall, missing.length ? 'missing: ' + missing.join(', ') : `${r.parts.window} windows, ${r.parts.fake} painted, ${r.parts.cloth} washing, ${r.parts.balcony + r.parts.balconySolid} balconies`);
+      check('detail by distance follows quality', r.reach.low < r.reach.medium && r.reach.medium < r.reach.high, JSON.stringify(r.reach));
+      check('quarter clutter and café are placed', r.infill.boat >= 2 && r.infill.cone >= 3, `${r.infill.boat} boats hauled up, ${r.infill.cone} cones (parasols, pines)`);
+    } catch (e) { check('facade checks', false, e.message); }
+
     // e. frame time per preset
     for (const p of ['low', 'medium', 'high']) {
       try {

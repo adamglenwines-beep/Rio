@@ -719,10 +719,9 @@ export class Growth {
     const id = this.buildings.length;
     const b = Object.assign(c, {
       id, floors: 1 + (r() < 0.35 ? 1 : 0),
-      bonus: r.weighted([[0, 5], [1, 2], [-1, 2]]),
-      facade: new THREE.Color(r.weighted(FACADE_COLOURS)).offsetHSL(r.range(-0.01, 0.01), r.range(-0.05, 0.03), r.range(-0.03, 0.03)),
-      shutter: new THREE.Color(r.pick(SHUTTER_COLOURS)),
-      roofCol: new THREE.Color(r.weighted(ROOF_COLOURS)).offsetHSL(0, 0, r.range(-0.04, 0.04)),
+      bonus: r.weighted(B.floorBonus),
+      shutter: new THREE.Color(r.weighted(SHUTTER_COLOURS)),
+      roofKey: r.weighted(ROOF_COLOURS.map((k, i) => [i, k[1]])),
       roof: c.kind === ZONE.COM ? r.weighted([['gable', 3], ['hip', 2], ['flat', 2]]) : r.weighted([['gable', 6], ['hip', 2], ['flat', 2], ['gableX', 2]]),
       balconies: r() < 0.45,
       seed: (r() * 1e9) | 0,
@@ -730,6 +729,8 @@ export class Growth {
       fails: 0,
       ver: 0,                    // bumped whenever this house must be redrawn
     });
+    b.roofCol = new THREE.Color(ROOF_COLOURS[b.roofKey][0]).offsetHSL(0, 0, r.range(-0.04, 0.04));
+    b.roofKind = ROOF_COLOURS[b.roofKey][2];
     if (b.arch) b.floors = Math.max(b.floors, b.minFloors);
     if (b.flatiron) b.roof = r() < 0.5 ? 'hip' : 'flat';   // a ridge along a wedge looks odd
     this.buildings.push(b);
@@ -741,9 +742,54 @@ export class Growth {
     }
     if (b.frontage) this.frontLive.push(id);
     this._forCells(b.corners, RASTER_INSET, (k) => { if (k >= 0 && this.occ[k] === EMPTY) this.occ[k] = id; });
+    // the colour is chosen once the house is on the map, so neighbours are found both ways round
+    b.colourKey = this._pickColour(b);
+    b.facade = new THREE.Color(FACADE_COLOURS[b.colourKey][0]).offsetHSL(r.range(-0.008, 0.008), r.range(-0.04, 0.03), r.range(-0.025, 0.025));
     this._touch(b);
     this.dirty = true;
     return b;
+  }
+
+  /** Ids of the houses that touch (or nearly touch) a footprint. */
+  adjacentIds(corners) {
+    const ids = new Set();
+    for (let i = 0; i < corners.length; i++) {
+      const a = corners[i], b2 = corners[(i + 1) % corners.length];
+      const e = norm(sub(b2, a)), L = dist(a, b2), ccw = signedArea(corners) > 0;
+      const n = ccw ? [e[1], -e[0]] : [-e[1], e[0]];   // outward
+      for (let u = 0.4; u < L; u += 0.8) for (const d of [0.5, 1.1]) {
+        const o = this.occAt(a[0] + e[0] * u + n[0] * d, a[1] + e[1] * u + n[1] * d);
+        if (o >= 0) ids.add(o);
+      }
+    }
+    return ids;
+  }
+
+  /** Every house touching house `b`, whichever of the two the touch is measured from. */
+  neighboursOf(b) {
+    const ids = this.adjacentIds(b.corners);
+    ids.delete(b.id);
+    const [cx, cz] = centroid(b.corners);
+    for (const id of this.live) {
+      if (id === b.id || ids.has(id)) continue;
+      const o = this.buildings[id], [ox, oz] = centroid(o.corners);
+      if (Math.hypot(ox - cx, oz - cz) < 16 && this.adjacentIds(o.corners).has(b.id)) ids.add(id);
+    }
+    return ids;
+  }
+
+  /** A facade colour (index into FACADE_COLOURS) no neighbour has, from another colour family if possible. */
+  _pickColour(b) {
+    const used = new Set(), fams = new Set();
+    for (const id of this.neighboursOf(b)) {
+      const o = this.buildings[id];
+      if (o && o.colourKey !== undefined) { used.add(o.colourKey); fams.add(FACADE_COLOURS[o.colourKey][2]); }
+    }
+    const keys = FACADE_COLOURS.map((_, i) => i);
+    let pool = keys.filter((i) => !used.has(i) && !fams.has(FACADE_COLOURS[i][2]));
+    if (!pool.length) pool = keys.filter((i) => !used.has(i));
+    if (!pool.length) pool = keys;
+    return this.rng.weighted(pool.map((i) => [i, FACADE_COLOURS[i][1]]));
   }
 
   /** Target storeys (above the uphill ground) for a building right now. */

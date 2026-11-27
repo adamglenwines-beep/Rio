@@ -24,6 +24,13 @@ export function layDemo(game) {
     paths.addPath([P(-4, side * 34), P(-34, side * 36), P(-66, side * 34)]);
   }
 
+  // More flights of steps off the main street, up to the first lane on each side
+  // (as in Riomaggiore, where stairs branch off Via Colombo all the way up).
+  paths.addPath([P(-25), P(-24, 16)]);
+  paths.addPath([P(-56), P(-55, -16)]);
+  paths.addPath([P(-86), P(-84, 14)]);
+  paths.addPath([P(-86), P(-85, -14)]);
+
   // Two diagonal stairs forking off the main street at a sharp angle (pointed
   // corner buildings grow in the forks).
   paths.addPath([P(-22), P(-31, -9), P(-38, -16)]);

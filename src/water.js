@@ -6,6 +6,20 @@ import { makeRng } from './noise.js';
 import { harbourLayout } from './paths.js';
 import { registerStyled } from './style.js';
 
+/** A little gozzo fishing boat hull: a box with pinched, raised ends (about 3.6 m long). */
+export function gozzoHull() {
+  const hull = new THREE.BoxGeometry(1.3, 0.55, 3.6, 1, 1, 4);
+  const p = hull.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const z = p.getZ(i), y = p.getY(i);
+    const end = Math.abs(z) / 1.8;               // 0 middle → 1 bow/stern
+    p.setX(i, p.getX(i) * (1 - 0.75 * end * end) * (y < 0 ? 0.75 : 1));
+    p.setY(i, y + (y > 0 ? 0.25 * end * end : 0));
+  }
+  hull.computeVertexNormals();
+  return hull;
+}
+
 export class Sea {
   constructor(terrain) {
     this.terrain = terrain;

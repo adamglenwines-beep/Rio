@@ -225,6 +225,7 @@ export class Graphics {
     this._applySize();
     this._buildPipeline();
     if (this.game.scenery) this.game.scenery.setQuality(name);
+    if (this.game.growth) this.game.growth.renderer.setQuality(name);
     this.shadowsDirty();
     this._emit();
   }

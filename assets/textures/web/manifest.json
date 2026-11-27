@@ -483,6 +483,30 @@
      "bytes": 214222
     }
    }
+  },
+  {
+   "key": "rubble",
+   "set": "Bricks078",
+   "tone": "greyish",
+   "scale": 2.2,
+   "use": "rough stone ground floors, and the stone under worn plaster",
+   "mean": [
+    0.608,
+    0.6,
+    0.568
+   ],
+   "files": {
+    "1024": {
+     "albedo": "rubble_albedo_1024.webp",
+     "data": "rubble_data_1024.webp",
+     "bytes": 639788
+    },
+    "512": {
+     "albedo": "rubble_albedo_512.webp",
+     "data": "rubble_data_512.webp",
+     "bytes": 171646
+    }
+   }
   }
  ]
 }

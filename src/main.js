@@ -114,7 +114,7 @@ game.renderFrame = (dt, rawDt = dt) => {
     infillTimer = CONFIG.infill.refreshSeconds;
     game.infill.start();
   }
-  if (game.infill.busy && game.infill.work(CONFIG.infill.frameBudgetMs)) { terraces.refresh(game.growth, game.infill); scenery.refresh(game.growth, game.infill); }
+  if (game.infill.busy && game.infill.work(CONFIG.infill.frameBudgetMs)) { terraces.refresh(game.growth, game.infill); scenery.refresh(game.growth, game.infill); terrain.setTownMask((x, z) => game.infill.townDistance(x, z)); }
   rig.update(dt);
   camera.updateMatrixWorld();   // everything drawn this frame uses this frame's camera
   sea.update(elapsed);

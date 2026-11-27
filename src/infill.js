@@ -27,6 +27,8 @@ import { CONFIG } from './config.js';
 import { makeRng } from './noise.js';
 import { BAND } from './terrain.js';
 import { registerStyled } from './style.js';
+import { gozzoHull } from './water.js';
+import { harbourLayout } from './paths.js';
 
 const FREE = 0, HOUSE = 1, LANE = 2, OPEN = 3, VOID = 4;
 const C = (hex) => new THREE.Color(hex);
@@ -65,6 +67,7 @@ export class Infill {
       cyl: new THREE.CylinderGeometry(1, 1, 1, 8).translate(0, 0.5, 0),
       cone: new THREE.ConeGeometry(1, 1, 5).translate(0, 0.5, 0),
       blob: this.blobGeos.faceted,
+      boat: gozzoHull().translate(0, 0.28, 0),
     };
     this.kinds = {};
     for (const [k, geo] of Object.entries(geos)) this.kinds[k] = { geo, mat, mesh: null, cap: 0, shadow: k !== 'box' || true };
@@ -441,6 +444,109 @@ export class Infill {
     }
   }
 
+  /** Distance (m) from (x, z) to the nearest house or lane, from the last finished plan; Infinity outside it. */
+  townDistance(x, z) {
+    const g = this.grid;
+    if (!g) return Infinity;
+    const i = Math.floor(x - g.x0), j = Math.floor(z - g.z0);
+    if (i < 0 || j < 0 || i >= g.W || j >= g.H) return Infinity;
+    return Math.min(g.dB[j * g.W + i], g.dL[j * g.W + i]);
+  }
+
+  // ---- the two quarters: fishing gear by the harbour, farm gear up the hill -------------
+
+  /** Which quarter a spot belongs to: 'fishing' by the harbour, 'farming' higher up, or null. */
+  quarterAt(x, z) {
+    const t = this.terrain, h = t.harbour, I = CONFIG.infill, y = t.heightAt(x, z);
+    if (Math.hypot(x - h.x, z - h.z) < I.fishingRadius && y < I.fishingMaxHeight) return 'fishing';
+    if (y > I.farmingMinHeight) return 'farming';
+    return null;
+  }
+
+  /** A boat hauled out and chocked up, some under a canvas cover. */
+  _boat(x, z, yaw, rng) {
+    const y = this._h(x, z) + 0.12, c = Math.cos(yaw), s = Math.sin(yaw);
+    const hull = rng.weighted([[C('#f2efe6'), 6], [C('#3f7fc4'), 2], [C('#5ab0d8'), 1.5], [C('#d64a3b'), 0.7], [C('#3b9c6b'), 0.5], [C('#e8c14a'), 0.4]]);
+    this._put('boat', x, y, z, 1, 1, 1, hull, yaw, 0, (rng() - 0.5) * 0.16);
+    for (const u of [-0.9, 0.9]) this._put('box', x + s * u, y - 0.14, z + c * u, 0.9, 0.16, 0.14, rng.pick(COL.wood), yaw);   // chocks
+    if (rng() < 0.45) this._put('box', x, y + 0.5, z, 1.0, 0.07, 2.6, rng() < 0.6 ? C('#3f6fb0') : C('#e9e4d6'), yaw);      // canvas cover
+    else this._put('box', x, y + 0.36, z, 0.9, 0.05, 2.2, C('#c9a77a'), yaw);                                              // thwarts and boards
+  }
+
+  /** Nets heaped to dry, with a few floats. */
+  _nets(x, z, rng) {
+    const y = this._h(x, z);
+    this._put('blob', x, y + 0.1, z, 0.75, 0.22, 0.6, rng.pick([C('#c9c2ad'), C('#b8ad8f'), C('#a89a78')]), rng() * 6);
+    for (let i = 0, n = rng.int(2, 4); i < n; i++) this._put('blob', x + rng.range(-0.5, 0.5), y + 0.24, z + rng.range(-0.4, 0.4), 0.09, 0.09, 0.09, rng() < 0.75 ? C('#e8502a') : C('#f2efe6'));
+  }
+
+  /** Nets hung to dry on a rail between two posts. */
+  _netRack(x, z, dir, rng) {
+    const len = rng.range(1.8, 2.6), y = this._h(x, z), yaw = Math.atan2(dir[1], -dir[0]) + Math.PI / 2;
+    for (const u of [-len / 2, len / 2]) { const px = x + dir[0] * u, pz = z + dir[1] * u; this._put('box', px, this._h(px, pz) - 0.2, pz, 0.07, 1.75, 0.07, rng.pick(COL.wood)); }
+    this._put('box', x, y + 1.5, z, len, 0.05, 0.05, rng.pick(COL.wood), yaw);
+    this._put('box', x, y + 0.45, z, len - 0.15, 1.05, 0.04, rng.pick([C('#b8ad8f'), C('#9aa38a'), C('#a89a78')]), yaw);
+    this._put('blob', x + dir[0] * 0.3, y + 0.35, z + dir[1] * 0.3, 0.1, 0.1, 0.1, C('#e8502a'));
+  }
+
+  _crates(x, z, rng) {
+    const y = this._h(x, z);
+    this._put('box', x, y, z, 0.6, 0.32, 0.42, rng.pick(COL.wood), rng() * 3);
+    if (rng() < 0.6) this._put('box', x + 0.05, y + 0.32, z, 0.55, 0.3, 0.4, rng.pick(COL.wood), rng() * 3);
+    if (rng() < 0.5) this._put('cyl', x + 0.55, y + 0.3, z + 0.1, 0.3, 0.08, 0.3, C('#e8703a'), 0, 1.3);   // a lifebuoy leaning
+  }
+
+  /** Wine barrels: one or two standing, sometimes one on its side. */
+  _barrels(x, z, rng) {
+    const y = this._h(x, z), oak = () => rng.pick([C('#7a6a55'), C('#6e5f4e'), C('#8a7a64')]);
+    this._put('cyl', x, y, z, 0.36, 0.9, 0.36, oak());
+    for (const hy of [0.18, 0.7]) this._put('cyl', x, y + hy, z, 0.375, 0.05, 0.375, COL.dark);
+    if (rng() < 0.55) { this._put('cyl', x + 0.8, y, z + 0.1, 0.33, 0.82, 0.33, oak()); this._put('cyl', x + 0.8, y + 0.4, z + 0.1, 0.345, 0.05, 0.345, COL.dark); }
+    if (rng() < 0.4) this._put('blob', x - 0.55, y + 0.24, z + 0.3, 0.24, 0.26, 0.24, C('#4f7a4a'));   // a demijohn
+  }
+
+  /** A bundle of vine stakes and a hoe or two leaning on the wall behind (direction d). */
+  _stakes(x, z, d, rng) {
+    const y = this._h(x, z), yaw = Math.atan2(d[0], d[1]);
+    for (let i = 0, n = rng.int(4, 7); i < n; i++) {
+      const u = (i - n / 2) * 0.09 + rng.range(-0.03, 0.03);
+      this._put('box', x + d[1] * u - d[0] * 0.15, y - 0.05, z - d[0] * u - d[1] * 0.15, 0.05, rng.range(1.5, 2.0), 0.05, rng.pick([C('#a39d90'), C('#8f8676'), C('#b3ab9c')]), yaw, -0.2, 0);
+    }
+    this._put('box', x + d[1] * 0.5 - d[0] * 0.15, y - 0.05, z - d[0] * 0.5 - d[1] * 0.15, 0.04, 1.5, 0.04, rng.pick(COL.wood), yaw, -0.25, 0);
+    this._put('box', x + d[1] * 0.5 + d[0] * 0.2, y + 1.36, z - d[0] * 0.5 + d[1] * 0.2, 0.2, 0.04, 0.1, COL.dark, yaw);
+  }
+
+  _baskets(x, z, rng) {
+    const y = this._h(x, z);
+    for (let i = 0, n = rng.int(1, 3); i < n; i++) {
+      const px = x + rng.range(-0.4, 0.4), pz = z + rng.range(-0.3, 0.3);
+      this._put('cyl', px, y, pz, 0.26, 0.3, 0.26, rng.pick([C('#b89a66'), C('#a88a58')]));
+      if (rng() < 0.6) this._put('blob', px, y + 0.3, pz, 0.22, 0.1, 0.22, rng.pick([C('#5a2f5a'), C('#7a9a45'), C('#e2c93a')]));   // grapes, leaves, lemons
+    }
+  }
+
+  /** Café tables with parasols on the harbour piazza (kept off the lane through its middle). */
+  _cafe() {
+    const t = this.terrain, lay = harbourLayout(t), rng = makeRng(t.seed * 17 + 5), G = this.game.growth;
+    const spots = [[-3.3, -2.0], [3.3, -2.0], [-3.5, 1.2], [3.5, 1.2], [-1.6, -3.6], [1.9, -3.5]];
+    const cream = [C('#ece6d6'), C('#ece6d6'), C('#c9a593'), C('#e6cf8a')];
+    for (const [ox, oz] of spots) {
+      const x = lay.x + ox, z = lay.piazzaZ + oz;
+      if (G.occAt(x, z) >= 0 || t.heightAt(x, z) < 0.6) continue;
+      if (Math.abs(ox) < 1.6 && Math.abs(x - t.ravineX(z)) < 1.4) continue;   // the main street
+      const y = t.heightAt(x, z) + 0.05;
+      this._put('cyl', x, y, z, 0.05, 0.72, 0.05, COL.dark);
+      this._put('cyl', x, y + 0.72, z, 0.42, 0.04, 0.42, COL.white);
+      for (let c = 0, n = rng.int(2, 4); c < n; c++) {
+        const a = c / n * 6.28 + rng() * 0.5, cx = x + Math.cos(a) * 0.72, cz = z + Math.sin(a) * 0.72;
+        this._put('box', cx, y, cz, 0.36, 0.44, 0.36, rng.pick(COL.wood), a);
+        this._put('box', cx + Math.cos(a) * 0.16, y + 0.44, cz + Math.sin(a) * 0.16, 0.05, 0.42, 0.36, rng.pick(COL.wood), a + Math.PI / 2);
+      }
+      this._put('cyl', x + 0.15, y, z + 0.15, 0.035, 2.3, 0.035, COL.dark);
+      this._put('cone', x + 0.15, y + 2.05, z + 0.15, 1.5, 0.5, 1.5, rng.pick(cream), rng() * 6);
+    }
+  }
+
   _bench(x, z, yaw, rng) {
     const y = this._h(x, z), col = rng() < 0.5 ? rng.pick(COL.stone) : rng.pick(COL.wood);
     this._put('box', x, y + 0.38, z, 1.4, 0.08, 0.42, col, yaw);
@@ -524,6 +630,14 @@ export class Infill {
       return -0.5 * Math.atan2(2 * sxz, sxx - szz);
     };
 
+    // the fishing quarter keeps its boats and gear in every yard by the harbour
+    const qtr = this.quarterAt(P.cx, P.cz);
+    if (qtr === 'fishing' && ['orto', 'orchard', 'tree', 'shed', 'patio', 'pine'].includes(type) && rng() < I.boatYard) {
+      const yaw0 = axisYaw();
+      scatter((x, z) => this._boat(x, z, yaw0 + rng.range(-0.25, 0.25), rng), 1.25, 2.6, 2, (k) => Math.min(g.dB[k], g.dL[k]) >= 1.1);
+      scatter((x, z) => (rng() < 0.5 ? this._nets(x, z, rng) : this._crates(x, z, rng)), 0.6, 1.8, 3, null);
+      type = 'yard';
+    }
     switch (type) {
       case 'sliver': {
         if (P.n >= 4 && rng() < 0.45) {
@@ -623,11 +737,26 @@ export class Infill {
     }
 
     // --- life against the house walls (then ground cover for whatever is still bare) ---
-    let lineDone = false;
+    let lineDone = false, gear = 0;
     for (const k of P.wallCells) {
       if (g.claimed[k] === 2) continue;
       const roll = rng();
       const [x, z] = this._xz(g, k);
+      // each quarter's own clutter against the walls
+      if (qtr && gear < 3 && rng() < I.quarterClutter) {
+        const d = this._towardWall(g, k), pick = rng();
+        if (qtr === 'fishing') {
+          if (pick < 0.3 && d && this._fits(x, z, 0.9) && this._fits(x + d[1] * 1.3, z - d[0] * 1.3, 0.6) && this._fits(x - d[1] * 1.3, z + d[0] * 1.3, 0.6)) {
+            this._boat(x, z, Math.atan2(d[1], -d[0]), rng); this._claim(x, z, 1.5); gear++; continue;
+          } else if (pick < 0.55 && d && this._fits(x, z, 0.5)) { this._netRack(x, z, [d[1], -d[0]], rng); this._claim(x, z, 1.1, false); gear++; continue; }
+          else if (pick < 0.8 && this._fits(x, z, 0.55)) { this._nets(x, z, rng); this._claim(x, z, 0.7); gear++; continue; }
+          else if (this._fits(x, z, 0.45)) { this._crates(x, z, rng); this._claim(x, z, 0.6); gear++; continue; }
+        } else {
+          if (pick < 0.4 && this._fits(x, z, 0.55)) { this._barrels(x, z, rng); this._claim(x, z, 0.8); gear++; continue; }
+          else if (pick < 0.7 && d && this._fits(x, z, 0.35)) { this._stakes(x, z, d, rng); this._claim(x, z, 0.5); gear++; continue; }
+          else if (this._fits(x, z, 0.4)) { this._baskets(x, z, rng); this._claim(x, z, 0.5); gear++; continue; }
+        }
+      }
       if (roll < I.bougainvillea) { if (this._fits(x, z, 0.3) && this._bouga(g, k, rng)) this._claim(x, z, 0.45); }
       else if (roll < I.bougainvillea + I.washing && !lineDone && P.wallCells.length >= 3) {
         const d = this._towardWall(g, k);
@@ -685,6 +814,7 @@ export class Infill {
         J.types[type] = (J.types[type] || 0) + 1;
         this._decorate(this.wg, P, type, rng);
       } else {
+        this._cafe();
         this._flush();
         this.grid = this.wg;
         this.types = J.types || {};

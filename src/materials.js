@@ -210,6 +210,11 @@ export function injectSurface(sh, cfg) {
       ${cfg.masks ? 'vMask = aMask;' : 'vMask = vec4(0.0);'}
     }`);
   sh.vertexShader = (cfg.masks ? 'attribute vec4 aMask;\n' : '') + 'varying vec4 vMask;\n' + sh.vertexShader;
+  // house walls: where along the wall this is (for corner wear and painted corner stones)
+  if (cfg.weather) {
+    sh.vertexShader = 'attribute vec3 aWall;\nvarying vec3 vWall;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n vWall = aWall;');
+    sh.fragmentShader = 'varying vec3 vWall;\n' + sh.fragmentShader;
+  }
   if (cfg.layer === 'attr' && !/attribute vec3 aoParams/.test(sh.vertexShader)) sh.vertexShader = 'attribute vec3 aoParams;\n' + sh.vertexShader;
 
   const body = cfg.mode === 'terrain' ? `{ vec3 wp = vSW; ${terrainGLSL()} }`
@@ -238,27 +243,54 @@ const FACE_GLSL = (cfg) => `
       MSample s = mSample(uv, layer);
       vec3 base = diffuseColor.rgb;
       vec3 c = mTint(base, s.col, layer);
-      ${cfg.weather ? WEATHER_GLSL.replace(/PLASTER_LAYER/g, String(LAYERS.plaster ?? 0)).replace(/WORN_LAYER/g, String(LAYERS.plasterWorn ?? 1)) : ''}
+      ${cfg.weather ? WEATHER_GLSL.replace(/PLASTER_LAYER/g, String(LAYERS.plaster ?? 0)).replace(/WORN_LAYER/g, String(LAYERS.plasterWorn ?? 1)).replace(/RUBBLE_LAYER/g, String(LAYERS.rubble ?? LAYERS.stoneBase ?? 0)) : ''}
       diffuseColor.rgb = c;
       mNormalW = normalize(t * s.tn.x + b * s.tn.y + nG * s.tn.z);
       mRough = s.rough;`;
 
-// house walls only: worn-plaster patches, rising damp, faint vertical grime
+// House walls only. Plaster wears away in layers, as on the real facades: first the
+// colour coat (a pale undercoat shows as a thin halo), then the grey render, and in the
+// deepest part the rubble stone of the wall itself. It goes first low on the wall, at the
+// corners, and in blotches; each house has its own amount of wear (aWall.z). Also here:
+// painted corner stones (quoins), sun-faded colour variation, rising damp, vertical grime.
 const WEATHER_GLSL = `
       if (layer == PLASTER_LAYER && abs(nG.y) < 0.5) {
         vec2 q = vec2(dot(wp, t), wp.y);
-        // worn patches: blend in the weathered plaster where a large noise is high
-        float patchN = mFbm(q * 0.22 + vMRand * 13.0);
-        float worn = smoothstep(0.58, 0.78, patchN) * uWeather;
-        if (worn > 0.01) {
-          MSample w = mSample(uv * 0.9 + 0.31, WORN_LAYER);
-          c = mix(c, mTint(base, w.col, WORN_LAYER) * 0.93, worn);
-          s.tn = normalize(mix(s.tn, w.tn, worn));
-        }
+        float amt = fract(vWall.z), flags = floor(vWall.z + 0.001);
+        float h = wp.y - vMGround;
+        float dCorner = vWall.x >= 0.0 ? min(vWall.x, vWall.y - vWall.x) : 9.0;
         // gentle colour variation across a facade (sun-faded, repainted bits)
         c *= 1.0 + (mFbm(q * 0.11 + 3.7 + vMRand * 5.0) - 0.5) * 0.14 * uWeather;
+        // painted corner stones: long and short blocks alternating up both corners
+        if (flags > 0.5 && dCorner < (mod(floor(wp.y / 0.34), 2.0) < 0.5 ? 0.58 : 0.34) && fract(wp.y / 0.34) > 0.07)
+          c = mix(c, vec3(0.80, 0.77, 0.69) * (c.g / max(base.g, 0.05)), 0.9);
+        // ---- plaster loss ----
+        float n1 = mFbm(q * 0.55 + vMRand * 17.0);                       // blotches a couple of metres across
+        float n2 = mFbm(q * 2.3 + vMRand * 41.0);                        // jagged edges
+        float n3 = mNoise(q * 9.0 + 3.0);                                // crumbs
+        float low = 1.0 - smoothstep(0.0, 0.5 + 2.6 * amt, h);
+        float corner = 1.0 - smoothstep(0.0, 0.2 + 0.9 * amt, dCorner);
+        float w = ((n1 - 0.5) * 1.1 + (n2 - 0.5) * 0.55 + (n3 - 0.5) * 0.12 + low * 0.42 + corner * (0.1 + 0.3 * n1) * step(0.12, amt) + amt * 0.5 - 0.64) * uWeather;
+        if (w > 0.0) {
+          MSample wr = mSample(uv * 0.9 + 0.31, WORN_LAYER);
+          vec3 under = mix(c, vec3(0.80, 0.76, 0.66), 0.55) * (0.92 + 0.16 * n3);   // old limewash / undercoat
+          vec3 render = mTint(vec3(0.40, 0.38, 0.34), wr.col, WORN_LAYER);   // grey-beige base render
+          float e1 = smoothstep(0.016, 0.028, w);
+          vec3 cc = mix(under, render, e1);
+          vec3 tnn = mix(s.tn, wr.tn, e1);
+          float e2 = smoothstep(0.2, 0.22, w);
+          if (e2 > 0.0) {
+            MSample st = mSample(vec2(dot(wp, t), -dot(wp, b)) / uLayerP[RUBBLE_LAYER].x + vMRand * 3.1, RUBBLE_LAYER);
+            cc = mix(cc, mTint(vec3(0.27, 0.26, 0.24), st.col, RUBBLE_LAYER), e2);     // the stone of the wall
+            tnn = mix(tnn, st.tn, e2);
+            s.rough = mix(s.rough, st.rough, e2);
+          }
+          cc *= 1.0 - 0.28 * (1.0 - smoothstep(0.0, 0.035, abs(w - 0.205)));   // the broken edge casts a thin shadow
+          float e0 = smoothstep(0.0, 0.012, w);                          // a crisp, jagged edge
+          c = mix(c, cc, e0);
+          s.tn = normalize(mix(s.tn, tnn, e0));
+        }
         // rising damp: darker, greyer and a touch green near the ground
-        float h = wp.y - vMGround;
         float dampTop = 0.9 + 0.7 * mFbm(vec2(q.x * 0.6, vMRand * 9.0));
         float damp = (1.0 - smoothstep(dampTop - 0.5, dampTop, h)) * uWeather;
         vec3 dampCol = mix(vec3(dot(c, vec3(0.3, 0.55, 0.15))), c, 0.45) * vec3(0.72, 0.74, 0.68);
@@ -267,7 +299,6 @@ const WEATHER_GLSL = `
         float streak = mNoise(vec2(q.x * 3.2, q.y * 0.18 + vMRand * 31.0));
         c *= 1.0 - 0.07 * uWeather * smoothstep(0.55, 0.9, streak);
       }`;
-
 
 /**
  * The ground. Three families of surface, blended by steepness with a noisy edge:

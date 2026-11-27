@@ -506,6 +506,20 @@ export class Terrain {
     this.version++;
   }
 
+  /**
+   * Trodden ground: bare earth (no grass or scrub tint) around houses and lanes.
+   * `near(x, z)` returns the distance in metres to the nearest house or lane
+   * (or Infinity); called when the town changes.
+   */
+  setTownMask(near) {
+    const { FV, fcell, half } = this, am = this.mesh.geometry.attributes.aMask;
+    for (let j = 0; j < FV; j++) for (let i = 0; i < FV; i++) {
+      const d = near(i * fcell - half, j * fcell - half);
+      am.array[(j * FV + i) * 4 + 2] = d === Infinity ? 0 : 1 - smoothstep(2.0, 6.5, d);
+    }
+    am.needsUpdate = true;
+  }
+
   /** The ring of distant hills, headlands and sea floor around the playable square (scenery only). */
   _buildOuter() {
     const O = CONFIG.terrain.outer, step = O.cell, R = O.reach, half = this.half;
