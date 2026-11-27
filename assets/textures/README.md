@@ -1,6 +1,6 @@
 # Textures
 
-74 free **CC0** PBR texture sets (no attribution required), collected by Adam from
+87 free **CC0** PBR texture sets (no attribution required), collected by Adam from
 Poly Haven and ambientCG and converted here for the browser:
 
 - `*_color.jpg`: 2048 px, sRGB colour.
@@ -54,10 +54,23 @@ less lush sets. Originals were mostly 4K; ask Adam if a higher resolution is eve
 | `Rock060` | Grey-brown veined rock. Good for headlands. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Rock060) |
 | `Rocks002` | Loose grey pebbles. Beach and shoreline. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Rocks002) |
 | `Gravel022` | Fine gravel. Paths and terrace floors. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Gravel022) |
+| `Ground019` | Grey-violet gravel with ochre flecks. Gravel yards, quarry floor. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground019) |
+| `Ground024` | Grey earth, small moss patches. Shaded ground and damp corners. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground024) |
+| `Ground031` | Grey cracked, stony dirt. Dry rocky ground and outcrop edges. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground031) |
 | `Ground037` | Grass and earth mix. Hillsides. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground037) |
+| `Ground046` | Dark olive-brown earth, mottled. Shaded hillside under trees. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground046) |
+| `Ground053` | Red-brown soil with pale stones. **Recommended** for terraces, vineyards and olive groves. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground053) |
+| `Ground063` | Pale stony scrub with dry moss. **Recommended** for sunny wild hillside. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground063) |
+| `Ground067` | Warm brown earth. Tilled ground, vegetable gardens (orti). | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground067) |
 | `Ground068` | Earth with grass patches. Hillsides and terraces. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground068) |
+| `Ground074` | Light dusty earth with sparse grass. Dry hillside and lane edges. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground074) |
+| `Ground077` | Bright orange fine dirt. Use sparingly or desaturate: very saturated. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground077) |
 | `Ground081` | Dry, stony earth. **Recommended** for dry Ligurian hillsides. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground081) |
+| `Ground082S` | Brown soil with twigs and leaf litter. Orchard and woodland floor. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground082S) |
+| `Ground085` | Brown earth with scattered blue-grey stones. Hillside paths and terraces. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground085) |
 | `Ground086` | Earth, moss and grass. Hillsides. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground086) |
+| `Ground108` | Grey-brown rubble and stone chips. **Recommended** for the quarry and rocky shore. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground108) |
+| `Ground111` | Pinkish-red earth with gravel. Terra rossa variety; desaturate slightly. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Ground111) |
 | `Grass001` | Dense dark grass. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Grass001) |
 | `Grass004` | Short green grass. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Grass004) |
 | `Grass007` | Bright green grass. Probably too lush for dry Liguria. | ao, color, height, normal, roughness | [ambientCG](https://ambientcg.com/view?id=Grass007) |
