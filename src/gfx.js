@@ -72,7 +72,10 @@ import { CONFIG } from './config.js';
 export const PRESETS = {
   low:    { label: 'Low',    pixelRatio: 1.0, post: false, msaa: 0, bloom: 0,   shadowSize: 1024, shadowSoft: false, ssao: false, reflection: 0,    haze: true, tex: 512, aniso: 1, macro: 0 },
   medium: { label: 'Medium', pixelRatio: 1.5, post: true,  msaa: 4, bloom: 0.5, shadowSize: 2048, shadowSoft: true,  ssao: false, reflection: 0.25, haze: true, tex: 1024, aniso: 4, macro: 1 },
-  high:   { label: 'High',   pixelRatio: 2.0, post: true,  msaa: 4, bloom: 1.0, shadowSize: 4096, shadowSoft: true,  ssao: true,  reflection: 0.5,  haze: true, tex: 1024, aniso: 8, macro: 1 },
+  // ssao (screen-space AO, GTAO) is off on every preset since v0.12: it cost about a fifth of a
+  // High frame, drew the whole scene a second time, and its un-antialiased edges made washing and
+  // thin parts jagged and crawling. Baked AO (buildings.js: wall foot, eaves, window rings) replaces it.
+  high:   { label: 'High',   pixelRatio: 2.0, post: true,  msaa: 4, bloom: 1.0, shadowSize: 4096, shadowSoft: true,  ssao: false, reflection: 0.5,  haze: true, tex: 1024, aniso: 8, macro: 1 },
 };
 // Auto's ladder, best first: each rung is a preset plus an extra resolution scale.
 const LADDER = [

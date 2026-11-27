@@ -70,12 +70,12 @@ function parseArgs() {
         fragmentShader: 'varying float vUp; void main() { gl_FragColor = vec4(vec3(vUp < 0.3 ? 1.0 : 0.0), 1.0); }',
       });
       g.scene.traverse((m) => { if (m.isMesh || m.isPoints || m.isLine) { swapped.push([m, m.material, m.visible]); m.material = m === mass ? white : black; } });
-      g.sky.visible = false;
+      g.gfx.sky.visible = false;
       const bg = R.getClearColor(new T.Color()), tm = R.toneMapping;
       R.setClearColor(0x000000); R.toneMapping = T.NoToneMapping;
       const was = R.shadowMap.needsUpdate; R.shadowMap.needsUpdate = false;
       R.setRenderTarget(null); R.render(g.scene, g.camera); const mask = grab();
-      R.shadowMap.needsUpdate = was; R.toneMapping = tm; R.setClearColor(bg); g.sky.visible = true;
+      R.shadowMap.needsUpdate = was; R.toneMapping = tm; R.setClearColor(bg); g.gfx.sky.visible = true;
       for (const [m, mat] of swapped) m.material = mat;
       // classify
       const hsl = (r, gg, b) => { r /= 255; gg /= 255; b /= 255; const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), l = (mx + mn) / 2;

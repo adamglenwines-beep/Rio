@@ -36,7 +36,7 @@ const VIEWS = {
     await game.gfx.texturesReady; game.demo(); game.growth.grow(700); game.speed = 0;
     for (let i = 0; i < 400 && (game.infill.busy || i < 4); i++) game.renderFrame(0.05);
   });
-  let view = VIEWS[o.view || 'roof'];
+  let view = o.view === 'auto-roof' ? 'auto-roof' : VIEWS[o.view || 'roof'];
   if (!view) { const [p, t] = o.view.replace('cam=', '').split(':').map((s) => s.split(',').map(Number)); view = [p, t]; }
   const results = {};
   for (const v of variants) {
@@ -50,9 +50,18 @@ const VIEWS = {
       if (v === 'noDetail') matUniforms.uDetail.value = 0;
       if (v === 'bias1') matUniforms.uMipBias.value = 1;
       if (v === 'noPaint') styleUniforms.uPaint.value = 0;
+      const qSaved = matUniforms.uLayerQ ? matUniforms.uLayerQ.value.map((q) => q.clone()) : null;
+      if (v === 'oldTex' && qSaved) matUniforms.uLayerQ.value.forEach((q) => q.set(1, 0, 0, 0));   // v0.11 texture settings
       const hb = g.terrain.harbour, T = g.THREE;
       g.rig.tween = null; g.rig.controls.enableDamping = false;
-      const P = new T.Vector3(hb.x + view[0][0], view[0][1], hb.z + view[0][2]), Q = new T.Vector3(hb.x + view[1][0], view[1][1], hb.z + view[1][2]);
+      let P = new T.Vector3(hb.x + view[0][0], view[0][1], hb.z + view[0][2]), Q = new T.Vector3(hb.x + view[1][0], view[1][1], hb.z + view[1][2]);
+      if (view === 'auto-roof') {
+        // a slate roof near the middle of town, seen from a few metres above (as in the bug video)
+        const G = g.growth, hs = G.live.map((id) => G.buildings[id]).filter((b) => b.roof !== 'flat' && b.roofKind !== 'terracotta');
+        hs.sort((a, b) => Math.hypot(a.x - hb.x, a.z - hb.z + 30) - Math.hypot(b.x - hb.x, b.z - hb.z + 30));
+        const b = hs[0];
+        Q = new T.Vector3(b.x, b.top + 0.6, b.z); P = new T.Vector3(b.x + 3, b.top + 6.5, b.z + 4.5);
+      }
       const side = new T.Vector3().subVectors(Q, P).cross(new T.Vector3(0, 1, 0)).normalize();
       const w = gl.drawingBufferWidth, hh = gl.drawingBufferHeight;
       const grab = () => { const px = new Uint8Array(w * hh * 4); gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
@@ -73,6 +82,7 @@ const VIEWS = {
           sum += Math.abs(Ls[f][i] - Ls[f - 1][i]); fsum += Math.abs(Fs[f][i] - Fs[f - 1][i]); fmag += Math.abs(Fs[f][i]); n++;
         }
       }
+      if (qSaved) qSaved.forEach((q, i) => matUniforms.uLayerQ.value[i].copy(q));
       if (gfx.ssao) gfx.ssao.enabled = saved.ao;
       matUniforms.uNormalK.value = saved.n; matUniforms.uDetail.value = saved.d; matUniforms.uMipBias.value = saved.b; styleUniforms.uPaint.value = saved.p;
       g.rig.controls.enableDamping = true;
@@ -80,7 +90,7 @@ const VIEWS = {
     }, { v, view, steps: +(o.steps || 6) });
     results[v] = r;
     console.log(v.padEnd(10), 'change', r.score, ' fizz (fine-detail change ÷ fine detail)', r.fizz, ' fine detail', r.detail);
-    if (o.strip && v === variants[0]) await page.screenshot({ path: path.resolve(ROOT, o.strip), type: 'jpeg', quality: 90 });
+    if (o.strip) await page.screenshot({ path: path.resolve(ROOT, o.strip.replace('.jpg', '_' + v + '.jpg')), type: 'jpeg', quality: 90 });
   }
   console.log(JSON.stringify(results));
   if (h.errors.length) console.log('PAGE ERRORS:\n' + h.errors.slice(0, 8).join('\n'));

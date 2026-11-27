@@ -324,6 +324,24 @@ export const CONFIG = {
     bloomThreshold: 2.2,     // brightness (before tone mapping) above which things glow: the sun, glints, lit windows
   },
 
+  // ---- Textures (materials.js) --------------------------------------------------
+  // Against shimmer: a texture's detail is its brightness ÷ its average brightness, which is
+  // multiplied onto each surface's own colour. On a dark photo (slate) with pale chipped edges
+  // that ratio reached 11x: texel-sized white specks that fizzed and crawled as the camera
+  // moved. Per texture: `contrast` scales the detail (1 = as photographed; in log space, so
+  // it stays balanced around the average) and `mipBias` asks for a slightly softer mip level.
+  // The ratio is also capped to [detailMin, detailMax] for every texture.
+  textures: {
+    detailMin: 0.3, detailMax: 2.4,
+    layers: {
+      slateA: { contrast: 0.5, mipBias: 0.75 },
+      terraB: { contrast: 0.8, mipBias: 0.25 },
+      stoneBase: { contrast: 0.75, mipBias: 0.25 },
+      setts: { contrast: 0.8, mipBias: 0.25 },
+      planks: { contrast: 0.8, mipBias: 0.25 },
+    },
+  },
+
   // ---- Simulation -----------------------------------------------------------
   sim: {
     stepsPerSecond: 3,     // growth steps per second at 1x speed

@@ -15,6 +15,8 @@ when a design decision changes.
   4. Give the user the live link https://adamglenwines-beep.github.io/Rio/ and the
      version label they should see (a hard refresh may be needed if they see the old one).
 - If the user dislikes a round, they can ask to roll `main` back to an earlier version.
+- **Never delete sections from `PROGRESS.md`.** When a run finishes, move its notes to an
+  "Earlier runs" section (or to `docs/progress-archive/`); don't overwrite them.
 - For visual changes, take before/after screenshots (postcard, aerial, and close-ups
   relevant to the change) and keep comparison images in `docs/progress/`.
 - At the end of a round, report what got worse and what you'd tune next.

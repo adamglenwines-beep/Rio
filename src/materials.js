@@ -39,6 +39,7 @@ export const matUniforms = {
   uTexOn: { value: 0 },                  // 0 until textures have loaded
   uLayerP: { value: Array.from({ length: 32 }, () => new THREE.Vector4(2, 0.5, 1, 0.7)) },   // scale, keepHue, normal, meanLum
   uLayerMean: { value: Array.from({ length: 32 }, () => new THREE.Color(0.7, 0.7, 0.7)) },
+  uLayerQ: { value: Array.from({ length: 32 }, () => new THREE.Vector4(1, 0, 0, 0)) },          // detail contrast, extra mip bias
   uDetail: { value: 1 },                 // texture contrast (per art style)
   uNormalK: { value: 1 },                // normal-map strength (per art style)
   uMipBias: { value: 0 },                // >0 = softer textures (per art style)
@@ -73,6 +74,8 @@ export function setManifest(json) {
     const keepHue = L.tone === 'grey' ? 0 : L.tone === 'greyish' ? 0.35 : 0.6;
     matUniforms.uLayerP.value[i].set(L.scale, keepHue, 1, lum);
     matUniforms.uLayerMean.value[i].setRGB(L.mean[0], L.mean[1], L.mean[2], THREE.SRGBColorSpace);
+    const Q = CONFIG.textures.layers[L.key] || {};
+    matUniforms.uLayerQ.value[i].set(Q.contrast ?? 1, Q.mipBias ?? 0, 0, 0);
   });
   return manifest;
 }
@@ -144,6 +147,7 @@ const GLSL_COMMON = /* glsl */`
   uniform float uTexOn, uDetail, uNormalK, uMipBias, uMacro, uWeather, uTime;
   uniform vec4 uLayerP[32];
   uniform vec3 uLayerMean[32];
+  uniform vec4 uLayerQ[32];
   float mHash(vec2 p) { p = fract(p * vec2(233.34, 851.73)); p += dot(p, p + 23.45); return fract(p.x * p.y); }
   float mNoise(vec2 p) {
     vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
@@ -155,8 +159,9 @@ const GLSL_COMMON = /* glsl */`
   MSample mSample(vec2 uv, int layer) {
     MSample s;
     if (uTexOn < 0.5) { s.col = uLayerMean[layer]; s.tn = vec3(0.0, 0.0, 1.0); s.rough = 0.9; return s; }   // textures off (mirror pass)
-    vec4 a = texture(uAlbedoArr, vec3(uv, float(layer)), uMipBias);
-    vec4 d = texture(uDataArr, vec3(uv, float(layer)), uMipBias);
+    float bias = uMipBias + uLayerQ[layer].y;
+    vec4 a = texture(uAlbedoArr, vec3(uv, float(layer)), bias);
+    vec4 d = texture(uDataArr, vec3(uv, float(layer)), bias);
     s.col = a.rgb;
     vec2 nxy = (d.rg * 2.0 - 1.0) * uNormalK * uLayerP[layer].z;
     s.tn = vec3(nxy, sqrt(max(1.0 - dot(nxy, nxy), 0.0)));
@@ -174,8 +179,10 @@ const GLSL_COMMON = /* glsl */`
   vec3 mTint(vec3 base, vec3 tex, int layer) {
     vec4 P = uLayerP[layer];
     float lum = dot(tex, vec3(0.2126, 0.7152, 0.0722));
-    float k = mix(1.0, lum / max(P.w, 0.03), uDetail);                    // luminance detail
-    vec3 hue = tex / max(uLayerMean[layer], vec3(0.03));                  // the texture's own colour shifts
+    float c = uLayerQ[layer].x;                                            // this texture's detail contrast
+    float ratio = clamp(lum / max(P.w, 0.03), ${f1(CONFIG.textures.detailMin)}, ${f1(CONFIG.textures.detailMax)});
+    float k = exp(log(ratio) * c * uDetail);                              // luminance detail
+    vec3 hue = exp(log(clamp(tex / max(uLayerMean[layer], vec3(0.03)), vec3(0.2), vec3(3.0))) * c);   // the texture's own colour shifts
     return base * mix(vec3(k), mix(vec3(1.0), hue, uDetail), P.y);
   }
   // One rock bed: its colour, and (alpha) how proud it stands: 1 thick rib … 0 recessed shale.
