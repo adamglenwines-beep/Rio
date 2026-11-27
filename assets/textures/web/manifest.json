@@ -1,0 +1,392 @@
+{
+ "sizes": [
+  1024,
+  512
+ ],
+ "layers": [
+  {
+   "key": "plaster",
+   "set": "plastered_wall",
+   "tone": "grey",
+   "scale": 3.2,
+   "use": "house walls (tinted per house)",
+   "mean": [
+    0.696,
+    0.696,
+    0.696
+   ],
+   "files": {
+    "1024": {
+     "albedo": "plaster_albedo_1024.webp",
+     "data": "plaster_data_1024.webp",
+     "bytes": 615360
+    },
+    "512": {
+     "albedo": "plaster_albedo_512.webp",
+     "data": "plaster_data_512.webp",
+     "bytes": 121782
+    }
+   }
+  },
+  {
+   "key": "plasterWorn",
+   "set": "red_plaster_weathered",
+   "tone": "grey",
+   "scale": 3.6,
+   "use": "weathered patches blended into walls",
+   "mean": [
+    0.696,
+    0.696,
+    0.696
+   ],
+   "files": {
+    "1024": {
+     "albedo": "plasterWorn_albedo_1024.webp",
+     "data": "plasterWorn_data_1024.webp",
+     "bytes": 378150
+    },
+    "512": {
+     "albedo": "plasterWorn_albedo_512.webp",
+     "data": "plasterWorn_data_512.webp",
+     "bytes": 60624
+    }
+   }
+  },
+  {
+   "key": "stoneBase",
+   "set": "stone_wall_04",
+   "tone": "keep",
+   "scale": 2.4,
+   "use": "harbour stone bases, plinths, passage vaults",
+   "mean": [
+    0.436,
+    0.403,
+    0.371
+   ],
+   "files": {
+    "1024": {
+     "albedo": "stoneBase_albedo_1024.webp",
+     "data": "stoneBase_data_1024.webp",
+     "bytes": 869240
+    },
+    "512": {
+     "albedo": "stoneBase_albedo_512.webp",
+     "data": "stoneBase_data_512.webp",
+     "bytes": 199672
+    }
+   }
+  },
+  {
+   "key": "stoneDry",
+   "set": "stone_wall",
+   "tone": "keep",
+   "scale": 2.6,
+   "use": "dry-stone terrace walls",
+   "mean": [
+    0.635,
+    0.572,
+    0.479
+   ],
+   "files": {
+    "1024": {
+     "albedo": "stoneDry_albedo_1024.webp",
+     "data": "stoneDry_data_1024.webp",
+     "bytes": 718638
+    },
+    "512": {
+     "albedo": "stoneDry_albedo_512.webp",
+     "data": "stoneDry_data_512.webp",
+     "bytes": 208260
+    }
+   }
+  },
+  {
+   "key": "stoneDressed",
+   "set": "Bricks111B",
+   "tone": "greyish",
+   "scale": 1.8,
+   "use": "dressed stone: arch frames, quay edges",
+   "mean": [
+    0.43,
+    0.411,
+    0.378
+   ],
+   "files": {
+    "1024": {
+     "albedo": "stoneDressed_albedo_1024.webp",
+     "data": "stoneDressed_data_1024.webp",
+     "bytes": 491842
+    },
+    "512": {
+     "albedo": "stoneDressed_albedo_512.webp",
+     "data": "stoneDressed_data_512.webp",
+     "bytes": 126562
+    }
+   }
+  },
+  {
+   "key": "cliff",
+   "set": "cliff_side",
+   "tone": "greyish",
+   "scale": 14,
+   "use": "cliffs and steep rock (toned toward grey)",
+   "mean": [
+    0.399,
+    0.343,
+    0.3
+   ],
+   "files": {
+    "1024": {
+     "albedo": "cliff_albedo_1024.webp",
+     "data": "cliff_data_1024.webp",
+     "bytes": 583402
+    },
+    "512": {
+     "albedo": "cliff_albedo_512.webp",
+     "data": "cliff_data_512.webp",
+     "bytes": 168156
+    }
+   }
+  },
+  {
+   "key": "rock",
+   "set": "rock_face_03",
+   "tone": "greyish",
+   "scale": 5,
+   "use": "outcrops and broken rock",
+   "mean": [
+    0.457,
+    0.422,
+    0.39
+   ],
+   "files": {
+    "1024": {
+     "albedo": "rock_albedo_1024.webp",
+     "data": "rock_data_1024.webp",
+     "bytes": 755414
+    },
+    "512": {
+     "albedo": "rock_albedo_512.webp",
+     "data": "rock_data_512.webp",
+     "bytes": 182350
+    }
+   }
+  },
+  {
+   "key": "ground",
+   "set": "Ground081",
+   "tone": "keep",
+   "scale": 7,
+   "use": "dry stony hillside earth (tinted by terrain colour)",
+   "mean": [
+    0.525,
+    0.481,
+    0.346
+   ],
+   "files": {
+    "1024": {
+     "albedo": "ground_albedo_1024.webp",
+     "data": "ground_data_1024.webp",
+     "bytes": 882108
+    },
+    "512": {
+     "albedo": "ground_albedo_512.webp",
+     "data": "ground_data_512.webp",
+     "bytes": 229840
+    }
+   }
+  },
+  {
+   "key": "cobble",
+   "set": "cobblestone_floor_001",
+   "tone": "keep",
+   "scale": 2.2,
+   "use": "lanes and stairs",
+   "mean": [
+    0.475,
+    0.46,
+    0.414
+   ],
+   "files": {
+    "1024": {
+     "albedo": "cobble_albedo_1024.webp",
+     "data": "cobble_data_1024.webp",
+     "bytes": 692540
+    },
+    "512": {
+     "albedo": "cobble_albedo_512.webp",
+     "data": "cobble_data_512.webp",
+     "bytes": 171464
+    }
+   }
+  },
+  {
+   "key": "setts",
+   "set": "pavement_05",
+   "tone": "keep",
+   "scale": 2.4,
+   "use": "piazza, quay, slipway",
+   "mean": [
+    0.473,
+    0.417,
+    0.351
+   ],
+   "files": {
+    "1024": {
+     "albedo": "setts_albedo_1024.webp",
+     "data": "setts_data_1024.webp",
+     "bytes": 557940
+    },
+    "512": {
+     "albedo": "setts_albedo_512.webp",
+     "data": "setts_data_512.webp",
+     "bytes": 133362
+    }
+   }
+  },
+  {
+   "key": "slateA",
+   "set": "RoofingTiles003",
+   "tone": "keep",
+   "scale": 2.2,
+   "use": "slate roofs",
+   "mean": [
+    0.204,
+    0.212,
+    0.204
+   ],
+   "files": {
+    "1024": {
+     "albedo": "slateA_albedo_1024.webp",
+     "data": "slateA_data_1024.webp",
+     "bytes": 611304
+    },
+    "512": {
+     "albedo": "slateA_albedo_512.webp",
+     "data": "slateA_data_512.webp",
+     "bytes": 164488
+    }
+   }
+  },
+  {
+   "key": "slateB",
+   "set": "RoofingTiles013A",
+   "tone": "keep",
+   "scale": 2.2,
+   "use": "slate roofs (variant)",
+   "mean": [
+    0.175,
+    0.172,
+    0.19
+   ],
+   "files": {
+    "1024": {
+     "albedo": "slateB_albedo_1024.webp",
+     "data": "slateB_data_1024.webp",
+     "bytes": 113138
+    },
+    "512": {
+     "albedo": "slateB_albedo_512.webp",
+     "data": "slateB_data_512.webp",
+     "bytes": 40496
+    }
+   }
+  },
+  {
+   "key": "terraA",
+   "set": "RoofingTiles012B",
+   "tone": "keep",
+   "scale": 2.2,
+   "use": "terracotta roofs",
+   "mean": [
+    0.508,
+    0.304,
+    0.219
+   ],
+   "files": {
+    "1024": {
+     "albedo": "terraA_albedo_1024.webp",
+     "data": "terraA_data_1024.webp",
+     "bytes": 276356
+    },
+    "512": {
+     "albedo": "terraA_albedo_512.webp",
+     "data": "terraA_data_512.webp",
+     "bytes": 80250
+    }
+   }
+  },
+  {
+   "key": "terraB",
+   "set": "RoofingTiles014C",
+   "tone": "keep",
+   "scale": 2.2,
+   "use": "terracotta roofs (variant)",
+   "mean": [
+    0.406,
+    0.303,
+    0.239
+   ],
+   "files": {
+    "1024": {
+     "albedo": "terraB_albedo_1024.webp",
+     "data": "terraB_data_1024.webp",
+     "bytes": 461566
+    },
+    "512": {
+     "albedo": "terraB_albedo_512.webp",
+     "data": "terraB_data_512.webp",
+     "bytes": 132696
+    }
+   }
+  },
+  {
+   "key": "woodPaint",
+   "set": "PaintedWood009B",
+   "tone": "grey",
+   "scale": 1.4,
+   "use": "shutters and doors (tinted)",
+   "mean": [
+    0.696,
+    0.696,
+    0.696
+   ],
+   "files": {
+    "1024": {
+     "albedo": "woodPaint_albedo_1024.webp",
+     "data": "woodPaint_data_1024.webp",
+     "bytes": 549796
+    },
+    "512": {
+     "albedo": "woodPaint_albedo_512.webp",
+     "data": "woodPaint_data_512.webp",
+     "bytes": 97406
+    }
+   }
+  },
+  {
+   "key": "planks",
+   "set": "Planks012",
+   "tone": "keep",
+   "scale": 1.8,
+   "use": "weathered timber boat-store doors",
+   "mean": [
+    0.319,
+    0.257,
+    0.198
+   ],
+   "files": {
+    "1024": {
+     "albedo": "planks_albedo_1024.webp",
+     "data": "planks_data_1024.webp",
+     "bytes": 599100
+    },
+    "512": {
+     "albedo": "planks_albedo_512.webp",
+     "data": "planks_data_512.webp",
+     "bytes": 131502
+    }
+   }
+  }
+ ]
+}

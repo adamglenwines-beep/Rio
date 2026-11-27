@@ -16,6 +16,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { STYLES } from './style.js';
+import { loadTextures, matUniforms } from './materials.js';
 
 // Colour grade (linear HDR, before tone mapping): white balance for Warmth,
 // and per-style saturation and contrast.
@@ -68,9 +69,9 @@ import { CONFIG } from './config.js';
 
 // ---- quality presets ------------------------------------------------------------
 export const PRESETS = {
-  low:    { label: 'Low',    pixelRatio: 1.0, post: false, msaa: 0, bloom: 0,   shadowSize: 1024, shadowSoft: false, ssao: false, reflection: 0,    haze: true },
-  medium: { label: 'Medium', pixelRatio: 1.5, post: true,  msaa: 4, bloom: 0.5, shadowSize: 2048, shadowSoft: true,  ssao: false, reflection: 0.25, haze: true },
-  high:   { label: 'High',   pixelRatio: 2.0, post: true,  msaa: 4, bloom: 1.0, shadowSize: 4096, shadowSoft: true,  ssao: true,  reflection: 0.5,  haze: true },
+  low:    { label: 'Low',    pixelRatio: 1.0, post: false, msaa: 0, bloom: 0,   shadowSize: 1024, shadowSoft: false, ssao: false, reflection: 0,    haze: true, tex: 512, aniso: 1, macro: 0 },
+  medium: { label: 'Medium', pixelRatio: 1.5, post: true,  msaa: 4, bloom: 0.5, shadowSize: 2048, shadowSoft: true,  ssao: false, reflection: 0.25, haze: true, tex: 1024, aniso: 4, macro: 1 },
+  high:   { label: 'High',   pixelRatio: 2.0, post: true,  msaa: 4, bloom: 1.0, shadowSize: 4096, shadowSoft: true,  ssao: true,  reflection: 0.5,  haze: true, tex: 1024, aniso: 8, macro: 1 },
 };
 const ORDER = ['low', 'medium', 'high'];
 
@@ -94,7 +95,7 @@ export class Graphics {
     this.hour = TIMES.midday; this.targetHour = this.hour;
     this.timeName = 'midday';
     this.warmth = this._loadSetting('warmth', 'neutral');   // 'cool' | 'neutral' | 'warm'
-    this.style = STYLES[this._loadSetting('style', 'clean')] || STYLES.clean;
+    this.style = STYLES[this._loadSetting('style', 'painted')] || STYLES.painted;   // default: closest to the art target
     this.styleName = Object.keys(STYLES).find((k) => STYLES[k] === this.style);
     this.resolution = 1;           // extra scale on top of the preset (Auto lowers it if needed)
     this.mode = 'auto';            // 'auto' or a preset name
@@ -190,6 +191,10 @@ export class Graphics {
   _use(name) {
     this.presetName = name;
     this.preset = PRESETS[name];
+    // textures for this preset (Low: half-size layers, no large-scale variation sample)
+    matUniforms.uMacro.value = this.preset.macro;
+    this.texturesReady = loadTextures(this.renderer, this.preset.tex, Math.min(this.preset.aniso, this.renderer.capabilities.getMaxAnisotropy()))
+      .catch((e) => console.error('textures failed to load', e));
     const r = this.renderer, P = this.preset;
     // shadows: map size and filtering (a filter change needs shaders recompiled)
     const type = P.shadowSoft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;

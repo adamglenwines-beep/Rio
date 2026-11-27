@@ -356,7 +356,7 @@ export class Terrain {
     this.flatNormals = geo.attributes.normal.array.slice();
     this.activeColors = this.baseColors;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, flatShading: true });
-    registerStyled(mat, 'ground');
+    registerStyled(mat, 'ground', { mode: 'terrain' });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     mesh.castShadow = true;

@@ -1,0 +1,22 @@
+{
+  "_comment": "Source of truth for which texture sets the game uses. tools/pack_textures.py reads this and writes packed WebP files + manifest.json here. Layer order = index in the GPU texture arrays (src/materials.js refers to layers by key).",
+  "sizes": [1024, 512],
+  "layers": [
+    { "key": "plaster",      "set": "plastered_wall",        "tone": "grey", "scale": 3.2, "use": "house walls (tinted per house)" },
+    { "key": "plasterWorn",  "set": "red_plaster_weathered", "tone": "grey", "scale": 3.6, "use": "weathered patches blended into walls" },
+    { "key": "stoneBase",    "set": "stone_wall_04",         "tone": "keep", "scale": 2.4, "use": "harbour stone bases, plinths, passage vaults" },
+    { "key": "stoneDry",     "set": "stone_wall",            "tone": "keep", "scale": 2.6, "use": "dry-stone terrace walls" },
+    { "key": "stoneDressed", "set": "Bricks111B",            "tone": "greyish", "scale": 1.8, "use": "dressed stone: arch frames, quay edges" },
+    { "key": "cliff",        "set": "cliff_side",            "tone": "greyish", "scale": 14, "use": "cliffs and steep rock (toned toward grey)" },
+    { "key": "rock",         "set": "rock_face_03",          "tone": "greyish", "scale": 5, "use": "outcrops and broken rock" },
+    { "key": "ground",       "set": "Ground081",             "tone": "keep", "scale": 7, "use": "dry stony hillside earth (tinted by terrain colour)" },
+    { "key": "cobble",       "set": "cobblestone_floor_001", "tone": "keep", "scale": 2.2, "use": "lanes and stairs" },
+    { "key": "setts",        "set": "pavement_05",           "tone": "keep", "scale": 2.4, "use": "piazza, quay, slipway" },
+    { "key": "slateA",       "set": "RoofingTiles003",       "tone": "keep", "scale": 2.2, "use": "slate roofs" },
+    { "key": "slateB",       "set": "RoofingTiles013A",      "tone": "keep", "scale": 2.2, "use": "slate roofs (variant)" },
+    { "key": "terraA",       "set": "RoofingTiles012B",      "tone": "keep", "scale": 2.2, "use": "terracotta roofs" },
+    { "key": "terraB",       "set": "RoofingTiles014C",      "tone": "keep", "scale": 2.2, "use": "terracotta roofs (variant)" },
+    { "key": "woodPaint",    "set": "PaintedWood009B",       "tone": "grey", "scale": 1.4, "use": "shutters and doors (tinted)" },
+    { "key": "planks",       "set": "Planks012",             "tone": "keep", "scale": 1.8, "use": "weathered timber boat-store doors" }
+  ]
+}

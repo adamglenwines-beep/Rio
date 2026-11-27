@@ -17,6 +17,10 @@ import { UI } from './ui.js';
 import { Graphics } from './gfx.js';
 import { VERSION } from './version.js';
 import { STYLES, applyStyleToMaterials } from './style.js';
+import { loadManifest } from './materials.js';
+
+// the texture manifest (layer order) must be known before any material compiles
+await loadManifest();
 
 // ---- Renderer ---------------------------------------------------------------
 const app = document.getElementById('app');

@@ -20,6 +20,7 @@ import { makeRng } from './noise.js';
 import { ZONE } from './zones.js';
 import { sub, norm, dist, lerp2, centroid, edgeNormal, offsetPoly, chamferPoly } from './geom.js';
 import { STYLES, registerStyled } from './style.js';
+import { LAYERS } from './materials.js';
 
 const FH = CONFIG.building.floorHeight;
 const WHITE = new THREE.Color(1, 1, 1);
@@ -33,7 +34,8 @@ const AWN_COLS = [new THREE.Color('#d24b3f'), new THREE.Color('#2e7cb8'), new TH
 
 /** Accumulates flat-shaded, vertex-coloured triangles into one BufferGeometry. */
 class GeoBuilder {
-  constructor() { this.pos = []; this.nor = []; this.col = []; }
+  constructor() { this.pos = []; this.nor = []; this.col = []; this.lay = []; this.layer = -1; }
+  // this.layer: the texture layer (materials.js LAYERS index, -1 = none) for what is added next
 
   /** A planar convex face from 3D points; wound to face along `want` (if given). */
   face(pts, c, want) {
@@ -47,7 +49,7 @@ class GeoBuilder {
     if (want && n[0] * want[0] + n[1] * want[1] + n[2] * want[2] < 0) { pts = [...pts].reverse(); n = n.map((k) => -k); }
     for (let i = 1; i + 1 < pts.length; i++) {
       for (const p of [pts[0], pts[i], pts[i + 1]]) {
-        this.pos.push(p[0], p[1], p[2]); this.nor.push(n[0], n[1], n[2]); this.col.push(c.r, c.g, c.b);
+        this.pos.push(p[0], p[1], p[2]); this.nor.push(n[0], n[1], n[2]); this.col.push(c.r, c.g, c.b); this.lay.push(this.layer);
       }
     }
   }
@@ -57,6 +59,7 @@ class GeoBuilder {
     this.pos.push(a[0], a[1], a[2], b[0], b[1], b[2], d[0], d[1], d[2]);
     this.nor.push(n[0], n[1], n[2], n[0], n[1], n[2], n[0], n[1], n[2]);
     this.col.push(c.r, c.g, c.b, c.r, c.g, c.b, c.r, c.g, c.b);
+    this.lay.push(this.layer, this.layer, this.layer);
   }
 
   /** Add every triangle of a three.js geometry, transformed by `m`, in one colour. */
@@ -95,7 +98,7 @@ class GeoBuilder {
         const NA = [en[0][0], 0, en[0][1]], NB = [en[1][0], 0, en[1][1]];
         const tri = (p1, n1, p2, n2, p3, n3) => {
           this.pos.push(...p1, ...p2, ...p3); this.nor.push(...n1, ...n2, ...n3);
-          for (let k = 0; k < 3; k++) this.col.push(c.r, c.g, c.b);
+          for (let k = 0; k < 3; k++) { this.col.push(c.r, c.g, c.b); this.lay.push(this.layer); }
         };
         if (ccw) { tri(A0, NA, A1, NA, B1, NB); tri(A0, NA, B1, NB, B0, NB); }
         else { tri(A0, NA, B0, NB, B1, NB); tri(A0, NA, B1, NB, A1, NA); }
@@ -116,7 +119,7 @@ class GeoBuilder {
    * The walls shader darkens walls near the ground, more so in narrow lanes.
    * `probe(x, z, nx, nz)` returns the enclosure for a wall facing (nx, nz).
    */
-  arrays(probe, terrain) {
+  arrays(probe, terrain, rand = 0) {
     const n = this.pos.length, P = this.pos, N = this.nor;
     const ao = new Float32Array(n);
     const memo = new Map();
@@ -130,7 +133,7 @@ class GeoBuilder {
         v = [g, enc];
         memo.set(key, v);
       }
-      ao[i] = v[0]; ao[i + 1] = v[1]; ao[i + 2] = 0;
+      ao[i] = v[0]; ao[i + 1] = v[1]; ao[i + 2] = this.lay[i / 3] + 1 + rand * 0.9;   // layer + house random (materials.js)
     }
     return { pos: new Float32Array(P), nor: new Float32Array(N), col: new Float32Array(this.col), ao };
   }
@@ -221,11 +224,13 @@ export class BuildingRenderer {
       storeRoom: { geo: new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0), mat: this._storeMaterial(), shadow: false },
     };
     for (const p of Object.values(this.parts)) { p.mesh = null; p.cap = 0; }
-    registerStyled(this.massMat, 'surface');
+    registerStyled(this.massMat, 'surface', { mode: 'face', layer: 'attr', weather: true });
+    const surf = { shutterOpen: 'woodPaint', shutterClosed: 'woodPaint', door: 'woodPaint', chimney: 'plaster' };
     const seen = new Set([this.massMat]);
-    for (const p of Object.values(this.parts)) {
+    for (const [k, p] of Object.entries(this.parts)) {
       if (seen.has(p.mat) || p.mat.isMeshBasicMaterial) continue;
-      seen.add(p.mat); registerStyled(p.mat, 'surface');
+      seen.add(p.mat);
+      registerStyled(p.mat, 'surface', surf[k] ? { mode: 'face', layer: surf[k] } : null);
     }
   }
 
@@ -293,6 +298,7 @@ export class BuildingRenderer {
     outer.moveTo(-w / 2 - F, 0); outer.lineTo(w / 2 + F, 0); outer.lineTo(w / 2 + F, h + F * 0.8); outer.lineTo(-w / 2 - F, h + F * 0.8); outer.lineTo(-w / 2 - F, 0);
     outer.holes.push(archShape(w, h, new THREE.Path()));
     const frameCol = new THREE.Color('#bcb09a').offsetHSL(0, 0, (rng() - 0.5) * 0.05);
+    gb.layer = LAYERS.stoneDressed;
     gb.geometry(new THREE.ExtrudeGeometry(outer, { depth: P, bevelEnabled: false, curveSegments: 12 }), M, frameCol);
     // a keystone, standing a little proud
     const key = new THREE.BoxGeometry(0.34, 0.42, 0.08).translate(0, h + 0.05, P + 0.03);
@@ -300,6 +306,7 @@ export class BuildingRenderer {
     // the back of the opening
     const r = w / 2, ys = h - r;
     const at = (x, z) => new THREE.Vector3(x, 0, z);
+    gb.layer = -1;
     gb.geometry(new THREE.ShapeGeometry(archShape(w, h), 12).translate(0, 0, 0.01), M, DARK);
     if (rng() < S.openChance) {
       // open: the store inside, interior-mapped behind the arch (lit some nights)
@@ -310,6 +317,7 @@ export class BuildingRenderer {
     }
     // closed: weathered timber double doors, plank by plank
     const base = new THREE.Color(rng.pick(DOOR_WEATHERED));
+    gb.layer = LAYERS.planks;
     const N = 2 * Math.max(3, Math.round(w / 0.5));      // even, so the leaves meet in the middle
     const pw = w / N, topAt = (x) => ys + Math.sqrt(Math.max(r * r - x * x, 0));
     for (let i = 0; i < N; i++) {
@@ -320,6 +328,7 @@ export class BuildingRenderer {
       gb.face(pts, c, new THREE.Vector3(n[0], 0, n[1]).toArray());
     }
     // iron straps across each leaf, and a ring handle
+    gb.layer = -1;
     for (const y of [0.35, Math.min(ys, h * 0.72)]) for (const s of [-1, 1]) {
       const strap = new THREE.BoxGeometry(r - 0.12, 0.07, 0.02).translate(s * (r / 2 + 0.02), y, 0.05);
       gb.geometry(strap, M, IRON);
@@ -348,7 +357,9 @@ export class BuildingRenderer {
     const ey = new THREE.Vector3(0, 1, 0);
     const M = new THREE.Matrix4().makeBasis(ex, ey, ez).setPosition(b.x, 0, b.z);
     const geo = new THREE.ExtrudeGeometry(sh, { depth: len + 0.06, bevelEnabled: false, curveSegments: 10 }).translate(0, 0, -len / 2 - 0.03);
+    gb.layer = LAYERS.stoneBase;
     gb.geometry(geo, M, stone.clone().multiplyScalar(1.12));
+    gb.layer = LAYERS.stoneDressed;
     // dressed-stone arch rings at both ends
     const ring = new THREE.Shape();
     ring.absarc(mid, a.y - R, R + 0.22, a1 - 0.05, Math.PI - a1 + 0.05, false);
@@ -485,7 +496,9 @@ export class BuildingRenderer {
     const side = (i) => { const n = edgeNormal(P, i); return [n[0], 0, n[1]]; };
     if (b.roof === 'flat') {
       // a roof terrace: low parapet in a lighter shade, tiled floor inside
+      gb.layer = LAYERS.plaster;
       gb.prism(offsetPoly(b.corners, 0.05), top, top + 0.55, b.facade.clone().offsetHSL(0, -0.05, 0.06));
+      gb.layer = this._roofLayer(b);
       gb.prism(offsetPoly(b.corners, -0.25), top + 0.05, top + 0.57, b.roofCol);
       return;
     }
@@ -498,6 +511,7 @@ export class BuildingRenderer {
     if (b.roof === 'hip') { const C = centroid(P); R0 = lerp2(R0, C, 0.35); R1 = lerp2(R1, C, 0.35); }
     const p = P.map((q) => lift(q, top)), r0 = lift(R0, yr), r1 = lift(R1, yr);
     const col = b.roofCol, hip = b.roof === 'hip';
+    gb.layer = this._roofLayer(b);
     if (along) {
       gb.face([p[0], p[1], r1, r0], col, up);
       gb.face([p[2], p[3], r0, r1], col, up);
@@ -585,6 +599,13 @@ export class BuildingRenderer {
         diffuseColor.rgb = mix(inside, uSky * (0.15 + 0.35 * uDay), (0.08 + 0.45 * fres) * (1.0 - lit * 0.8));`);
     };
     return m;
+  }
+
+  /** Slate or terracotta, by the house's roof colour (two variants of each). */
+  _roofLayer(b) {
+    const c = b.roofCol, terra = c.r > c.b + 0.1;
+    const alt = (b.seed >> 4) & 1;
+    return terra ? (alt ? LAYERS.terraA : LAYERS.terraB) : (alt ? LAYERS.slateA : LAYERS.slateB);
   }
 
   /** Walls of a footprint: chamfered (and shaded round) in the softer styles. */
@@ -697,6 +718,7 @@ export class BuildingRenderer {
     if (b.arch) {
       // Archway / covered passage: the house sits on two piers over the lane.
       const a = b.arch, hw = b.w / 2, hd = b.d / 2;
+      gb.layer = LAYERS.plaster;
       gb.prism(q, a.y, b.top, b.facade, false, true);
       const piers = a.axis === 'f'
         ? [this._rectPart(b, -hw, a.lo, -hd, hd), this._rectPart(b, a.hi, hw, -hd, hd)]
@@ -704,20 +726,25 @@ export class BuildingRenderer {
       for (const pier of piers) if (dist(pier[0], pier[1]) > 0.2 && dist(pier[1], pier[2]) > 0.2) gb.prism(pier, base, a.y + 0.05, b.facade, false);
       this._passageVault(gb, b, stone);
     } else {
+      gb.layer = LAYERS.plaster;
       this._walls(gb, q, base, b.top, b.facade);
       const hb = this._harbourBase(b, rng);
       if (hb) {
         // rough stone base, battered at the foot, with a pale string course on top
+        gb.layer = LAYERS.stoneBase;
         gb.prism(offsetPoly(q, 0.14), base, hb.top, hb.col);
         gb.prism(offsetPoly(q, 0.26), base, b.gMin + 0.9, hb.col.clone().multiplyScalar(0.9));
+        gb.layer = LAYERS.stoneDressed;
         gb.prism(offsetPoly(q, 0.18), hb.top - 0.04, hb.top + 0.16, cream);
         if (hb.vault) this._boatStore(gb, put, b, hb.vault, rng);
       } else {
+        gb.layer = LAYERS.stoneBase;
         this._walls(gb, offsetPoly(q, 0.06), base, b.gMin + 0.45, stone, true);
       }
     }
     const corniceCol = rng() < 0.6 ? cream : b.facade.clone().offsetHSL(0, -0.1, 0.12);
     const cor = this.style.cornice;
+    gb.layer = LAYERS.plaster;
     this._walls(gb, offsetPoly(q, 0.11 + (cor - 0.32) * 0.4), b.top - cor, b.top, corniceCol, true);
 
     // --- roof ---
@@ -797,7 +824,7 @@ export class BuildingRenderer {
       }
       parts[k] = { n, m: M, c: C };
     }
-    const g = gb.arrays((x, z, nx, nz) => this._enclosure(b, x, z, nx, nz), t);
+    const g = gb.arrays((x, z, nx, nz) => this._enclosure(b, x, z, nx, nz), t, (b.seed % 997) / 997);
     return { ver: b.ver, pos: g.pos, nor: g.nor, col: g.col, ao: g.ao, parts };
   }
 

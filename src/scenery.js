@@ -19,10 +19,10 @@ export class Scenery {
     this.group = new THREE.Group();
     this.walls = this._contourWalls();
     this.trees = this._placeTrees();
-    const mat = (c, kind = 'ground') => registerStyled(new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, flatShading: true }), kind);
+    const mat = (c, kind = 'ground', surface = null) => registerStyled(new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, flatShading: true }), kind, surface);
     this.crownGeos = { faceted: new THREE.IcosahedronGeometry(1, 0), round: new THREE.IcosahedronGeometry(1, 2) };
     this.meshes = {
-      wall: this._mesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), mat('#ffffff'), this.walls.length, false),
+      wall: this._mesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), mat('#ffffff', 'ground', { mode: 'face', layer: 'stoneDry' }), this.walls.length, false),
       vine: this._mesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), mat('#ffffff'), this.walls.length, false),
       trunk: this._mesh(new THREE.CylinderGeometry(0.18, 0.28, 1, 5).translate(0, 0.5, 0), mat('#6b5040'), this.trees.length, true),
       crown: this._mesh(this.crownGeos.faceted, mat('#ffffff', 'foliage'), this.trees.length, true),

@@ -47,7 +47,10 @@ export class PathNetwork {
     const slab = new THREE.BoxGeometry(1, 1, 1);
     slab.translate(0, -0.5, 0); // origin at the top face, so y = walking surface
     this.slabGeo = slab;
-    this.slabMat = registerStyled(new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true }), 'surface');
+    // lanes and stairs: cobbles; quay, piazza, slipway and jetty: small setts
+    this.slabMat = registerStyled(new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true }), 'surface', { mode: 'face', layer: 'cobble' });
+    this.harbourMat = registerStyled(new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true }), 'surface', { mode: 'face', layer: 'setts' });
+    this.meshes = [];
     this.mesh = null;
     this.previewMat = new THREE.MeshStandardMaterial({ color: '#f39a4a', transparent: true, opacity: 0.85, emissive: '#7a3a10', emissiveIntensity: 0.25 });
     this.preview = null;
@@ -290,15 +293,24 @@ export class PathNetwork {
       const g = t.heightAt(lay.slipX, z);
       slabs.push({ x: lay.slipX, z, y: g + 0.12, rot: 0, len: 0.95, width: lay.slipW, depth: 1.2 });
     }
+    const harbourCount = slabs.length;
     for (const p of this.paths) this._slabsFor(p.points, P.width, slabs);
+    const laneCount = slabs.length;
     // the jetty
     for (const j of this.jetty) {
       if (t.heightAt(j.x, j.z) > 1) continue;
       slabs.push({ x: j.x, z: j.z, y: 1.1, rot: 0.25, len: 1.05, width: 2.6, depth: 1.1 - t.heightAt(j.x, j.z) });
     }
 
-    if (this.mesh) { this.group.remove(this.mesh); this.mesh.dispose(); }
-    const mesh = new THREE.InstancedMesh(this.slabGeo, this.slabMat, Math.max(slabs.length, 1));
+    for (const m of this.meshes) { this.group.remove(m); m.dispose(); }
+    // the jetty joins the harbour paving
+    const harbour = slabs.slice(0, harbourCount).concat(slabs.slice(laneCount));
+    this.meshes = [this._slabMesh(harbour, this.harbourMat), this._slabMesh(slabs.slice(harbourCount, laneCount), this.slabMat)];
+    this.slabs = slabs;
+  }
+
+  _slabMesh(slabs, material) {
+    const mesh = new THREE.InstancedMesh(this.slabGeo, material, Math.max(slabs.length, 1));
     mesh.count = slabs.length;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), v = new THREE.Vector3();
     const up = new THREE.Vector3(0, 1, 0), c = new THREE.Color();
@@ -313,9 +325,8 @@ export class PathNetwork {
     });
     mesh.castShadow = false;
     mesh.receiveShadow = true;
-    this.mesh = mesh;
     this.group.add(mesh);
-    this.slabs = slabs;
+    return mesh;
   }
 
   /** Orange preview of a path being drawn. */

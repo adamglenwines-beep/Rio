@@ -17,10 +17,12 @@
 // by each module's setStyle(). Switching style recompiles shaders once.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
+import { injectSurface, matUniforms } from './materials.js';
 
 export const STYLES = {
   clean: {
     label: 'Clean low-poly', flat: true, paint: 0, grad: 0,
+    tex: { detail: 0.45, normal: 0.55, mipBias: 0.6 },   // textures: subtle, crisp facets stay readable
     // lights & grade
     hemi: 1.0, sun: 1.0, sat: 1.04, contrast: 1.04, shadowTint: [1, 1, 1],
     // geometry
@@ -30,13 +32,15 @@ export const STYLES = {
   },
   soft: {
     label: 'Soft stylised', flat: false, paint: 0, grad: 1,
+    tex: { detail: 0.4, normal: 0.4, mipBias: 1.6 },     // textures: softened (blurred) and gentle
     hemi: 1.15, sun: 0.92, sat: 1.06, contrast: 0.97, shadowTint: [1.05, 1.0, 1.12],
     chamfer: 0.32, smoothCorners: true, roundFoliage: true, smoothTerrain: true,
     detailScale: 1.06, cornice: 0.42, overhang: 0.32,
     sky: { clouds: 0, soft: 1 },
   },
   painted: {
-    label: 'Hand-painted', flat: false, paint: 1, grad: 0.5,
+    label: 'Hand-painted', flat: false, paint: 0.4, grad: 0.4,
+    tex: { detail: 1.0, normal: 1.0, mipBias: 0 },       // textures: full detail (closest to the art target)
     hemi: 1.1, sun: 0.95, sat: 1.12, contrast: 1.0, shadowTint: [1.08, 0.98, 1.2],
     chamfer: 0.12, smoothCorners: false, roundFoliage: true, smoothTerrain: true,
     detailScale: 1.14, cornice: 0.5, overhang: 0.36,
@@ -65,9 +69,10 @@ const NOISE = /* glsl */`
 /**
  * Register a material for style switching. `kind` tunes the brushwork:
  * 'surface' (houses, paths: plaster/stone by orientation), 'ground',
- * 'foliage', 'water'.
+ * 'foliage', 'water'. `surface` (optional) gives it textures from the shared
+ * material system: { mode: 'face' | 'terrain', layer: key | 'attr', weather }.
  */
-export function registerStyled(material, kind = 'surface') {
+export function registerStyled(material, kind = 'surface', surface = null) {
   const prev = material.onBeforeCompile;
   const prevKey = prev ? prev.toString() : '';
   material.onBeforeCompile = (sh, r) => {
@@ -114,14 +119,19 @@ export function registerStyled(material, kind = 'surface') {
       }`).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
       // coloured shadows / shade (soft and painted styles)
       reflectedLight.indirectDiffuse *= uShadowTint;`);
+    // textures (materials.js): inserted after the style patch so they run first
+    if (surface) injectSurface(sh, surface);
   };
-  material.customProgramCacheKey = () => prevKey + '|styled:' + kind;
+  material.customProgramCacheKey = () => prevKey + '|styled:' + kind + (surface ? '|surf:' + JSON.stringify(surface) : '');
   registry.push({ material, kind });
   return material;
 }
 
 /** Switch every registered material to a style (flat vs smooth needs a recompile). */
 export function applyStyleToMaterials(style) {
+  matUniforms.uDetail.value = style.tex.detail;
+  matUniforms.uNormalK.value = style.tex.normal;
+  matUniforms.uMipBias.value = style.tex.mipBias;
   styleUniforms.uPaint.value = style.paint;
   styleUniforms.uGrad.value = style.grad;
   styleUniforms.uShadowTint.value.setRGB(...style.shadowTint);
