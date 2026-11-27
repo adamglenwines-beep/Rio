@@ -22,7 +22,7 @@ import { sub, norm, dist, lerp2, centroid, edgeNormal, offsetPoly, chamferPoly, 
 import { STYLES, registerStyled } from './style.js';
 import { LAYERS } from './materials.js';
 import { PALETTE, FACADES } from './data.js';
-import { frameGeometry, leafGeometry, surroundGeometry, paintedOpeningMaterial, doorGeometries, balconyGeometries, chairGeometry, WINDOW_TYPES, GLASS_Z } from './facade.js';
+import { frameGeometry, leafGeometry, surroundGeometry, paintedOpeningMaterial, doorGeometries, balconyGeometries, chairGeometry, shopfrontGeometry, signGeometry, archGeometries, awningGeometry, awningMaterial, WINDOW_TYPES, GLASS_Z } from './facade.js';
 
 const FH = CONFIG.building.floorHeight;
 const WHITE = new THREE.Color(1, 1, 1);
@@ -361,13 +361,26 @@ export class BuildingRenderer {
       this.parts['balRail_' + v.name] = { geo: g.rail, mat: lambert(), shadow: true, far: 320 };
     }
     this.parts.chair = { geo: chairGeometry(), mat: lambert(), shadow: false, far: 120 };
-    const D = FACADES.groundFloors.door, dg = doorGeometries(D.w, D.h, D.recess);
+    // ground floors (data/facades.json groundFloors): workshop doors, arched entries, shopfronts, awnings
+    const GF = FACADES.groundFloors;
+    const wd = doorGeometries(GF.workshopDoor.w, GF.workshopDoor.h, GF.workshopDoor.recess);
+    this.parts.wsJambs = { geo: wd.surround, mat: lambert({ vertexColors: true }), shadow: true };
+    this.parts.wsLeaf = { geo: wd.leaf, mat: lambert({ vertexColors: true }), shadow: true };
+    const ad = doorGeometries(GF.archedEntry.w, GF.archedEntry.h, GF.archedEntry.recess, true), ag = archGeometries(GF.archedEntry.w, GF.archedEntry.h, GF.archedEntry.recess);
+    this.parts.archJambs = { geo: ad.surround, mat: lambert({ vertexColors: true }), shadow: true };
+    this.parts.archLeaf = { geo: ad.leaf, mat: lambert({ vertexColors: true }), shadow: true };
+    this.parts.archSpandrel = { geo: ag.spandrel, mat: lambert(), shadow: true };
+    this.parts.archRing = { geo: ag.voussoirs, mat: lambert(), shadow: false };
+    this.parts.shopFront = { geo: shopfrontGeometry(GF.shopfront.w, GF.shopfront.h, GF.shopfront.recess), mat: lambert({ vertexColors: true }), shadow: true };
+    this.parts.shopSign = { geo: signGeometry(GF.shopfront.w + 0.2), mat: lambert({ vertexColors: true }), shadow: false };
+    this.parts.awningCloth = { geo: awningGeometry(GF.awning.depth, GF.awning.drop), mat: awningMaterial(GF.awning.stripe), shadow: true };
+    const D = GF.door, dg = doorGeometries(D.w, D.h, D.recess);
     this.parts.doorJambs = { geo: dg.surround, mat: lambert({ vertexColors: true }), shadow: true };
     this.parts.doorLeaf = { geo: dg.leaf, mat: lambert({ vertexColors: true }), shadow: true };
     for (const st of ['closed', 'open', 'half', 'none']) this.parts['paint_' + st] = { geo: paintGeo, mat: paintedOpeningMaterial(st), shadow: false, lod: 'far' };
     for (const p of Object.values(this.parts)) { p.mesh = null; p.cap = 0; }
     registerStyled(this.massMat, 'surface', { mode: 'face', layer: 'attr', weather: true, trueMean: true });
-    const surf = { leafL: 'woodPaint', leafR: 'woodPaint', door: 'woodPaint', chimney: 'plaster', doorFrame: 'stoneDressed', doorLeaf: 'planks', doorJambs: 'stoneDressed',
+    const surf = { leafL: 'woodPaint', leafR: 'woodPaint', door: 'woodPaint', chimney: 'plaster', doorFrame: 'stoneDressed', doorLeaf: 'planks', doorJambs: 'stoneDressed', wsLeaf: 'planks', wsJambs: 'stoneDressed', archLeaf: 'planks', archJambs: 'stoneDressed', archRing: 'stoneDressed', archSpandrel: 'plaster',
       sur_standard: 'plaster', sur_french: 'plaster', sur_small: 'plaster' };
     // detail by distance: a part with `far` shrinks away beyond that many metres (× the quality's reach)
     this.detailReach = { value: 1 };
@@ -1005,6 +1018,57 @@ export class BuildingRenderer {
     }
   }
 
+  /**
+   * Stone bases, dados and string courses as bands standing `out` proud of the walls, with
+   * the ground-floor openings cut through them (v0.13). A 'level' band runs between two
+   * heights (a harbour base, a rough stone ground floor, a string course): it is tiled
+   * round each opening, with stone reveals back to `revealTo` (the next layer in). A 'follow'
+   * band follows the lane (a dado, a low stone base, `h` high above the ground at each end):
+   * an opening through it splits it, with stone jambs.
+   */
+  _bands(gb, q, bands, holes) {
+    for (const B of bands) {
+      gb.layer = B.layer;
+      const oq = offsetPoly(q, B.out);
+      for (let i = 0; i < 4; i++) {
+        const A = q[i], n = edgeNormal(q, i), e = norm(sub(q[(i + 1) % 4], A));
+        const a = oq[i], c = oq[(i + 1) % 4], s = (a[0] - A[0]) * e[0] + (a[1] - A[1]) * e[1], Lb = dist(a, c), N = [n[0], 0, n[1]];
+        const hs = holes[i].map((h) => ({ ...h, u0: h.u0 - s, u1: h.u1 - s, depth: B.out - (B.revealTo || 0), col: B.col.clone().multiplyScalar(0.9) }));
+        if (B.kind === 'level') {
+          const P = (p, y) => [p[0], y, p[1]];
+          gb.wallHoles(P(a, B.y0), P(c, B.y0), P(a, B.y1), P(c, B.y1), Lb, B.y0, B.y1, hs, B.col, N);
+          continue;
+        }
+        // follows the ground: split at every opening that reaches its foot
+        const { gA, gB } = B.walls[i], lo = Math.min(gA, gB) - 0.7;
+        const top = (u) => gA + (gB - gA) * clamp(u / Lb, 0, 1) + B.h;
+        const at = (u, y) => [a[0] + e[0] * u, y, a[1] + e[1] * u];
+        const back = (p) => [p[0] - n[0] * B.out, p[1], p[2] - n[1] * B.out];
+        const cuts = hs.filter((h) => h.y0 < top((h.u0 + h.u1) / 2) && h.u1 > 0 && h.u0 < Lb).sort((x, y) => x.u0 - y.u0);
+        let u = 0;
+        const seg = (u0, u1) => {
+          if (u1 - u0 < 0.02) return;
+          const f = [at(u0, lo), at(u1, lo), at(u1, top(u1)), at(u0, top(u0))];
+          gb.face(f, B.col, N);
+          gb.face([f[3], f[2], back(f[2]), back(f[3])], B.col.clone().multiplyScalar(1.04), [0, 1, 0]);   // its top ledge
+        };
+        for (const h of cuts) {
+          seg(u, Math.max(u, h.u0));
+          // stone jambs from the band's face back to the wall, either side of the opening
+          const y0 = Math.max(lo, Math.min(h.y0, top(h.u0))), yl = top(h.u0), yr = top(h.u1);
+          gb.face([at(h.u0, y0), back(at(h.u0, y0)), back(at(h.u0, yl)), at(h.u0, yl)], h.col, [e[0], 0, e[1]]);
+          gb.face([at(h.u1, y0), at(h.u1, yr), back(at(h.u1, yr)), back(at(h.u1, y0))], h.col, [-e[0], 0, -e[1]]);
+          u = Math.max(u, h.u1);
+        }
+        seg(u, Lb);
+      }
+      if (B.kind === 'level') {
+        gb.face(oq.map((p) => [p[0], B.y1, p[1]]), B.col.clone().multiplyScalar(1.03), [0, 1, 0]);
+        if (B.bottom) gb.face(oq.map((p) => [p[0], B.y0, p[1]]), B.col.clone().multiplyScalar(0.8), [0, -1, 0]);
+      }
+    }
+  }
+
   /** Walls of a footprint: chamfered (and shaded round) in the softer styles. */
   _walls(gb, poly, y0, y1, col, top = false) {
     const S = this.style;
@@ -1245,7 +1309,7 @@ export class BuildingRenderer {
 
     // --- walls, stone ground floor, string courses, cornice ---
     let stoneTop = 0;                                     // top of the rough stone, where there is some
-    let dado = null;                                      // a render dado: built with the walls (doors cut through it)
+    const bands = [];                                     // stone bases, dados, string courses: built after the openings (cut through them)
     // the wall's outer skin: bands (from the foot up to `top`) that stand `out` metres proud of
     // the footprint (stone bases, dados, plinths); wall-mounted parts are placed on the skin
     const skins = [];
@@ -1265,25 +1329,25 @@ export class BuildingRenderer {
       const hb = this._harbourBase(b, rng);
       if (hb) {
         // rough stone base, battered at the foot, with a pale string course on top
-        gb.layer = LAYERS.rubble ?? LAYERS.stoneBase;
-        gb.prism(offsetPoly(q, 0.14), base, hb.top, hb.col);
-        gb.prism(offsetPoly(q, 0.26), base, b.gMin + 0.9, hb.col.clone().multiplyScalar(0.9));
-        gb.layer = LAYERS.stoneDressed;
-        gb.prism(offsetPoly(q, 0.18), hb.top - 0.04, hb.top + 0.16, cream);
+        const rub = LAYERS.rubble ?? LAYERS.stoneBase;
+        bands.push({ kind: 'level', out: 0.14, y0: base, y1: hb.top, col: hb.col, layer: rub },
+          { kind: 'level', out: 0.26, y0: base, y1: b.gMin + 0.9, col: hb.col.clone().multiplyScalar(0.9), layer: rub, revealTo: 0.14 },
+          { kind: 'level', out: 0.18, y0: hb.top - 0.04, y1: hb.top + 0.16, col: cream, layer: LAYERS.stoneDressed, revealTo: 0.14, bottom: true });
         skins.push({ top: b.gMin + 0.9, out: 0.26 }, { top: hb.top - 0.04, out: 0.14 }, { top: hb.top + 0.16, out: 0.18 });
         if (hb.vault) this._boatStore(gb, put, b, hb.vault, rng);
         stoneTop = hb.top;
       } else if (F.ground === 'stone') {
         // a rough stone ground floor (the cellar), plaster above
         stoneTop = Math.min(b.gMin + K.stoneStorey[0] + rng() * (K.stoneStorey[1] - K.stoneStorey[0]), b.top - FH);
-        gb.layer = LAYERS.rubble ?? LAYERS.stoneBase;
-        gb.prism(offsetPoly(q, 0.05), base, stoneTop, new THREE.Color(rng.pick(K.stoneColours)));
-        gb.prism(offsetPoly(q, 0.11), base, b.gMin + 0.5, new THREE.Color(rng.pick(K.stoneColours)).multiplyScalar(0.9));
+        const rub = LAYERS.rubble ?? LAYERS.stoneBase;
+        bands.push({ kind: 'level', out: 0.05, y0: base, y1: stoneTop, col: new THREE.Color(rng.pick(K.stoneColours)), layer: rub },
+          { kind: 'level', out: 0.11, y0: base, y1: b.gMin + 0.5, col: new THREE.Color(rng.pick(K.stoneColours)).multiplyScalar(0.9), layer: rub, revealTo: 0.05 });
         skins.push({ top: b.gMin + 0.5, out: 0.11 }, { top: stoneTop, out: 0.05 });
       } else if (F.ground === 'dado') {
         // a rough render dado whose top line follows the lane up the slope
         const h = K.dado[0] + rng() * (K.dado[1] - K.dado[0]), col = new THREE.Color(rng.pick(K.dadoColours));
-        dado = { h, col, walls: [] };
+        const dado = { kind: 'follow', h, col, walls: [], layer: LAYERS.plasterWorn, out: 0.035 };
+        bands.push(dado);
         for (let i = 0; i < 4; i++) {
           const A = q[i], Bc = q[(i + 1) % 4], n = edgeNormal(q, i);
           const gA = t.heightAt(A[0] + n[0] * 0.3, A[1] + n[1] * 0.3), gB = t.heightAt(Bc[0] + n[0] * 0.3, Bc[1] + n[1] * 0.3);
@@ -1291,9 +1355,16 @@ export class BuildingRenderer {
           skins.push({ top: Math.max(gA, gB) + h + 0.03, out: 0.035, dado: true });
         }
       } else {
-        gb.layer = LAYERS.stoneBase;
-        this._walls(gb, offsetPoly(q, 0.06), base, b.gMin + 0.45, stone, true);
-        skins.push({ top: b.gMin + 0.45, out: 0.06, plinth: true });
+        // a dressed-stone base along the foot of the walls, following the lane (doors are cut through it)
+        const SB = FACADES.groundFloors.stoneBase, h = SB.height[0] + rng() * (SB.height[1] - SB.height[0]);
+        const dado = { kind: 'follow', h, col: new THREE.Color(rng.pick(K.stoneColours)).multiplyScalar(1.05), walls: [], layer: LAYERS.stoneBase, out: SB.out };
+        bands.push(dado);
+        for (let i = 0; i < 4; i++) {
+          const A = q[i], Bc = q[(i + 1) % 4], n = edgeNormal(q, i);
+          const gA = t.heightAt(A[0] + n[0] * 0.3, A[1] + n[1] * 0.3), gB = t.heightAt(Bc[0] + n[0] * 0.3, Bc[1] + n[1] * 0.3);
+          dado.walls.push({ gA, gB });
+          skins.push({ top: Math.max(gA, gB) + h + 0.03, out: SB.out, dado: true });
+        }
       }
     }
     b.stoneTop = stoneTop;
@@ -1352,6 +1423,8 @@ export class BuildingRenderer {
       const sgn = Math.sign(n[1] * e[0] - n[0] * e[1]) || 1;   // does the parts' local +x run along e (1) or against it (-1)?
       const W = { A, e, n, L, nx: n[0], nz: n[1], ex: e[0], ez: e[1], rot: srot, sgn, wall: i };
       const cols = Math.max(1, Math.round(L / (front ? WIN.columns.front : WIN.columns.side)));
+      const [hcx, hcz] = centroid(q), hbr = this.terrain.harbour;
+      const harbourHouse = Math.hypot(hcx - hbr.x, hcz - hbr.z) < FACADES.groundFloors.harbourRadius;
       const wStd = WIN.types.standard.w, margin = WIN.edgeMargin + wStd / 2;
       // uneven rhythm: each column a little off the regular grid; now and then two windows paired close together
       const slack = Math.max(0, L / cols - wStd - 0.6) * 0.5 * F.irregular;
@@ -1362,40 +1435,73 @@ export class BuildingRenderer {
         us[ci] = clamp(mid - half, Math.min(margin, L / 2), L / 2); us[ci + 1] = clamp(mid + half, L / 2, Math.max(L - margin, L / 2));
       }
 
-      // the door: the front door on the lane, and a back or side door wherever another lane runs past
+      // the ground floor on the lane (data/facades.json groundFloors): a shopfront, a workshop door, an
+      // arched entry or a house door, by the harbour and piazza more often a shop; and a back or side
+      // door wherever another lane runs past
       let doorCol = -1, door = null;
       const midCol = Math.floor((cols - 1) / 2);
-      const wantsDoor = front ? (b.kind !== ZONE.COM && b.vaultEdge !== i) : (!b.arch && this._laneBeside(q, i));
+      const GF = FACADES.groundFloors;
+      // (by the harbour, also onto open ground: the quay, the piazza and the café)
+      const wantsDoor = b.vaultEdge !== i && (front || (!b.arch && (this._laneBeside(q, i) || harbourHouse)));
       if (wantsDoor) {
-        const D = FACADES.groundFloors.door, u = us[midCol], dx = A[0] + e[0] * u, dz = A[1] + e[1] * u;
+        const where = harbourHouse ? 'harbour' : 'town';
+        let kind = 'door', awn = 0;
+        if (front || harbourHouse) {                       // by the harbour, every wall onto a lane, the quay or the piazza
+          const v = b.kind === ZONE.COM && front ? GF.variants.find((x) => x.name === 'shop')
+            : rng.weighted(GF.variants.filter((x) => x.where === where).map((x) => [x, x.weight]));
+          kind = v.name; awn = v.awning;
+        }
+        const D = kind === 'shop' ? GF.shopfront : kind === 'workshop' ? GF.workshopDoor : kind === 'arched' ? GF.archedEntry : GF.door;
+        const u = clamp(us[midCol], D.w / 2 + 0.45, L - D.w / 2 - 0.45), dx = A[0] + e[0] * u, dz = A[1] + e[1] * u;
         const g = t.heightAt(dx + n[0] * 0.5, dz + n[1] * 0.5);
-        const clear = !covered(A, e, n, u - 0.85, u + 0.85, g - 0.2, g + 2.7, 1.0) && g + 2.7 < b.top && !(b.arch && g < b.arch.y - 0.2 && front === false);
+        let y0 = g + (kind === 'shop' ? 0.05 : 0.15);
+        const clear = L > D.w + 0.9 && !covered(A, e, n, u - D.w / 2 - 0.3, u + D.w / 2 + 0.3, g - 0.2, g + D.h + 0.5, front ? 1.0 : FACADES.windows.clearInFront) && y0 + D.h + 0.6 < b.top
+          && t.heightAt(dx + n[0] * 1.6, dz + n[1] * 1.6) < g + 0.5 && Math.abs(t.heightAt(A[0] + n[0] * 0.5, A[1] + n[1] * 0.5) - t.heightAt(Bc[0] + n[0] * 0.5, Bc[1] + n[1] * 0.5)) < (front ? 9 : 1.5)
+          && !(b.arch && g < b.arch.y - 0.2 && front === false);
         if (clear) {
           doorCol = midCol;
-          let y0 = g + 0.15;
-          for (const k of skins) if (k.plinth && y0 < k.top) y0 = k.top;      // over a stone plinth: a raised threshold
-          const recessed = plain(y0 + 0.05) && y0 + D.h < b.top - FH * 0.2 && u - D.w / 2 > 0.3 && u + D.w / 2 < L - 0.3;
+          const recessed = true;                         // (stone bases and dados are cut through too: see _bands)
           const sk = recessed ? lean(y0) : skin(g), px = dx + n[0] * sk, pz = dz + n[1] * sk;
-          b.openings.push({ kind: 'door', wall: i, u0: u - 0.75, u1: u + 0.75, y0: y0 - 0.2, y1: y0 + D.h + 0.3 });
+          b.openings.push({ kind: kind === 'door' ? 'door' : kind, wall: i, u0: u - D.w / 2 - 0.2, u1: u + D.w / 2 + 0.2, y0: y0 - 0.2, y1: y0 + D.h + 0.3 });
           const leafCol = front ? F.doorCol : this._c.copy(F.doorCol).multiplyScalar(0.85);
-          if (recessed) {
-            holes[i].push({ u0: u - D.w / 2, u1: u + D.w / 2, y0, y1: y0 + D.h, depth: D.recess, col: F.doorStone.clone().multiplyScalar(0.95) });
-            put('doorJambs', px, y0, pz, srot, 1, 1, 1, F.doorStone);
-            put('doorLeaf', px, y0, pz, srot, 1, 1, 1, leafCol);
-          } else {
+          if (!recessed) {
+            // on a rough stone ground floor: the old flat door in its stone frame
             put('doorFrame', px, g + 0.2, pz, srot, 1, 1, 1, F.doorStone);
             put('door', px, g + 0.2, pz, srot, 1, 1, 1, leafCol);
+          } else {
+            holes[i].push({ u0: u - D.w / 2, u1: u + D.w / 2, y0, y1: y0 + D.h, depth: D.recess, col: (kind === 'shop' ? b.facade : F.doorStone).clone().multiplyScalar(0.95) });
+            if (kind === 'shop') {
+              put('shopFront', px, y0, pz, srot, 1, 1, 1, WHITE);
+              put('shopSign', px, y0 + D.h + 0.1, pz, srot, 1, 1, 1, this._c.set(rng.pick(['#2f5a44', '#6b3b2a', '#2a4a6b', '#7a2e2a', '#3a3a3a'])));
+            } else if (kind === 'workshop') {
+              put('wsJambs', px, y0, pz, srot, 1, 1, 1, F.doorStone);
+              put('wsLeaf', px, y0, pz, srot, 1, 1, 1, this._c.set(rng.pick(['#7d6b55', '#6e5f4e', '#8a7a64', '#5f6e5f', '#5d6b78'])));
+            } else if (kind === 'arched') {
+              put('archJambs', px, y0, pz, srot, 1, 1, 1, F.doorStone);
+              put('archLeaf', px, y0, pz, srot, 1, 1, 1, leafCol);
+              put('archSpandrel', px, y0, pz, srot, 1, 1, 1, b.facade);
+              put('archRing', px, y0, pz, srot, 1, 1, 1, F.doorStone);
+            } else {
+              put('doorJambs', px, y0, pz, srot, 1, 1, 1, F.doorStone);
+              put('doorLeaf', px, y0, pz, srot, 1, 1, 1, leafCol);
+            }
+            // an awning over a shop or workshop: striped (stripes made in the shader) or plain cream
+            if (awn > 0 && rng() < awn) {
+              const pair = rng() < GF.awning.plain ? ['#ece6d6', '#ece6d6'] : rng.pick(PALETTE.awningStripes);
+              const aw = D.w + 0.5, ay = y0 + D.h + (kind === 'shop' ? 0.62 : 0.35);
+              if (ay + 0.1 < b.top) put('awningCloth', px, ay, pz, srot, aw, 1, 1, this._c.set(pair[1]));
+            }
           }
-          door = { u, w: D.w + 0.34, y0, y1: y0 + D.h + 0.2 };
+          door = { u, w: D.w + 0.34, y0, y1: y0 + D.h + (kind === 'shop' ? 0.7 : 0.25) };
           b.doors = (b.doors || 0) + 1;
-          if (F.pots && front) this._pots(put, dx, dz, g, W, rng, F);
+          b.groundKinds = b.groundKinds || {}; b.groundKinds[kind] = (b.groundKinds[kind] || 0) + 1;
+          if (F.pots && front && kind !== 'shop') this._pots(put, dx, dz, g, W, rng, F);
         }
       }
 
       // balconies: most upper floors of harbour-front houses, some elsewhere; one per floor, or now and then
       // one running across the whole facade
-      const BAL = FACADES.balconies, [hcx, hcz] = centroid(q), hbr = this.terrain.harbour;
-      const harbourHouse = Math.hypot(hcx - hbr.x, hcz - hbr.z) < FACADES.groundFloors.harbourRadius;
+      const BAL = FACADES.balconies;
       const seaward = harbourHouse && n[1] > 0.35;          // the sea lies toward +z: walls looking out over the harbour
       const pBal = seaward ? BAL.chanceHarbourFront : front ? (b.balconies ? BAL.chanceFront : 0) : (b.balconies ? BAL.chanceSide : 0);
       let lowestFloor = true;
@@ -1430,16 +1536,6 @@ export class BuildingRenderer {
           if (covered(A, e, n, u - w / 2 - 0.15, u + w / 2 + 0.15, y0 - 0.2, y1 + 0.3, WIN.clearInFront)) continue;
           if (ci === doorCol && door && y0 < door.y1 && y1 > door.y0) { any = true; continue; }   // the door is here
           const yc = (y0 + y1) / 2;
-          if (front && groundFloor && b.kind === ZONE.COM) {
-            any = true;
-            if (ci === midCol || cols === 1) {
-              const sy0 = Math.max(floorBottom, ground - 0.1), aw = AWN_COLS[(b.seed >> 3) % AWN_COLS.length], sk = skin(sy0);
-              put('shop', wx + n[0] * sk, sy0, wz + n[1] * sk, srot, Math.min(1, L / cols / 2.6), 1, 1, WHITE);
-              put((b.seed >> 6) % 4 === 0 ? 'awningStripe' : 'awning', wx + n[0] * (sk + 0.55), Math.max(floorBottom, ground) + 2.75, wz + n[1] * (sk + 0.55), srot, Math.min(2.6, L / cols), 1, 1, (b.seed >> 5) % 5 < 3 ? AWN_CREAM : aw);
-              b.openings.push({ kind: 'shop', wall: i, u0: u - 1.3, u1: u + 1.3, y0: sy0, y1: sy0 + 2.8 });
-            }
-            continue;
-          }
           if (b.vaultEdge === i && inStone) continue;         // the boat store is this wall's ground floor
           if (inStone) {
             // the cellar: at most a small grated window, no shutters
@@ -1509,24 +1605,7 @@ export class BuildingRenderer {
     const yb = b.arch ? b.arch.y : base;
     if (b.arch) gb.face(q.map((p2) => [p2[0], yb, p2[1]]), b.facade, [0, -1, 0]);
     this._shell(gb, q, qTop, yb, b.top, b.facade, holes);
-    if (dado) {
-      gb.layer = LAYERS.plasterWorn;
-      for (let i = 0; i < 4; i++) {
-        const A = q[i], Bc = q[(i + 1) % 4], n = edgeNormal(q, i), { gA, gB } = dado.walls[i], o = 0.035, h = dado.h;
-        const L = dist(A, Bc), P = (p2, y) => [p2[0] + n[0] * o, y, p2[1] + n[1] * o];
-        const top = (gA + gB) / 2 + h, lo = Math.min(gA, gB) - 0.7;
-        const cut = holes[i].filter((hh) => hh.y0 < top).map((hh) => ({ ...hh, depth: 0, y1: Math.min(hh.y1, top) }));
-        if (cut.length && Math.abs(gA - gB) < 0.6) {
-          // a level dado with a door through it: tiled round the opening (the wall's own reveal shows behind)
-          const cut2 = cut.map((hh) => ({ ...hh, y1: hh.y1 >= top - 0.01 ? top + 0.5 : hh.y1 }));
-          gb.wallHoles(P(A, lo), P(Bc, lo), P(A, top), P(Bc, top), L, lo, top, cut2, dado.col, [n[0], 0, n[1]], 0, L, true);
-          gb.face([[A[0] + n[0] * o, top, A[1] + n[1] * o], [Bc[0] + n[0] * o, top, Bc[1] + n[1] * o], [Bc[0], top + 0.03, Bc[1]], [A[0], top + 0.03, A[1]]], dado.col, [0, 1, 0]);
-        } else {
-          gb.face([P(A, gA - 0.7), P(Bc, gB - 0.7), P(Bc, gB + h), P(A, gA + h)], dado.col, [n[0], 0, n[1]]);
-          gb.face([P(A, gA + h), P(Bc, gB + h), [Bc[0], gB + h + 0.03, Bc[1]], [A[0], gA + h + 0.03, A[1]]], dado.col, [0, 1, 0]);
-        }
-      }
-    }
+    this._bands(gb, q, bands, holes);
 
     // --- pack the detail instances as ready-made matrices ---
     const parts = {};

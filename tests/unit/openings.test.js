@@ -77,9 +77,10 @@ test('openings are recessed; wall-mounted parts stand clear of the wall', () => 
   const frameFront = front(R.parts.frame_standard.geo, (x, y) => Math.abs(x) < T.w / 2 && Math.abs(y) < T.h / 2 - 0.01);
   assert.ok(frameFront <= -0.08, 'frame front ' + frameFront.toFixed(3));
   // every part's faces parallel to the wall are buried (< -1.5 cm) or stand clear (>= the gap). Shutter leaves are
-  // placed at their hinge, which stands gap + thickness out, so they are checked at placement, not here.
+  // placed at their hinge, which stands gap + thickness out, so they are checked at placement, not here. Arch
+  // spandrels fill the top corners of an arched opening in the wall's own plane, where there is no wall.
   for (const [k, p] of Object.entries(R.parts)) {
-    if (['bar', 'pot', 'blob', 'cloth', 'cone', 'chimney', 'awning', 'awningStripe', 'storeRoom', 'flowerbox', 'balcony', 'balconySolid', 'leafL', 'leafR'].includes(k)) continue;
+    if (['bar', 'pot', 'blob', 'cloth', 'cone', 'chimney', 'awning', 'awningStripe', 'storeRoom', 'flowerbox', 'balcony', 'balconySolid', 'leafL', 'leafR', 'archSpandrel'].includes(k)) continue;
     const P = p.geo.attributes.position, N = p.geo.attributes.normal;
     for (let i = 0; i < P.count; i++) {
       if (N.getZ(i) < 0.99) continue;
