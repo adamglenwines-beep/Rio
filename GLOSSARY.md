@@ -64,3 +64,11 @@ Game-development terms used in this project, one plain-English line each.
 | **GTAO** | Ground-truth ambient occlusion, a screen-space AO method. Used on High until v0.12; switched off because it was costly and made thin edges crawl. |
 | **Shimmer / fizz** | Fine detail (texture specks, thin lines) flickering as the camera moves, because it is smaller than a pixel. Fixed with softer texture levels (mip bias) and less extreme detail. |
 | **Calibration** | Tuning settings until a measured result matches a reference, e.g. lights tuned until a test wall shows the art target's sunlit and shaded colours. |
+| **Reveal** | The inside faces of an opening cut into a thick wall (its sides, top and the sill seat). Ours are 18 cm deep, so windows catch shadow. |
+| **Louvre / louvred shutter** | A shutter made of angled slats, so air and light pass but rain and sun don't. |
+| **Spandrel / voussoir** | In an arch: the spandrels fill the corners between the round head and the square around it; voussoirs are the wedge stones of the arch ring. |
+| **Chunk (spatial chunk)** | A square piece of the town drawn as its own batch. Chunks off screen are skipped (frustum culling), and each can switch detail level on its own. |
+| **Frustum culling** | Not drawing things outside the camera's view (the frustum is the pyramid the camera sees). |
+| **Condition (of a house)** | A number from 0 (crumbling plaster, faded paint) to 1 (freshly painted) in each house's plan. Later a household's wealth will move it. |
+| **House plan** | What a house is as the simulation sees it: its condition and a use for each floor (family, shop, workshop). The drawing code only reads it. |
+| **Content as data** | Game content (window kinds, colours, balcony variants…) kept in plain JSON files in data/, not in code, so it is easy to change and to carry to another engine. |

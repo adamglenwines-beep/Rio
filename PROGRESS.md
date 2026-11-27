@@ -4,7 +4,107 @@ So a new session can pick up with "Read PROGRESS.md and continue". Read `CLAUDE.
 `DESIGN.md` first. Decisions made without the user (they asked not to be asked) are
 recorded here with the reason.
 
-## The current run: v0.12 · Light (flicker, shimmer, no trees, light and colour)
+## The current run: v0.13 · Facades (facade detail and colour)
+
+Adam's buildings brief, narrowed by his addendum after reviewing v0.12: building shapes and massing
+are fine (not reworked), roofs low priority; the gap is facade detail and colour. Worked in his
+order, committing and screenshotting after each step. Dev branch: `claude/nice-planck-k467qs`.
+Not touched: trees, terrain, water. Network: polyhaven.com and ambientcg.com reachable.
+
+| Step | State |
+|---|---|
+| 1. Windows and shutters | done |
+| 2. Balconies | done |
+| 3. Ground floors | done |
+| 4. Palette (colour data only) | done |
+| 5. Horizontal trim | done |
+| 6. Plaster variation | done |
+| Performance: chunks, detail by distance | done (numbers below) |
+| Comparisons (target-v2-1, single building, target 05) | done: `Rio-reference/progress/v0.13_*` |
+
+**Content is data** (CLAUDE.md): `data/facades.json` (window kinds and sizes, recess, frame,
+sill, lintel, shutter states and angles, balcony variants, ground-floor variants by place,
+awnings, trim), `data/palette.json` (facade, shutter, door and awning colours),
+`data/houses.json` (condition spread, floor uses). Loaded by `src/data.js` (browser: fetch;
+tests: from disk). New shapes in `src/facade.js`.
+
+### 1. Windows and shutters
+- **Openings are cut through the walls** (`GeoBuilder.wallHoles`, `_shell`): each wall face is
+  tiled round its openings, with four reveal faces 18 cm deep, so the sun casts real shadow into
+  them. The frame (7 cm bars, mullion, transom on tall windows), glass, stone sill and lintel
+  sit in the recess (`frameGeometry`). Stone bases, dados and string courses are cut too
+  (`_bands`).
+- **Windows about twice the area**: 1.15 × 1.85 m standard (was 1.14 × 1.71 including its frame,
+  with the glass only 0.84 × 1.41), French windows 1.15 × 2.35 down to the floor, small top-floor
+  windows 0.85 × 1.15; a window column every 1.85 m on the lane wall (was 2.0) and 2.6 m on
+  others (2.9); a third of facades pair two windows 0.5 m apart. Blank bays 8% (was 18%).
+  The demo town has 2,273 windows (v0.12: about 1,600).
+- **Louvred shutter leaves as geometry** (`leafGeometry`: stiles, rails, 12 tilted slats each,
+  a plain back), hinged on the wall: shut, folded back flat against the wall, half open (one
+  leaf shut, one standing out 30–80°), or none; small random angles and sag. A leaf folds back
+  only where there is room (not over the next window, a door or a neighbour).
+- **No openings on walls with a neighbour or the hillside within 2 m** (`clearInFront`).
+- Bug fixed on the way: windows next to a corner were dropped whenever a neighbour stood beside
+  them (the cover test included both folded leaves); it now tests the opening itself.
+
+### 2. Balconies
+- Most upper floors of harbour-facing houses (80% per floor), 42% elsewhere on lane walls; now and
+  then one balcony across the whole facade (`_balcony`). Four variants: 1.6, 2.6 and 1.9 m wide,
+  0.85–1.15 m deep; slab with a moulded edge on two or three consoles, iron railing (dark,
+  green, white or grey) or a rendered parapet; pots with geraniums, flowers spilling over the
+  rail, a chair now and then, washing over the rail. 92 balconies in the demo town (v0.12: 25).
+
+### 3. Ground floors
+- Each lane-facing ground floor shows its use (from the house's plan): a **shopfront** (recessed
+  glazing, stall riser, glazed door, sign board), a **workshop** (wide plank double doors), an
+  **arched entry** (round-headed, stone voussoirs, fanlight door), or a **house door** (stone
+  jambs, lintel and step, set back 22 cm). Harbour houses also open onto the quay and piazza.
+- **Awnings** over shops and some workshops: striped (stripes made in the shader, 20 cm wide,
+  colours from `palette.json`) or plain cream, with a valance.
+- Plain houses stand on a **dressed-stone base** following the lane (0.55–1.0 m), replacing the
+  thin plinth; the harbour bases and rough stone ground floors are now cut by their openings.
+
+### 4. Palette (data only)
+Towards target 05 and the golden-hour photo: golden yellow, deep ochre, sun-faded ochre, lemon,
+orange, burnt orange, peach, **Genoa red (bold)**, coral, terracotta, salmon, rose, dusty rose,
+cream, limewash, sage. v0.12's lighting and colour-space fixes unchanged. Touching houses still
+never share a colour (unit test).
+
+### 5. Horizontal trim
+A two-step cornice under the eaves on every house (the upper step further out, so it casts a
+shadow line, with a shaded underside), and subtle bands at the floor lines on decorated houses
+and 40% of the others, in a colour close to the wall, always above the highest ground (they never
+cross a door).
+
+### 6. Plaster, and the house's condition
+- **Each house has a plan** (`src/houseplan.js`, pure game state, no Three.js): `condition` 0–1
+  (seeded, mostly 0.4–0.75) and a `use` per floor ('family', 'shop', 'workshop'). The renderer
+  only reads it: condition fades and greys the paint, crumbles plaster only below 0.35, and thins
+  the flowers; the ground floor's use picks its look. Later gameplay can set both.
+- The **grey blotches are gone**: houses in fair repair keep their plaster; where plaster falls
+  away it shows mostly the pale undercoat, grey render only deeper in. Gentle mottling, a slight
+  tone per house, softer damp at the foot, lighter streaks under sills.
+- `damaged_plaster` (Poly Haven, CC0, confirmed) replaces the worn-plaster texture (ASSETS.md).
+
+### Performance
+(numbers below, filled in at the end of the run)
+
+### Decisions (v0.13)
+- **Openings are real holes** in the merged wall mesh rather than a shader trick: they cast real
+  shadow and cost about 20 triangles per window in a mesh that is built once.
+- **Slatted leaves near, painted far**: detail by distance per chunk of the town; a chunk switches
+  as a whole (no per-window popping), at 75 m on High (× 0.8 Medium, × 0.5 Low).
+- **Chunks of 48 m**: 36 m chunks gave finer culling but 420 draw calls; 48 m gives ~260.
+- **A dark plate at the back of every opening** casts the shadow, so sun never shines through a
+  house at either detail level.
+- **Depth pre-pass not tried**: three.js already draws solid objects front to back (cheap early
+  depth rejection), and a pre-pass would draw every vertex twice, which this run increased.
+- **Arched entries are cut as rectangles** with spandrels filling the corners (a curved hole in the
+  merged wall would need a different tiling).
+- **Building shapes untouched**, as asked. The floor height is still 3 m everywhere (taller ground
+  floors would be massing).
+
+## Earlier run: v0.12 · Light (flicker, shimmer, no trees, light and colour)
 
 A small, surgical run in four parts, in this order. Dev branch: `claude/nice-planck-k467qs`.
 Not touched (later runs): building shapes, window design, roofs, materials, terrain, water.

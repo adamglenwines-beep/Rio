@@ -81,12 +81,12 @@ A **Manor Lords-style hybrid**:
 - **Tower houses**: narrow fronts (3.5–6 m), each with its own leaning to be a storey or
   two taller or shorter than its site suggests. A house beside two lanes gets a door on
   each (front door low, back door on the higher lane: the *uservàn*).
-- **Colour** (v0.12, replacing v0.10's cooler palette): lighter, warmer, sun-faded pigments:
-  ochre, golden ochre, lemon, cream, limewash, peach, faded burnt orange and terracotta,
-  salmon, dusty and pale rose, sage, limestone render; soft variation and sun-faded patches
-  within each wall. Calibrated so an ochre wall shows the art target's sunlit and shaded
-  colours (art-target-v2). Houses that touch never share a colour and rarely a colour family.
-  Shutters are a rich, fairly light green on almost every house.
+- **Colour** (v0.13, `data/palette.json`): warm, strong Ligurian pigments, towards art target 05:
+  golden yellow, deep and sun-faded ochre, lemon, orange, burnt orange, peach, a few bold Genoa-red
+  houses, coral, terracotta, salmon, rose, cream, limewash, sage; soft mottling and sun-faded
+  patches within each wall, a slight tone per house. (v0.12 was lighter and too pastel; v0.10 cooler.)
+  Houses that touch never share a colour and rarely a colour family. Shutters are a rich, fairly
+  light green on almost every house.
 - **Walls**: rough stone ground floors (the cellar) or a rough render dado, plaster above,
   walls leaning in a touch. Plaster wears in layers (colour coat, pale undercoat, grey
   render, rubble stone), mostly low down and at corners; about one house in eight is badly
@@ -105,6 +105,29 @@ A **Manor Lords-style hybrid**:
   with parasols on the piazza.
 - **Detail by distance**: small things (pots, bars, washing, flower boxes) are not drawn
   beyond a distance set per item and scaled by the quality setting.
+
+## Facades (v0.13)
+
+- **Facade content is data** (`data/facades.json`): window kinds and sizes, shutter states,
+  balcony variants, ground-floor variants by place, awnings, trim. Shapes in `src/facade.js`.
+- **Openings are cut through the walls** and recessed 18 cm (doors 22 cm, arches 32 cm), with a
+  frame, glass, stone sill and lintel inside, so they catch real shadow. Windows are big (about
+  1.15 × 1.85 m; French windows to the floor behind balconies), paired now and then, with few
+  blank bays. Stone bases, dados and string courses are cut by the openings too.
+- **Louvred shutters** built from slats, hinged on the wall: shut, folded back flat (only where
+  there is room), or half open, each a little irregular.
+- **Balconies** on most upper floors of harbour-facing houses: slab on consoles, iron railings or
+  a rendered parapet, pots and geraniums, now and then a chair or washing.
+- **Ground floors** show their use: shopfronts with signs and striped awnings, workshop doors,
+  arched entries, house doors with stone jambs and steps; harbour houses open onto the quay.
+- **Trim**: a two-step cornice under every eaves; subtle floor bands on some houses.
+- **No facade detail on walls with a neighbour or the hillside within 2 m.**
+- **Each house has a plan** (`src/houseplan.js`, `data/houses.json`, pure game state): a
+  condition 0–1 (paint fade, plaster loss below 0.35, tidiness) and a use per floor (family,
+  shop, workshop). Later gameplay sets them (floor uses, household wealth); the renderer reads.
+- **Drawn in 48 m chunks** of the town (each with its walls mesh and instanced parts), so
+  off-screen chunks are skipped; **detail by distance per chunk**: recessed openings with
+  frames, glass and louvred leaves near, flat painted openings far (75 m on High).
 
 ## Light (v0.12)
 
