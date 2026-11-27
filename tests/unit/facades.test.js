@@ -44,12 +44,12 @@ test('every house has a door; houses between two lanes have a second one', () =>
   assert.ok(two >= 8, two + ' houses with a back or side door onto another lane');
 });
 
-test('shutters come in all four states, mostly shut', () => {
+test('shutters: shut, folded open and half open, mostly shut', () => {
   const sum = {};
   for (const b of houses) for (const [k, v] of Object.entries(b.shutterStates || {})) sum[k] = (sum[k] || 0) + v;
-  for (const k of ['shutterClosed', 'shutterTilt', 'shutterOpen', 'shutterHalf']) assert.ok(sum[k] > 20, k + ': ' + sum[k]);
+  for (const k of ['closed', 'open', 'half']) assert.ok(sum[k] > 20, k + ': ' + sum[k]);
   const total = Object.values(sum).reduce((a, b) => a + b, 0);
-  assert.ok(sum.shutterClosed / total > 0.3 && sum.shutterOpen / total > 0.15, JSON.stringify(sum));
+  assert.ok(sum.closed / total > 0.3 && sum.open / total > 0.15, JSON.stringify(sum));
 });
 
 test('roofs are mostly grey slate, with some terracotta and some terraces', () => {

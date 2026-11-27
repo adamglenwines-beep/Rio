@@ -3,6 +3,8 @@
 // town without digging through the code. Units are metres (1 world unit = 1 m).
 // ---------------------------------------------------------------------------
 
+import { PALETTE } from './data.js';
+
 export const CONFIG = {
   seed: 7,                 // change for a different cove
 
@@ -140,7 +142,8 @@ export const CONFIG = {
     depth:  { flat: [5.5, 8.0], moderate: [5.5, 8.0], steep: [4.6, 6.0] },
     floorBonus: [[0, 4], [1, 3], [2, 1.2], [-1, 2]],   // each house's own leaning: storeys above or below what its site suggests
     roofPitch: 0.07,       // (old flat roofs; each house now draws its pitch from look.roofPitch)
-    detailReach: { low: 0.5, medium: 0.8, high: 1.0 },   // how far small facade details are drawn (× each detail's own distance)
+    detailReach: { low: 0.5, medium: 0.8, high: 1.0 },
+    lodDistance: 75,       // closer than this (m, × detailReach), openings are recessed with louvred shutters; further, painted flat   // how far small facade details are drawn (× each detail's own distance)
     // The look of a house: shares (0–1) of houses or windows that get each thing.
     look: {
       wearNone: 0.58, wearSome: 0.3,         // plaster wear: most houses are sound, 3 in 10 worn, about 1 in 8 badly worn
@@ -160,7 +163,6 @@ export const CONFIG = {
       washing: 0.1, flowerBox: 0.1,
       drainpipe: 0.5, bougainvillea: 0.14, doorPots: 0.62,
       terraceRailing: 0.6, terracePergola: 0.28, terraceParasol: 0.25, terraceWashing: 0.3,
-      doorColours: [['#1f5a3a', 4.5], ['#8a6844', 3], ['#4a2f22', 1.5], ['#2a5a5a', 0.6], ['#6e6558', 1]],
       flowerColours: ['#d23c4a', '#e0507a', '#f0f0e6', '#e8a0b4', '#d8452f'],
       bougainvilleaColours: ['#c2408f', '#b02a7c', '#d55aa6', '#9b1f6b'],
       washColours: ['#f2efe6', '#f2efe6', '#f4f1ea', '#9bc1d8', '#3a6ea5', '#e0667a', '#d8463b', '#e9c34a'],
@@ -353,31 +355,11 @@ export const CONFIG = {
   },
 };
 
-// Facade palette: [colour, weight, family]. v0.12: lighter, warmer, sun-faded colours, from
-// section 7 of Rio-reference/art-target-v2/graphics-review-v0.10.md, each lightened and faded a
-// little the way ochre #D5AC55 had to become #E2BC78 to match the art target's sunlit wall.
-// (v0.10–0.11 had a cooler, more saturated palette: Genoa red, orange, pale blue-grey.)
-// Two houses that touch never share a colour, and avoid sharing a family where they can.
-export const FACADE_COLOURS = [
-  ['#e2bc78', 12, 'yellow'],   // ochre, sun-faded (the colour calibrated against the art target)
-  ['#e3b062', 6, 'yellow'],    // golden ochre
-  ['#e4c886', 8, 'yellow'],    // lemon plaster
-  ['#e2d1b0', 5, 'pale'],      // warm cream
-  ['#ebe0cb', 2, 'pale'],      // limewash, off-white
-  ['#e8a77a', 10, 'orange'],   // peach
-  ['#d8914f', 9, 'orange'],    // burnt orange, faded
-  ['#c97b58', 8, 'orange'],    // terracotta, faded
-  ['#dc8d78', 10, 'pink'],     // salmon
-  ['#cf9488', 7, 'pink'],      // dusty rose
-  ['#e2a497', 3, 'pink'],      // pale rose
-  ['#adb596', 3, 'cool'],      // sage
-  ['#c4b8a0', 2, 'cool'],      // unpainted render (limestone)
-];
-// Shutters: green on nine windows in ten, one colour per house. v0.12: a richer, lighter
-// green (v0.11's were nearly black).
-export const SHUTTER_COLOURS = [
-  ['#2f7656', 3], ['#36805a', 2.5], ['#3d8a62', 2], ['#2e7262', 1], ['#4a8a63', 0.8], ['#8a968e', 0.4], ['#8a5040', 0.3],
-];
+// Facade, shutter and door colours are content: they live in data/palette.json (v0.13).
+// v0.12's palette (lighter, sun-faded) is in that file's history; v0.10–0.11 had a cooler one.
+export const FACADE_COLOURS = PALETTE.facade.map(([c, w, f]) => [c, w, f]);
+export const SHUTTER_COLOURS = PALETTE.shutter;
+
 // Roofs: mostly weathered grey slate (pale from above, some with a lichen cast), about one
 // in six terracotta.
 export const ROOF_COLOURS = [

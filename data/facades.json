@@ -1,0 +1,95 @@
+{
+  "_about": "Facade parts as data (v0.13). Sizes in metres. The generator (src/buildings.js, src/facade.js) reads these; weights are relative odds. Change a number here to change every house.",
+
+  "windows": {
+    "_about": "Openings are cut through the wall and recessed: the frame and glass sit `recess` behind the wall face, with a stone sill below and a lintel above.",
+    "recess": 0.18,
+    "frame": { "bar": 0.07, "depth": 0.07, "mullion": 0.045, "colour": "#efe6d2" },
+    "sill": { "height": 0.06, "proud": 0.07, "overhang": 0.07, "colour": "#d2cabb" },
+    "lintel": { "height": 0.13, "overhang": 0.05, "colour": "#d8d0c0" },
+    "types": {
+      "standard": { "w": 1.15, "h": 1.85, "sillAt": 0.75, "transom": true },
+      "french":   { "w": 1.15, "h": 2.35, "sillAt": 0.14, "transom": false, "sill": false },
+      "small":    { "w": 0.85, "h": 1.15, "sillAt": 0.85, "transom": false },
+      "cellar":   { "w": 0.7,  "h": 0.55, "sillAt": 1.25, "transom": false }
+    },
+    "columns": { "front": 1.85, "side": 2.6 },
+    "_columns": "one window column per this many metres of wall (front = the wall on the house's lane)",
+    "edgeMargin": 0.55,
+    "pairChance": 0.35,
+    "pairGap": 0.5,
+    "blindBay": 0.08,
+    "skipWindow": 0.03,
+    "fakeWindow": 0.55,
+    "smallTopFloor": 0.25,
+    "clearInFront": 2.0,
+    "_clearInFront": "no openings or wall detail on a wall with a neighbour or the hillside closer than this in front"
+  },
+
+  "shutters": {
+    "_about": "Two louvred leaves hung on the wall face, each half the opening wide. Built from slats near the camera, a flat painted board far away.",
+    "slats": 12,
+    "slatAngle": 0.6,
+    "thickness": 0.04,
+    "stile": 0.055,
+    "rail": 0.07,
+    "states": [
+      { "name": "closed", "weight": 0.42 },
+      { "name": "open", "weight": 0.36 },
+      { "name": "half", "weight": 0.16 },
+      { "name": "none", "weight": 0.06 }
+    ],
+    "openJitter": 0.14,
+    "halfAngle": [0.55, 1.45],
+    "closedJitter": 0.03,
+    "sag": 0.012
+  },
+
+  "balconies": {
+    "_about": "Balconies on upper floors, mostly on the lane-facing (harbour-facing) wall. depth = how far the slab stands out.",
+    "chanceHarbourFront": 0.8,
+    "chanceFront": 0.42,
+    "chanceSide": 0.08,
+    "variants": [
+      { "name": "single", "weight": 5, "width": 1.6, "depth": 0.85, "rail": "bars" },
+      { "name": "wide", "weight": 2, "width": 2.6, "depth": 0.95, "rail": "bars" },
+      { "name": "deep", "weight": 1.5, "width": 1.9, "depth": 1.15, "rail": "bars" },
+      { "name": "solid", "weight": 1, "width": 1.7, "depth": 0.85, "rail": "solid" }
+    ],
+    "slab": 0.13,
+    "railHeight": 1.0,
+    "barSpacing": 0.12,
+    "pots": 0.7,
+    "flowers": 0.75,
+    "washing": 0.2,
+    "chair": 0.18,
+    "railColours": [["#262d28", 4], ["#2f5a44", 2], ["#e9e6de", 1.5], ["#6b6a66", 1]]
+  },
+
+  "groundFloors": {
+    "_about": "What the ground floor of a house shows on its lane. `where`: harbour = by the harbour and piazza, town = elsewhere.",
+    "height": 3.6,
+    "variants": [
+      { "name": "shop", "weight": 4, "where": "harbour", "awning": 0.85 },
+      { "name": "workshop", "weight": 2, "where": "harbour", "awning": 0.3 },
+      { "name": "arched", "weight": 2, "where": "harbour", "awning": 0.0 },
+      { "name": "shop", "weight": 1, "where": "town", "awning": 0.6 },
+      { "name": "workshop", "weight": 1.5, "where": "town", "awning": 0.15 },
+      { "name": "arched", "weight": 1, "where": "town", "awning": 0.0 },
+      { "name": "door", "weight": 6, "where": "town", "awning": 0.0 }
+    ],
+    "harbourRadius": 34,
+    "shopfront": { "w": 2.3, "h": 2.6, "recess": 0.22 },
+    "workshopDoor": { "w": 1.5, "h": 2.4, "recess": 0.22 },
+    "archedEntry": { "w": 1.6, "h": 2.7, "recess": 0.32 },
+    "door": { "w": 1.05, "h": 2.15, "recess": 0.22 },
+    "steps": 0.5,
+    "awning": { "depth": 1.5, "drop": 0.35, "stripes": 9 }
+  },
+
+  "trim": {
+    "_about": "Horizontal trim: a cornice under the eaves on every house, and on some a band at each floor line.",
+    "cornice": { "height": 0.34, "proud": 0.16, "steps": 2 },
+    "bands": { "chance": 0.4, "height": 0.16, "proud": 0.04 }
+  }
+}

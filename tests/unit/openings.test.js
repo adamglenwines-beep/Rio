@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeGame } from './helpers.js';
 import { CONFIG } from '../../src/config.js';
+import { FACADES } from '../../src/data.js';
 import { convexOverlap, edgeNormal } from '../../src/geom.js';
 
 const game = makeGame();
@@ -63,22 +64,29 @@ test('no opening sits on a wall area covered by a neighbour', () => {
   assert.equal(bad.length, 0, bad.slice(0, 5).map((o) => `${o.kind} on house ${o.house} covered by ${o.by}`).join('; '));
 });
 
-test('wall-mounted parts stand clear of the wall, and a window\'s layers are apart', () => {
-  const Ly = R.layers, gap = CONFIG.building.facadeGap;
+test('openings are recessed; wall-mounted parts stand clear of the wall', () => {
+  const gap = CONFIG.building.facadeGap;
   assert.ok(gap >= 0.03, 'facade gap ' + gap);
-  const order = [Ly.surround, Ly.frame, Ly.pane, Ly.glass];
-  for (let i = 1; i < order.length; i++) assert.ok(order[i] - order[i - 1] >= 0.02 - 1e-9, 'window layers ' + order.join(', '));
-  assert.ok(Ly.shutterShut - Ly.glass >= 0.02 && Ly.shutterOpen - Ly.surround >= 0.02, 'shutters clear of glass and surround');
-  // every part's faces that look out from the wall are either buried (< -0.015) or clear (>= gap)
-  const T = game.THREE || null;
+  const front = (geo, pick = () => true) => {
+    let z = -Infinity; const P = geo.attributes.position, N = geo.attributes.normal;
+    for (let i = 0; i < P.count; i++) if (N.getZ(i) > 0.99 && pick(P.getX(i), P.getY(i))) z = Math.max(z, P.getZ(i));
+    return z;
+  };
+  // the frame and glass sit well back in the opening (recessed: they catch the wall's shadow)
+  const T = FACADES.windows.types.standard;
+  const frameFront = front(R.parts.frame_standard.geo, (x, y) => Math.abs(x) < T.w / 2 && Math.abs(y) < T.h / 2 - 0.01);
+  assert.ok(frameFront <= -0.08, 'frame front ' + frameFront.toFixed(3));
+  // every part's faces parallel to the wall are buried (< -1.5 cm) or stand clear (>= the gap). Shutter leaves are
+  // placed at their hinge, which stands gap + thickness out, so they are checked at placement, not here.
   for (const [k, p] of Object.entries(R.parts)) {
-    if (['bar', 'pot', 'blob', 'cloth', 'cone', 'chimney', 'awning', 'awningStripe', 'storeRoom', 'flowerbox', 'balcony', 'balconySolid'].includes(k)) continue;
+    if (['bar', 'pot', 'blob', 'cloth', 'cone', 'chimney', 'awning', 'awningStripe', 'storeRoom', 'flowerbox', 'balcony', 'balconySolid', 'leafL', 'leafR'].includes(k)) continue;
     const P = p.geo.attributes.position, N = p.geo.attributes.normal;
     for (let i = 0; i < P.count; i++) {
-      if (N.getZ(i) < 0.99) continue;   // only faces parallel to the wall, looking out
+      if (N.getZ(i) < 0.99) continue;
       const z = P.getZ(i);
       assert.ok(z < -0.015 || z >= gap - 1e-6, `${k}: a face ${(z * 100).toFixed(1)} cm from the wall`);
     }
   }
-  void T;
+  // the painted far opening stands in front of the painted surround
+  assert.ok(front(R.parts.paint_closed.geo) - front(R.parts.sur_standard.geo) >= 0.015);
 });

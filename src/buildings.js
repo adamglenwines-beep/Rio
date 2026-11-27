@@ -21,6 +21,8 @@ import { ZONE } from './zones.js';
 import { sub, norm, dist, lerp2, centroid, edgeNormal, offsetPoly, chamferPoly, convexOverlap } from './geom.js';
 import { STYLES, registerStyled } from './style.js';
 import { LAYERS } from './materials.js';
+import { PALETTE, FACADES } from './data.js';
+import { frameGeometry, leafGeometry, surroundGeometry, paintedOpeningMaterial, doorGeometries, WINDOW_TYPES, GLASS_Z } from './facade.js';
 
 const FH = CONFIG.building.floorHeight;
 const WHITE = new THREE.Color(1, 1, 1);
@@ -124,6 +126,57 @@ class GeoBuilder {
   }
 
   /**
+   * A wall face with rectangular openings cut through it (v0.13). The face is the
+   * quad P00 (u = 0, bottom) → P10 (u = L, bottom) → P11 → P01 (top), planar, with
+   * outward normal `n`; `yb`/`yt` its bottom and top heights. `holes`: [{ u0, u1, y0,
+   * y1, depth, col }] in metres along the wall and world heights. The solid parts are
+   * tiled in rows (runs without an opening merged into one quad), and each opening
+   * gets four reveal faces going `depth` into the wall: the sun casts real shadow in them.
+   * `u` per vertex goes to the wall attribute (wear at corners, painted quoins).
+   */
+  wallHoles(P00, P10, P01, P11, L, yb, yt, holes, c, n, uStart = 0, Lwall = L, noReveal = false) {
+    const at = (u, y) => {
+      const s = u / L, t = (y - yb) / (yt - yb);
+      const b0 = [P00[0] + (P10[0] - P00[0]) * s, P00[1] + (P10[1] - P00[1]) * s, P00[2] + (P10[2] - P00[2]) * s];
+      const b1 = [P01[0] + (P11[0] - P01[0]) * s, P01[1] + (P11[1] - P01[1]) * s, P01[2] + (P11[2] - P01[2]) * s];
+      return [b0[0] + (b1[0] - b0[0]) * t, b0[1] + (b1[1] - b0[1]) * t, b0[2] + (b1[2] - b0[2]) * t];
+    };
+    // openings inside this face (clipped to its height); winding so the face looks out along n
+    const H = holes.filter((h) => h.u0 > 0.02 && h.u1 < L - 0.02 && h.y1 > yb + 0.02 && h.y0 < yt - 0.02)
+      .map((h) => ({ ...h, y0: Math.max(h.y0, yb), y1: Math.min(h.y1, yt), cutTop: h.y1 >= yt, cutBottom: h.y0 <= yb }));
+    const ex = [P10[0] - P00[0], P10[1] - P00[1], P10[2] - P00[2]], ey = [P01[0] - P00[0], P01[1] - P00[1], P01[2] - P00[2]];
+    const flip = (ex[1] * ey[2] - ex[2] * ey[1]) * n[0] + (ex[2] * ey[0] - ex[0] * ey[2]) * n[1] + (ex[0] * ey[1] - ex[1] * ey[0]) * n[2] < 0;
+    const ys = [...new Set([yb, yt, ...H.flatMap((h) => [h.y0, h.y1])])].sort((a, b) => a - b);
+    const N = [n[0], n[1], n[2]];
+    const quad = (u0, u1, y0, y1) => {
+      const a = at(u0, y0), b = at(u1, y0), cc = at(u1, y1), d = at(u0, y1), U0 = u0 + uStart, U1 = u1 + uStart;
+      if (!flip) { this._tri(a, b, cc, N, c); this._tri(a, cc, d, N, c); this._wallUV([U0, U1, U1, U0, U1, U0], Lwall); }
+      else { this._tri(a, cc, b, N, c); this._tri(a, d, cc, N, c); this._wallUV([U0, U1, U1, U0, U0, U1], Lwall); }
+    };
+    for (let j = 0; j + 1 < ys.length; j++) {
+      const y0 = ys[j], y1 = ys[j + 1], ym = (y0 + y1) / 2;
+      if (y1 - y0 < 1e-4) continue;
+      const cut = H.filter((h) => h.y0 <= ym && h.y1 >= ym).sort((a, b) => a.u0 - b.u0);
+      let u = 0;
+      for (const h of cut) { if (h.u0 > u + 1e-4) quad(u, h.u0, y0, y1); u = Math.max(u, h.u1); }
+      if (L > u + 1e-4) quad(u, L, y0, y1);
+    }
+    // reveals: the four sides of each opening, going into the wall
+    for (const h of H) {
+      if (noReveal || !(h.depth > 0)) continue;
+      const d = h.depth, rc = h.col || c, inn = [-N[0] * d, -N[1] * d, -N[2] * d];
+      const back = (p) => [p[0] + inn[0], p[1] + inn[1], p[2] + inn[2]];
+      const a = at(h.u0, h.y0), b = at(h.u1, h.y0), cc = at(h.u1, h.y1), dd = at(h.u0, h.y1);
+      const e = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], el = Math.hypot(...e);
+      const E = e.map((v) => v / el);
+      if (!h.cutTop) this.face([dd, cc, back(cc), back(dd)], rc.clone().multiplyScalar(0.92), [0, -1, 0]);   // head (soffit)
+      if (!h.cutBottom) this.face([a, b, back(b), back(a)], rc, [0, 1, 0]);                                // seat
+      this.face([a, dd, back(dd), back(a)], rc.clone().multiplyScalar(0.96), E);                    // jambs
+      this.face([b, cc, back(cc), back(b)], rc.clone().multiplyScalar(0.96), [-E[0], -E[1], -E[2]]);
+    }
+  }
+
+  /**
    * Typed arrays for this builder's triangles, plus baked occlusion params per
    * vertex: aoParams = (ground height here, eaves height in decimetres + how
    * enclosed it is 0..0.9, texture layer + house random). The walls shader
@@ -177,6 +230,7 @@ function mergeColoured(parts) {
   out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   return out;
 }
+const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const box = (w, h, d, x = 0, y = 0, z = 0) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 /** mergeColoured, moved `dz` further out from the wall. */
 const shift = (dz, parts) => mergeColoured(parts).translate(0, 0, dz);
@@ -251,24 +305,14 @@ export class BuildingRenderer {
     this.parts = {
       window:  { geo: mergeColoured([[box(1.0, 1.5, 0.1, 0, 0, zb(Ly.frame, 0.1)), '#f1e9d6'], [box(0.74, 1.24, 0.04, 0, 0, zb(Ly.pane, 0.04)), '#3a3d44'],
                                      [box(1.14, 0.06, 0.2, 0, -0.78, 0.1), stoneTrim]]), mat: vc, shadow: false },
-      // painted surround (trompe-l'oeil band) and a cornice strip over the window; tinted per house
-      surround: { geo: box(1.36, 1.9, Ly.surround + 0.02, 0, 0.02, zb(Ly.surround, Ly.surround + 0.02)), mat: lambert(), shadow: false },
       pediment: { geo: mergeColoured([[box(1.52, 0.12, 0.12, 0, 1.03, zb(GAP + 0.07, 0.12)), '#ffffff'], [box(1.4, 0.06, 0.08, 0, 0.95, zb(GAP + 0.03, 0.08)), '#e6e6e6']]), mat: lambert({ vertexColors: true }), shadow: false, far: 260 },
       // a window painted on the plaster (see _fakeMaterial)
       fake:    { geo: new THREE.PlaneGeometry(1.36, 1.9).translate(0, 0.02, GAP), mat: this._fakeMaterial(), shadow: false },
       // weathering: grime streaks running down from the sill (a darkening decal)
       streak:  { geo: new THREE.PlaneGeometry(1.1, 1.9).translate(0, -0.95, GAP + 0.02), mat: this._streakMaterial(), shadow: false },
-      // ambient occlusion round the window: a soft darkening of the wall (and painted surround)
-      // where the frame and sill stand out from it (see _windowAOMaterial)
-      aoRing:  { geo: new THREE.PlaneGeometry(1.7, 2.3).translate(0, -0.05, GAP + 0.02), mat: this._windowAOMaterial(), shadow: false },
       // the glass: an interior-mapped fake room behind every window (see _glassMaterial)
-      glass:   { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, Ly.glass), mat: this._glassMaterial(), shadow: false },
-      shutterOpen:   { geo: mergeColoured([[box(0.42, 1.3, 0.05, -0.68, 0, zb(Ly.shutterOpen, 0.05)), '#ffffff'], [box(0.42, 1.3, 0.05, 0.68, 0, zb(Ly.shutterOpen, 0.05)), '#ffffff']]), mat: lambert(), shadow: false },
-      shutterClosed: { geo: mergeColoured([[box(0.8, 1.3, 0.08, 0, 0, zb(Ly.shutterShut, 0.08)), '#ffffff'], [box(0.8, 0.05, 0.02, 0, 0, Ly.shutterShut + 0.01), '#c8c8c8']]), mat: lambert({ vertexColors: true }), shadow: false },
-      // one leaf shut, one folded back against the wall
-      shutterHalf:   { geo: mergeColoured([[box(0.4, 1.3, 0.08, -0.2, 0, zb(Ly.shutterShut, 0.08)), '#ffffff'], [box(0.42, 1.3, 0.05, 0.68, 0, zb(Ly.shutterOpen, 0.05)), '#f4f4f4']]), mat: lambert({ vertexColors: true }), shadow: false },
-      // shut, with the lower panel pushed out on its stay (persiana alla genovese)
-      shutterTilt:   { geo: mergeColoured([[box(0.8, 0.66, 0.08, 0, 0.32, zb(Ly.shutterShut, 0.08)), '#ffffff'], [tiltPanel, '#eeeeee'], [box(0.8, 0.05, 0.02, 0, 0.0, Ly.shutterShut + 0.01), '#c8c8c8']]), mat: lambert({ vertexColors: true }), shadow: false },
+      // (v0.13: at the back of the recess; scaled to each opening)
+      glass:   { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, GLASS_Z), mat: this._glassMaterial(), shadow: false, lod: 'near' },
       balcony: { geo: shift(0.02, [[box(1.56, 0.12, 0.86, 0, -0.78, 0.42), pale], [box(0.1, 0.22, 0.6, -0.6, -0.92, 0.3), stoneTrim], [box(0.1, 0.22, 0.6, 0.6, -0.92, 0.3), stoneTrim],
                                      [box(1.52, 0.05, 0.05, 0, 0.21, 0.8), iron], [box(1.52, 0.03, 0.03, 0, -0.68, 0.8), iron],
                                      [box(0.05, 0.05, 0.8, -0.74, 0.21, 0.42), iron], [box(0.05, 0.05, 0.8, 0.74, 0.21, 0.42), iron], ...bars]), mat: vc, shadow: true },
@@ -297,10 +341,27 @@ export class BuildingRenderer {
       storeRoom: { geo: new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0), mat: this._storeMaterial(), shadow: false },
     };
     this.parts.streak.far = 140;
-    this.parts.aoRing.far = 320;
+    // v0.13 openings (src/facade.js, data/facades.json): a frame + sill + lintel per window kind,
+    // louvred shutter leaves (near) or boards (far), painted surrounds, and for distant houses
+    // a flat painted opening in place of the recess and slats (detail by distance)
+    const frameMat = lambert({ vertexColors: true });
+    for (const k of WINDOW_TYPES) {
+      this.parts['frame_' + k] = { geo: frameGeometry(k), mat: frameMat, shadow: true, lod: 'near' };
+      this.parts['sur_' + k] = { geo: surroundGeometry(k), mat: lambert(), shadow: false };
+    }
+    const leafMat = lambert({ vertexColors: true });
+    this.parts.leafL = { geo: leafGeometry(false, true), mat: leafMat, shadow: true, lod: 'near' };
+    this.parts.leafR = { geo: leafGeometry(true, true), mat: leafMat, shadow: true, lod: 'near' };
+    this.parts.cellarGlass = { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, Ly.glass), mat: this.parts.glass.mat, shadow: false };
+    const paintGeo = new THREE.PlaneGeometry(2, 1.06).translate(0, -0.03, GAP + 0.02);
+    const D = FACADES.groundFloors.door, dg = doorGeometries(D.w, D.h, D.recess);
+    this.parts.doorJambs = { geo: dg.surround, mat: lambert({ vertexColors: true }), shadow: true };
+    this.parts.doorLeaf = { geo: dg.leaf, mat: lambert({ vertexColors: true }), shadow: false };
+    for (const st of ['closed', 'open', 'half', 'none']) this.parts['paint_' + st] = { geo: paintGeo, mat: paintedOpeningMaterial(st), shadow: false, lod: 'far' };
     for (const p of Object.values(this.parts)) { p.mesh = null; p.cap = 0; }
     registerStyled(this.massMat, 'surface', { mode: 'face', layer: 'attr', weather: true, trueMean: true });
-    const surf = { shutterOpen: 'woodPaint', shutterClosed: 'woodPaint', shutterHalf: 'woodPaint', shutterTilt: 'woodPaint', door: 'woodPaint', chimney: 'plaster', surround: 'plaster', doorFrame: 'stoneDressed' };
+    const surf = { leafL: 'woodPaint', leafR: 'woodPaint', door: 'woodPaint', chimney: 'plaster', doorFrame: 'stoneDressed', doorLeaf: 'planks', doorJambs: 'stoneDressed',
+      sur_standard: 'plaster', sur_french: 'plaster', sur_small: 'plaster' };
     // detail by distance: a part with `far` shrinks away beyond that many metres (× the quality's reach)
     this.detailReach = { value: 1 };
     const fadeFar = (mat, far) => {
@@ -318,10 +379,31 @@ export class BuildingRenderer {
           #endif`);
       };
     };
+    // detail by distance for whole openings: 'near' parts (recess frames, glass, louvred
+    // leaves) are drawn only within the LOD distance, 'far' parts (painted openings, plain
+    // leaves) only beyond it (× the quality's reach). Per instance, in the vertex shader.
+    this.lodDist = { value: CONFIG.building.lodDistance };
+    const lodSwitch = (mat, mode) => {
+      const prev = mat.onBeforeCompile;
+      mat.onBeforeCompile = (sh, r) => {
+        if (prev) prev.call(mat, sh, r);
+        sh.uniforms.uLodDist = this.lodDist;
+        sh.vertexShader = 'uniform float uLodDist;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+          #ifdef USE_INSTANCING
+          {
+            float dL = distance(cameraPosition, (modelMatrix * vec4(instanceMatrix[3].xyz, 1.0)).xyz);
+            transformed *= ${mode === 'near' ? 'step(dL, uLodDist)' : 'step(uLodDist, dL)'};
+          }
+          #endif`);
+      };
+      const key = mat.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : () => '';
+      mat.customProgramCacheKey = () => key() + '|lod:' + mode;
+    };
     const seen = new Set([this.massMat]);
     for (const [k, p] of Object.entries(this.parts)) {
-      if (seen.has(p.mat)) { if (p.far) { p.mat = p.mat.clone(); } else continue; }
+      if (seen.has(p.mat)) { if (p.far || p.lod) { p.mat = p.mat.clone(); } else continue; }
       seen.add(p.mat);
+      if (p.lod) lodSwitch(p.mat, p.lod);
       if (p.far) fadeFar(p.mat, p.far);
       if (p.mat.isMeshBasicMaterial) continue;
       registerStyled(p.mat, p.kind || 'surface', surf[k] ? { mode: 'face', layer: surf[k], trueMean: true } : null);
@@ -329,7 +411,7 @@ export class BuildingRenderer {
   }
 
   /** Quality preset: how far away small details are still drawn. */
-  setQuality(name) { this.detailReach.value = CONFIG.building.detailReach[name] ?? 1; }
+  setQuality(name) { this.detailReach.value = CONFIG.building.detailReach[name] ?? 1; this.lodDist.value = CONFIG.building.lodDistance * this.detailReach.value; }
 
   /** Make sure a part's InstancedMesh can hold n instances. */
   _ensure(name, n) {
@@ -769,6 +851,125 @@ export class BuildingRenderer {
     return terra ? (alt ? LAYERS.terraA : LAYERS.terraB) : (alt ? LAYERS.slateA : LAYERS.slateB);
   }
 
+  /**
+   * The outer walls of a house with its openings cut through them (v0.13). Follows the art
+   * style: corners cut off (chamfered) in the softer styles, or walls leaning in a touch
+   * (q at the foot, qTop at the eaves). `holes[i]` = the openings in wall i (from corner i).
+   */
+  _shell(gb, q, qTop, y0, y1, col, holes) {
+    const S = this.style;
+    if (S.chamfer) {
+      const ch = chamferPoly(q, S.chamfer), P = ch.poly, m = P.length;
+      for (let k = 0; k < m; k++) {
+        const a = P[k], c2 = P[(k + 1) % m];
+        if (ch.normals[k]) {                                  // a cut-off corner: a plain narrow face
+          const nA = ch.normals[k][0], nB = ch.normals[k][1], nn = norm([nA[0] + nB[0], nA[1] + nB[1]]);
+          gb.face([[a[0], y0, a[1]], [c2[0], y0, c2[1]], [c2[0], y1, c2[1]], [a[0], y1, a[1]]], col, [nn[0], 0, nn[1]]);
+          continue;
+        }
+        const i = (k - 1) / 2, n = edgeNormal(q, i), uStart = dist(q[i], a), L = dist(a, c2);
+        const hs = holes[i].map((h) => ({ ...h, u0: h.u0 - uStart, u1: h.u1 - uStart }));
+        gb.wallHoles([a[0], y0, a[1]], [c2[0], y0, c2[1]], [a[0], y1, a[1]], [c2[0], y1, c2[1]], L, y0, y1, hs, col, [n[0], 0, n[1]], uStart, dist(q[i], q[(i + 1) % 4]));
+      }
+      return;
+    }
+    for (let i = 0; i < q.length; i++) {
+      const A = q[i], Bq = q[(i + 1) % q.length], At = qTop[i], Bt = qTop[(i + 1) % q.length], n = edgeNormal(q, i);
+      const P00 = [A[0], y0, A[1]], P10 = [Bq[0], y0, Bq[1]], P01 = [At[0], y1, At[1]], P11 = [Bt[0], y1, Bt[1]];
+      // the face's own normal (the wall leans in a touch), pointing out
+      const ex = sub3(P10, P00), ey = sub3(P01, P00);
+      let N = [ex[1] * ey[2] - ex[2] * ey[1], ex[2] * ey[0] - ex[0] * ey[2], ex[0] * ey[1] - ex[1] * ey[0]];
+      const l = Math.hypot(...N); N = N.map((v) => v / l);
+      if (N[0] * n[0] + N[2] * n[1] < 0) N = N.map((v) => -v);
+      gb.wallHoles(P00, P10, P01, P11, dist(A, Bq), y0, y1, holes[i], col, N);
+    }
+  }
+
+  /**
+   * One window (v0.13): the frame, glass, sill and lintel in the recess cut through the
+   * wall, a painted surround on decorated houses, and two louvred shutter leaves on their
+   * hinges, each shut, folded back flat against the wall (where there is room) or standing
+   * part open, a little irregular. Far away, all of it becomes one painted opening. Then
+   * whatever hangs off the window: a balcony, a flower box or a washing line.
+   * `o` = { u, w, h, y0, y1, yc, type, px, pz, inset, balcony, ground, roomLeft, roomRight }.
+   * Returns true if the right-hand leaf is folded back (it then takes wall space).
+   */
+  _opening(put, b, rng, F, W, o) {
+    const WIN = FACADES.windows, SH = FACADES.shutters, K = CONFIG.building.look, GAPm = CONFIG.building.facadeGap;
+    const { A, e, n, rot, sgn } = W, T = WIN.types[o.type], ky = o.h / T.h;
+    put('frame_' + o.type, o.px, o.yc, o.pz, rot, 1, ky, 1, WHITE);
+    // per-window randoms (packed in the instance colour): when its light comes on, the room's wall colour, the curtain
+    this._gc.setRGB(rng(), rng(), rng());
+    const fb = WIN.frame.bar;
+    put('glass', o.px, o.yc, o.pz, rot, (o.w - 2 * fb) / 0.74, (o.h - 2 * fb) / 1.24, 1, this._gc);
+    if (F.deco === 'surrounds' || F.deco === 'full') {
+      put('sur_' + o.type, o.px, o.yc, o.pz, rot, 1, ky, 1, F.trimSoft);
+      if (F.deco === 'full' && o.type !== 'small') put('pediment', o.px, o.y1 + WIN.lintel.height + 0.04 - 0.92, o.pz, rot, (o.w + 0.4) / 1.52, 1, 1, F.trimSoft);
+    }
+    if (!o.balcony && rng() < CONFIG.building.streakChance) put('streak', o.px, o.y0 - WIN.sill.height, o.pz, rot, (o.w / 1.1) * (0.85 + rng() * 0.3), 0.6 + rng() * 0.5, 1, WHITE);
+    // shutters
+    if (!b.shutterShades) b.shutterShades = [-0.025, 0, 0.025].map((d) => b.shutter.clone().offsetHSL(0, 0, d));
+    const shade = b.shutterShades[(rng() * 3) | 0];
+    let state = rng.weighted(SH.states.map((s) => [s.name, s.weight * (s.name === 'closed' ? F.shutMul.closed : s.name === 'open' ? F.shutMul.open : 1)]));
+    if (o.balcony && state === 'none') state = 'closed';
+    b.shutterStates = b.shutterStates || {}; b.shutterStates[state] = (b.shutterStates[state] || 0) + 1;
+    put('paint_' + state, o.px, o.yc, o.pz, rot, o.w, o.h, 1, shade);
+    let foldRight = false;
+    if (state !== 'none') {
+      const lw = o.w / 2, lh = o.h - 0.03, t = SH.thickness;
+      const halfSide = rng() < 0.5 ? -1 : 1;
+      for (const s of [-1, 1]) {
+        const key = (s < 0) === (sgn > 0) ? 'leafL' : 'leafR', openSign = key === 'leafL' ? -1 : 1;
+        const room = s < 0 ? o.roomLeft : o.roomRight;
+        const half = SH.halfAngle[0] + rng() * (SH.halfAngle[1] - SH.halfAngle[0]);
+        let ang;
+        if (state === 'closed' || (state === 'half' && s !== halfSide)) ang = rng() * SH.closedJitter;
+        else if (state === 'open' && room) ang = Math.PI - rng() * SH.openJitter;
+        else ang = half;
+        if (s > 0 && ang > 2.5) foldRight = true;
+        const hu = o.u + s * o.w / 2, out = o.inset + GAPm + t;
+        const hx = A[0] + e[0] * hu + n[0] * out, hz = A[1] + e[1] * hu + n[1] * out;
+        put(key, hx, o.yc + (rng() - 0.5) * 2 * SH.sag, hz, rot + openSign * ang, lw, lh, 1, shade);
+      }
+    }
+    const at = (along, out) => [o.px + e[0] * along + n[0] * out, o.pz + e[1] * along + n[1] * out];
+    if (o.balcony) {
+      const by = o.y0 + 0.7;                                // the old balcony part: its slab top 0.72 below its origin
+      put(F.balconySolid ? 'balconySolid' : 'balcony', o.px, by, o.pz, rot, 1, 1, 1, F.balconySolid ? b.facade : F.balconyTint);
+      if (rng() < K.balconyPots) for (const a of [-0.52, 0.5]) {
+        if (rng() < 0.3) continue;
+        const [px, pz] = at(a + (rng() - 0.5) * 0.2, 0.57);
+        put('pot', px, by - 0.72, pz, 0, 0.8, 0.9, 0.8, TERRACOTTA);
+        put('blob', px, by - 0.3, pz, rng() * 6, 0.22, 0.24, 0.22, LEAF);
+        if (rng() < 0.7) put('blob', px, by - 0.1, pz, rng() * 6, 0.13, 0.1, 0.13, F.flowerCol);
+      }
+      if (rng() < K.balconyWashing) {
+        const nn = 2 + ((rng() * 3) | 0);
+        for (let i = 0; i < nn; i++) {
+          const [px, pz] = at(-0.55 + (i + rng() * 0.4) * (1.1 / nn), 0.86);
+          put('cloth', px, by + 0.2, pz, rot, 0.28 + rng() * 0.22, 0.5 + rng() * 0.4, 1, this._c.set(rng.pick(K.washColours)));
+        }
+      }
+      return foldRight;
+    }
+    if (o.ground) return foldRight;
+    if (rng() < F.flowers) {
+      const [px, pz] = at(0, 0.2);
+      put('flowerbox', px, o.y0 + 0.02, pz, rot, o.w / 1.0, 1, 1, this._c.set(rng.pick(K.flowerColours)));
+    } else if (rng() < F.wash) {
+      // a washing line on two brackets under the sill
+      const ly = o.y0 - WIN.sill.height - 0.3, [lx, lz] = at(0, 0.38);
+      put('bar', lx, ly, lz, rot, 1.4 * o.w, 0.015, 0.015, IRON);
+      for (const a of [-0.62, 0.62]) { const [bx, bz] = at(a * o.w, 0.2); put('bar', bx, ly, bz, rot, 0.03, 0.03, 0.4, IRON); }
+      const nn = 2 + ((rng() * 3) | 0);
+      for (let i = 0; i < nn; i++) {
+        const [px, pz] = at((-0.55 + (i + rng() * 0.3) * (1.1 / nn)) * o.w, 0.38);
+        put('cloth', px, ly, pz, rot, 0.26 + rng() * 0.26, 0.4 + rng() * 0.5, 1, this._c.set(rng.pick(K.washColours)));
+      }
+    }
+    return foldRight;
+  }
+
   /** Walls of a footprint: chamfered (and shaded round) in the softer styles. */
   _walls(gb, poly, y0, y1, col, top = false) {
     const S = this.style;
@@ -813,37 +1014,14 @@ export class BuildingRenderer {
     return m;
   }
 
-  /**
-   * Ambient occlusion round a window, as a decal multiplied onto the wall: a soft dark
-   * ring hugging the frame, a little deeper under the sill. Stable (no screen-space
-   * noise), and drawn on every quality level.
-   */
-  _windowAOMaterial() {
-    const m = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, depthWrite: false, fog: false, toneMapped: false,
-      blending: THREE.MultiplyBlending, premultipliedAlpha: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
-    m.onBeforeCompile = (sh) => {
-      sh.vertexShader = 'varying vec2 vAp;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-        vAp = position.xy;`);
-      sh.fragmentShader = 'varying vec2 vAp;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-        vec2 d2 = max(abs(vAp - vec2(0.0, 0.0)) - vec2(0.5, 0.75), 0.0);
-        float ring = 1.0 - smoothstep(0.0, 0.22, length(d2));
-        float sill = (1.0 - smoothstep(0.0, 0.3, max(-0.81 - vAp.y, 0.0))) * step(vAp.y, -0.81) * (1.0 - smoothstep(0.5, 0.62, abs(vAp.x)));
-        float k = max(ring, sill * 1.2);
-        diffuseColor.rgb = vec3(1.0 - ${CONFIG.building.ao.window.toFixed(2)} * k * uAOk);`).replace('void main() {', 'uniform float uAOk;\nvoid main() {');
-      sh.uniforms.uAOk = this.aoUniforms.uAO;
-    };
-    return m;
-  }
-
   /** Detail meshes too small to matter in a ripply reflection. */
   smallParts() {
-    return ['shutterOpen', 'shutterClosed', 'shutterHalf', 'shutterTilt', 'balcony', 'balconySolid', 'door', 'doorFrame', 'awning', 'awningStripe', 'chimney', 'storeRoom',
-      'streak', 'aoRing', 'surround', 'pediment', 'fake', 'bar', 'pot', 'blob', 'cloth', 'cone', 'flowerbox']
+    return Object.keys(this.parts).filter((k) => !['window', 'glass', 'storeRoom'].includes(k) && !k.startsWith('frame_'))
       .map((k) => this.parts[k].mesh).filter(Boolean);
   }
 
   /** Flat overlays drawn on top of walls (not solid surfaces): left out of the ambient-occlusion pass. */
-  overlayParts() { return ['streak', 'aoRing'].map((k) => this.parts[k].mesh).filter(Boolean); }
+  overlayParts() { return ['streak'].map((k) => this.parts[k].mesh).filter(Boolean); }
 
   /** Forget every cached house (the next rebuild redraws the whole town). */
   invalidateAll() { this.cache.clear(); }
@@ -993,11 +1171,11 @@ export class BuildingRenderer {
       terraceFloor: new THREE.Color(rng.pick(['#c2b6a4', '#b9ad9c', '#cbbfae', '#b8704e'])),
       shut: [K.shutClosed * (0.6 + rng() * 0.9), K.shutTilt, K.shutOpen * (0.6 + rng() * 0.9), K.shutHalf],
       smallTop: rng() < K.smallTopFloor,
-      blindCol: rng() < K.blindBay ? (rng() * 4) | 0 : -1,
+      blindCol: rng() < FACADES.windows.blindBay ? (rng() * 4) | 0 : -1,
       irregular: rng(),
       balconySolid: rng() < K.balconySolid,
       balconyTint: new THREE.Color(rng.pick(['#ffffff', '#ffffff', '#dfe8df', '#f4efe6'])),
-      doorCol: new THREE.Color(rng.weighted(K.doorColours)),
+      doorCol: new THREE.Color(rng.weighted(PALETTE.door)),
       doorStone: new THREE.Color(rng.pick(['#b3ada2', '#c8c0b0', '#a5a096'])),
       pipe: rng() < K.drainpipe, pipeCol: new THREE.Color(rng.pick(['#7a4a3a', '#8a5a44', '#4f6e66', '#6b665e'])),
       bouga: rng() < K.bougainvillea,
@@ -1006,6 +1184,8 @@ export class BuildingRenderer {
       flowers: K.flowerBox * (rng() < 0.6 ? 0.4 : 2.2),
       flowerCol: new THREE.Color(rng.pick(K.flowerColours)),
     };
+    F.shutMul = { closed: F.shut[0] / K.shutClosed, open: F.shut[2] / K.shutOpen };
+    F.trimSoft = F.trim.clone().lerp(b.facade, 0.35);       // surrounds a little closer to the wall colour (lower contrast)
     F.ridge = F.ridgeTerracotta ? new THREE.Color(rng.pick(['#ae7055', '#b6775d', '#a2643f'])) : new THREE.Color('#dcd8cf');
     return F;
   }
@@ -1030,6 +1210,7 @@ export class BuildingRenderer {
 
     // --- walls, stone ground floor, string courses, cornice ---
     let stoneTop = 0;                                     // top of the rough stone, where there is some
+    let dado = null;                                      // a render dado: built with the walls (doors cut through it)
     // the wall's outer skin: bands (from the foot up to `top`) that stand `out` metres proud of
     // the footprint (stone bases, dados, plinths); wall-mounted parts are placed on the skin
     const skins = [];
@@ -1045,9 +1226,7 @@ export class BuildingRenderer {
       for (const pier of piers) if (dist(pier[0], pier[1]) > 0.2 && dist(pier[1], pier[2]) > 0.2) gb.prism(pier, base, a.y + 0.05, b.facade, false);
       this._passageVault(gb, b, stone);
     } else {
-      gb.layer = LAYERS.plaster;
-      if (this.style.chamfer) this._walls(gb, q, base, b.top, b.facade);
-      else gb.prism(q, base, b.top, b.facade, false, false, null, qTop);
+      // (the walls themselves are built after the facades, with the openings cut through them)
       const hb = this._harbourBase(b, rng);
       if (hb) {
         // rough stone base, battered at the foot, with a pale string course on top
@@ -1069,19 +1248,17 @@ export class BuildingRenderer {
       } else if (F.ground === 'dado') {
         // a rough render dado whose top line follows the lane up the slope
         const h = K.dado[0] + rng() * (K.dado[1] - K.dado[0]), col = new THREE.Color(rng.pick(K.dadoColours));
-        gb.layer = LAYERS.plasterWorn;
+        dado = { h, col, walls: [] };
         for (let i = 0; i < 4; i++) {
           const A = q[i], Bc = q[(i + 1) % 4], n = edgeNormal(q, i);
           const gA = t.heightAt(A[0] + n[0] * 0.3, A[1] + n[1] * 0.3), gB = t.heightAt(Bc[0] + n[0] * 0.3, Bc[1] + n[1] * 0.3);
-          const o = 0.035, ax = A[0] + n[0] * o, az = A[1] + n[1] * o, bx = Bc[0] + n[0] * o, bz = Bc[1] + n[1] * o;
-          gb.face([[ax, gA - 0.7, az], [bx, gB - 0.7, bz], [bx, gB + h, bz], [ax, gA + h, az]], col, [n[0], 0, n[1]]);
-          gb.face([[ax, gA + h, az], [bx, gB + h, bz], [Bc[0], gB + h + 0.03, Bc[1]], [A[0], gA + h + 0.03, A[1]]], col, [0, 1, 0]);
-          skins.push({ top: Math.max(gA, gB) + h + 0.03, out: 0.035 });
+          dado.walls.push({ gA, gB });
+          skins.push({ top: Math.max(gA, gB) + h + 0.03, out: 0.035, dado: true });
         }
       } else {
         gb.layer = LAYERS.stoneBase;
         this._walls(gb, offsetPoly(q, 0.06), base, b.gMin + 0.45, stone, true);
-        skins.push({ top: b.gMin + 0.45, out: 0.06 });
+        skins.push({ top: b.gMin + 0.45, out: 0.06, plinth: true });
       }
     }
     b.stoneTop = stoneTop;
@@ -1125,35 +1302,56 @@ export class BuildingRenderer {
       }
     } else if (b.roof === 'flat') this._terrace(put, b, rng, F);
 
-    // --- facades: doors and windows along every wall ---
+    // --- facades: doors and windows along every wall (v0.13: openings cut into the walls) ---
+    const holes = [[], [], [], []];                       // per wall: openings to cut, { u0, u1, y0, y1, depth, col }
+    const WIN = FACADES.windows;
+    const plain = (y) => skins.every((k) => k.dado || y >= k.top);   // plaster here (or a dado that can be cut through)
+    const lean = (y) => (this.style.chamfer ? 0 : -F.taper * clamp((y - base) / (b.top - base), 0, 1));
     for (let i = 0; i < 4; i++) {
       const A = q[i], Bc = q[(i + 1) % 4];
       const L = dist(A, Bc);
       if (L < 1.6) continue;
       const n = edgeNormal(q, i), e = norm(sub(Bc, A));
       const front = i === 0;
-      const cols = front ? Math.max(1, Math.round(L / 2.0)) : Math.max(1, Math.round(L / 2.9));
       const srot = Math.atan2(n[0], n[1]);
-      // uneven rhythm: each column sits a little off the regular grid
-      const slack = Math.max(0, L / cols - 1.5) * 0.5 * F.irregular;
+      const sgn = Math.sign(n[1] * e[0] - n[0] * e[1]) || 1;   // does the parts' local +x run along e (1) or against it (-1)?
+      const W = { A, e, n, L, nx: n[0], nz: n[1], ex: e[0], ez: e[1], rot: srot, sgn, wall: i };
+      const cols = Math.max(1, Math.round(L / (front ? WIN.columns.front : WIN.columns.side)));
+      const wStd = WIN.types.standard.w, margin = WIN.edgeMargin + wStd / 2;
+      // uneven rhythm: each column a little off the regular grid; now and then two windows paired close together
+      const slack = Math.max(0, L / cols - wStd - 0.6) * 0.5 * F.irregular;
       const us = [];
-      for (let ci = 0; ci < cols; ci++) us.push(clamp(L * ((ci + 0.5) / cols) + (rng() - 0.5) * 2 * slack, Math.min(0.85, L / 2), Math.max(L - 0.85, L / 2)));
-      const W = { nx: n[0], nz: n[1], ex: e[0], ez: e[1], rot: srot };
+      for (let ci = 0; ci < cols; ci++) us.push(clamp(L * ((ci + 0.5) / cols) + (rng() - 0.5) * 2 * slack, Math.min(margin, L / 2), Math.max(L - margin, L / 2)));
+      if (front && cols >= 2 && rng() < WIN.pairChance) {
+        const ci = (rng() * (cols - 1)) | 0, mid = (us[ci] + us[ci + 1]) / 2, half = wStd / 2 + WIN.pairGap / 2;
+        us[ci] = clamp(mid - half, Math.min(margin, L / 2), L / 2); us[ci + 1] = clamp(mid + half, L / 2, Math.max(L - margin, L / 2));
+      }
 
       // the door: the front door on the lane, and a back or side door wherever another lane runs past
-      let doorCol = -1, doorY = 0;
+      let doorCol = -1, door = null;
       const midCol = Math.floor((cols - 1) / 2);
       const wantsDoor = front ? (b.kind !== ZONE.COM && b.vaultEdge !== i) : (!b.arch && this._laneBeside(q, i));
       if (wantsDoor) {
-        const u = us[midCol], dx = A[0] + e[0] * u, dz = A[1] + e[1] * u;
+        const D = FACADES.groundFloors.door, u = us[midCol], dx = A[0] + e[0] * u, dz = A[1] + e[1] * u;
         const g = t.heightAt(dx + n[0] * 0.5, dz + n[1] * 0.5);
         const clear = !covered(A, e, n, u - 0.85, u + 0.85, g - 0.2, g + 2.7, 1.0) && g + 2.7 < b.top && !(b.arch && g < b.arch.y - 0.2 && front === false);
         if (clear) {
-          doorCol = midCol; doorY = g + 0.2;
-          const sk = skin(g), px = dx + n[0] * sk, pz = dz + n[1] * sk;
-          b.openings.push({ kind: 'door', wall: i, u0: u - 0.75, u1: u + 0.75, y0: doorY - 0.2, y1: doorY + 2.5 });
-          put('doorFrame', px, doorY, pz, srot, 1, 1, 1, F.doorStone);
-          put('door', px, doorY, pz, srot, 1, 1, 1, front ? F.doorCol : this._c.copy(F.doorCol).multiplyScalar(0.85));
+          doorCol = midCol;
+          let y0 = g + 0.15;
+          for (const k of skins) if (k.plinth && y0 < k.top) y0 = k.top;      // over a stone plinth: a raised threshold
+          const recessed = plain(y0 + 0.05) && y0 + D.h < b.top - FH * 0.2 && u - D.w / 2 > 0.3 && u + D.w / 2 < L - 0.3;
+          const sk = recessed ? lean(y0) : skin(g), px = dx + n[0] * sk, pz = dz + n[1] * sk;
+          b.openings.push({ kind: 'door', wall: i, u0: u - 0.75, u1: u + 0.75, y0: y0 - 0.2, y1: y0 + D.h + 0.3 });
+          const leafCol = front ? F.doorCol : this._c.copy(F.doorCol).multiplyScalar(0.85);
+          if (recessed) {
+            holes[i].push({ u0: u - D.w / 2, u1: u + D.w / 2, y0, y1: y0 + D.h, depth: D.recess, col: F.doorStone.clone().multiplyScalar(0.95) });
+            put('doorJambs', px, y0, pz, srot, 1, 1, 1, F.doorStone);
+            put('doorLeaf', px, y0, pz, srot, 1, 1, 1, leafCol);
+          } else {
+            put('doorFrame', px, g + 0.2, pz, srot, 1, 1, 1, F.doorStone);
+            put('door', px, g + 0.2, pz, srot, 1, 1, 1, leafCol);
+          }
+          door = { u, w: D.w + 0.34, y0, y1: y0 + D.h + 0.2 };
           b.doors = (b.doors || 0) + 1;
           if (F.pots && front) this._pots(put, dx, dz, g, W, rng, F);
         }
@@ -1163,46 +1361,78 @@ export class BuildingRenderer {
       for (let k = 0; ; k++) {
         const floorBottom = b.top - FH * (k + 1);
         if (floorBottom < base) break;
-        const wy = floorBottom + 1.55;
         let any = false;
+        const row = [];                                   // this storey's windows: planned first, shutters decided left to right
         for (let ci = 0; ci < cols; ci++) {
           const u = us[ci];
           const wx = A[0] + e[0] * u, wz = A[1] + e[1] * u;
           const ground = t.heightAt(wx, wz);
-          if (floorBottom < ground - 0.4) continue;           // this storey is underground here
           if (b.arch && floorBottom < b.arch.y - 0.2) continue; // below the rooms of an archway house
-          // on a wall area covered by (or right up against) a neighbour? Shared walls get no openings.
-          const hwid = 0.95 * this.style.detailScale;
-          if (covered(A, e, n, u - hwid, u + hwid, floorBottom, floorBottom + FH)) continue;
-          if (ci === doorCol && wy - 0.95 < doorY + 2.55 && wy + 0.95 > doorY - 0.2) { any = true; continue; }   // the door is here
-          const inset = skin(floorBottom);
-          b.openings.push({ kind: 'window', wall: i, u0: u - hwid, u1: u + hwid, y0: floorBottom, y1: floorBottom + FH });
-          const px = wx + n[0] * inset, pz = wz + n[1] * inset;
           const groundFloor = floorBottom < ground + 1.2;
           const inStone = stoneTop && floorBottom < stoneTop - 0.5;
+          // which kind of window: a balcony door (French window), a small top-floor window, or the standard one
+          const balcony = front && b.balconies && !lowestFloor && !groundFloor && rng() < 0.42;
+          let type = balcony ? 'french' : (k === 0 && F.smallTop ? 'small' : 'standard');
+          let T = WIN.types[type];
+          let y0 = floorBottom + T.sillAt, y1 = y0 + T.h;
+          for (const s2 of skins) if (s2.dado && y0 < s2.top + 0.1) { y0 = s2.top + 0.1; y1 = Math.max(y1, y0 + 1.1); }   // clear of a dado
+          const yMax = b.top - cor - WIN.lintel.height - 0.08;
+          if (y1 > yMax) y1 = yMax;
+          if (y1 - y0 < 1.3 && type !== 'small') { type = 'small'; T = WIN.types.small; y1 = Math.min(y0 + T.h, yMax); }
+          if (y1 - y0 < 0.8) continue;
+          if (y0 < ground + 0.35) continue;                // this storey is underground here
+          // facing the hillside close in front? (no openings onto a bank of earth)
+          if (t.heightAt(wx + n[0] * WIN.clearInFront, wz + n[1] * WIN.clearInFront) > y0 - 0.3) continue;
+          const w = T.w;
+          // on a wall area covered by, or within ~2 m of, a neighbour? Shared walls get no openings.
+          if (covered(A, e, n, u - w, u + w, y0 - 0.2, y1 + 0.3, WIN.clearInFront)) continue;
+          if (ci === doorCol && door && y0 < door.y1 && y1 > door.y0) { any = true; continue; }   // the door is here
+          const yc = (y0 + y1) / 2;
           if (front && groundFloor && b.kind === ZONE.COM) {
             any = true;
             if (ci === midCol || cols === 1) {
-              const sy0 = Math.max(floorBottom, ground - 0.1), aw = awnCols[(b.seed >> 3) % awnCols.length];
-              put('shop', px, sy0, pz, srot, Math.min(1, L / cols / 2.6), 1, 1, WHITE);
-              put((b.seed >> 6) % 4 === 0 ? 'awningStripe' : 'awning', px + n[0] * 0.55, Math.max(floorBottom, ground) + 2.75, pz + n[1] * 0.55, srot, Math.min(2.6, L / cols), 1, 1, (b.seed >> 5) % 5 < 3 ? AWN_CREAM : aw);
+              const sy0 = Math.max(floorBottom, ground - 0.1), aw = AWN_COLS[(b.seed >> 3) % AWN_COLS.length], sk = skin(sy0);
+              put('shop', wx + n[0] * sk, sy0, wz + n[1] * sk, srot, Math.min(1, L / cols / 2.6), 1, 1, WHITE);
+              put((b.seed >> 6) % 4 === 0 ? 'awningStripe' : 'awning', wx + n[0] * (sk + 0.55), Math.max(floorBottom, ground) + 2.75, wz + n[1] * (sk + 0.55), srot, Math.min(2.6, L / cols), 1, 1, (b.seed >> 5) % 5 < 3 ? AWN_CREAM : aw);
+              b.openings.push({ kind: 'shop', wall: i, u0: u - 1.3, u1: u + 1.3, y0: sy0, y1: sy0 + 2.8 });
             }
             continue;
           }
           if (b.vaultEdge === i && inStone) continue;         // the boat store is this wall's ground floor
           if (inStone) {
             // the cellar: at most a small grated window, no shutters
-            if (rng() < 0.3 && wy - 0.2 > ground + 0.9) { any = true; this._window(put, px, wy + 0.25, pz, b, rng, F, W, { cellar: true }); }
+            if (rng() < 0.3 && floorBottom + 1.8 > ground + 0.9) {
+              any = true;
+              const sk = skin(floorBottom);
+              this._window(put, wx + n[0] * sk, floorBottom + 1.8, wz + n[1] * sk, b, rng, F, W, { cellar: true });
+              b.openings.push({ kind: 'cellar', wall: i, u0: u - 0.4, u1: u + 0.4, y0: floorBottom + 1.4, y1: floorBottom + 2.2 });
+            }
             continue;
           }
+          if (!plain(y0)) continue;
+          const inset = lean(yc), px = wx + n[0] * inset, pz = wz + n[1] * inset;
           // a blind bay: bare wall, or a window painted on it
-          if ((front && ci === F.blindCol && cols > 1) || rng() < K.skipWindow) {
-            if (rng() < K.fakeWindow) put('fake', px, wy, pz, srot, 1, 1, 1, b.shutter);
+          if ((front && ci === F.blindCol && cols > 1) || rng() < WIN.skipWindow) {
+            if (rng() < WIN.fakeWindow) put('fake', px, yc, pz, srot, w / 1.0, (y1 - y0) / 1.5, 1, b.shutter);
             continue;
           }
           any = true;
-          const balcony = front && b.balconies && !lowestFloor && !groundFloor && rng() < 0.42;
-          this._window(put, px, wy, pz, b, rng, F, W, { balcony, small: k === 0 && F.smallTop && !balcony, ground: groundFloor });
+          row.push({ u, w, h: y1 - y0, y0, y1, yc, type, px, pz, inset, balcony: type === 'french', ground: groundFloor });
+        }
+        // shutters: a leaf folds back only where there is room beside the window (not over the next window or the door)
+        row.sort((p, p2) => p.u - p2.u);
+        let used = 0.08;                                  // how far along the wall is taken, by openings or folded leaves
+        for (let r = 0; r < row.length; r++) {
+          const o = row[r], lw = o.w / 2;
+          if (door && o.y0 < door.y1 && o.y1 > door.y0 && door.u < o.u) used = Math.max(used, door.u + door.w / 2);
+          const next = r + 1 < row.length ? row[r + 1] : null;
+          const nextEdge = next ? next.u - next.w / 2 : (door && door.u > o.u && o.y0 < door.y1 && o.y1 > door.y0 ? door.u - door.w / 2 : L - 0.08);
+          o.roomLeft = o.u - o.w / 2 - used >= lw + 0.03;
+          o.roomRight = nextEdge - (o.u + o.w / 2) >= lw + 0.03 + (next ? next.w / 2 + 0.03 : 0);   // leave the next window its own left leaf
+          holes[i].push({ u0: o.u - o.w / 2, u1: o.u + o.w / 2, y0: o.y0, y1: o.y1, depth: WIN.recess });
+          b.openings.push({ kind: 'window', wall: i, u0: o.u - o.w, u1: o.u + o.w, y0: o.y0, y1: o.y1 });
+          const foldRight = this._opening(put, b, rng, F, W, o);
+          used = o.u + o.w / 2 + (foldRight ? lw : 0);
         }
         if (any) lowestFloor = false;
       }
@@ -1218,6 +1448,30 @@ export class BuildingRenderer {
           }
         }
         if (F.bouga && !covered(A, e, n, Math.max(0, L - 4.2), L, t.heightAt(Bc[0], Bc[1]), b.top, 0.5)) this._climber(put, b, Bc, e, n, L, rng);
+      }
+    }
+
+    // --- the walls, with every opening cut through them ---
+    gb.layer = LAYERS.plaster;
+    const yb = b.arch ? b.arch.y : base;
+    if (b.arch) gb.face(q.map((p2) => [p2[0], yb, p2[1]]), b.facade, [0, -1, 0]);
+    this._shell(gb, q, qTop, yb, b.top, b.facade, holes);
+    if (dado) {
+      gb.layer = LAYERS.plasterWorn;
+      for (let i = 0; i < 4; i++) {
+        const A = q[i], Bc = q[(i + 1) % 4], n = edgeNormal(q, i), { gA, gB } = dado.walls[i], o = 0.035, h = dado.h;
+        const L = dist(A, Bc), P = (p2, y) => [p2[0] + n[0] * o, y, p2[1] + n[1] * o];
+        const top = (gA + gB) / 2 + h, lo = Math.min(gA, gB) - 0.7;
+        const cut = holes[i].filter((hh) => hh.y0 < top).map((hh) => ({ ...hh, depth: 0, y1: Math.min(hh.y1, top) }));
+        if (cut.length && Math.abs(gA - gB) < 0.6) {
+          // a level dado with a door through it: tiled round the opening (the wall's own reveal shows behind)
+          const cut2 = cut.map((hh) => ({ ...hh, y1: hh.y1 >= top - 0.01 ? top + 0.5 : hh.y1 }));
+          gb.wallHoles(P(A, lo), P(Bc, lo), P(A, top), P(Bc, top), L, lo, top, cut2, dado.col, [n[0], 0, n[1]], 0, L, true);
+          gb.face([[A[0] + n[0] * o, top, A[1] + n[1] * o], [Bc[0] + n[0] * o, top, Bc[1] + n[1] * o], [Bc[0], top + 0.03, Bc[1]], [A[0], top + 0.03, A[1]]], dado.col, [0, 1, 0]);
+        } else {
+          gb.face([P(A, gA - 0.7), P(Bc, gB - 0.7), P(Bc, gB + h), P(A, gA + h)], dado.col, [n[0], 0, n[1]]);
+          gb.face([P(A, gA + h), P(Bc, gB + h), [Bc[0], gB + h + 0.03, Bc[1]], [A[0], gA + h + 0.03, A[1]]], dado.col, [0, 1, 0]);
+        }
       }
     }
 
@@ -1243,71 +1497,13 @@ export class BuildingRenderer {
     return { ver: b.ver, pos: g.pos, nor: g.nor, col: g.col, ao: g.ao, wall: g.wall, parts };
   }
 
-  /**
-   * One window with everything hanging off it. `W` is the wall's frame
-   * (normal n, direction e, rotation); `o` says what kind: { balcony, small,
-   * cellar, ground }.
-   */
-  _window(put, x, y, z, b, rng, F, W, o) {
-    const K = CONFIG.building.look, k = this.style.detailScale, rot = W.rot;
-    const at = (along, out) => [x + W.ex * along + W.nx * out, z + W.ez * along + W.nz * out];
-    let sx = k, sy = k, yy = y;
-    if (o.small) { sx = k * 0.8; sy = k * 0.62; yy = y - 0.12; }
-    if (o.cellar) { sx = k * 0.72; sy = k * 0.5; }
-    if (o.balcony) { sy = k * 1.5; yy = y - 0.35; }        // a balcony door, down to the floor
-    put('window', x, yy, z, rot, sx, sy, 1, WHITE);
-    // per-window randoms (packed in the instance colour): when its light comes on,
-    // the room's wall colour, and how far its curtain is drawn
+  /** A small grated cellar window on a stone ground floor (no recess: the stone stands proud). */
+  _window(put, x, y, z, b, rng, F, W) {
+    const k = this.style.detailScale * 0.72, ky = this.style.detailScale * 0.5;
+    put('window', x, y, z, W.rot, k, ky, 1, WHITE);
     this._gc.setRGB(rng(), rng(), rng());
-    put('glass', x, yy, z, rot, sx, sy, 1, this._gc);
-    put('aoRing', x, yy, z, rot, sx, sy, 1, WHITE);
-    if (o.cellar) { put('bar', x + W.nx * 0.12, yy - 0.3 * sy, z + W.nz * 0.12, rot, 0.03, 0.6 * sy, 0.03, IRON); return; }
-    if (F.deco === 'surrounds' || F.deco === 'full') {
-      put('surround', x, yy, z, rot, sx, sy, 1, F.trim);
-      if (F.deco === 'full' && !o.small) put('pediment', x, yy + 0.75 * (sy - 1), z, rot, sx, 1, 1, F.trim);
-    }
-    if (rng() < CONFIG.building.streakChance) put('streak', x, yy - 0.74 * sy, z, rot, sx * (0.85 + rng() * 0.3), 0.7 + rng() * 0.6, 1, WHITE);
-    // shutters: shut, shut with the lower panel pushed out, folded open, or one leaf each way
-    if (!b.shutterShades) b.shutterShades = [-0.025, 0, 0.025].map((d) => b.shutter.clone().offsetHSL(0, 0, d));
-    const shade = b.shutterShades[(rng() * 3) | 0];
-    const w = F.shut, r = rng() * (w[0] + w[1] + w[2] + w[3]);
-    const state = r < w[0] ? 'shutterClosed' : r < w[0] + w[1] ? (o.balcony ? 'shutterClosed' : 'shutterTilt') : r < w[0] + w[1] + w[2] ? 'shutterOpen' : 'shutterHalf';
-    put(state, x, yy, z, rot, sx, sy, 1, shade);
-    b.shutterStates = b.shutterStates || {}; b.shutterStates[state] = (b.shutterStates[state] || 0) + 1;
-    if (o.balcony) {
-      const by = y - 0.71;                                  // slab just above the floor line
-      put(F.balconySolid ? 'balconySolid' : 'balcony', x, by, z, rot, 1, 1, 1, F.balconySolid ? b.facade : F.balconyTint);
-      if (rng() < K.balconyPots) for (const a of [-0.52, 0.5]) {
-        if (rng() < 0.3) continue;
-        const [px, pz] = at(a + (rng() - 0.5) * 0.2, 0.57);
-        put('pot', px, by - 0.72, pz, 0, 0.8, 0.9, 0.8, TERRACOTTA);
-        put('blob', px, by - 0.3, pz, rng() * 6, 0.22, 0.24, 0.22, LEAF);
-        if (rng() < 0.7) put('blob', px, by - 0.1, pz, rng() * 6, 0.13, 0.1, 0.13, F.flowerCol);
-      }
-      if (rng() < K.balconyWashing) {
-        const n = 2 + ((rng() * 3) | 0);
-        for (let i = 0; i < n; i++) {
-          const [px, pz] = at(-0.55 + (i + rng() * 0.4) * (1.1 / n), 0.86);
-          put('cloth', px, by + 0.2, pz, rot, 0.28 + rng() * 0.22, 0.5 + rng() * 0.4, 1, this._c.set(rng.pick(K.washColours)));
-        }
-      }
-      return;
-    }
-    if (o.ground) return;
-    if (rng() < F.flowers) {
-      const [px, pz] = at(0, 0.21);
-      put('flowerbox', px, yy - 0.75 * sy + 0.1, pz, rot, sx, 1, 1, this._c.set(rng.pick(K.flowerColours)));
-    } else if (rng() < F.wash) {
-      // a washing line on two brackets under the sill
-      const ly = yy - 0.75 * sy - 0.32, [lx, lz] = at(0, 0.38);
-      put('bar', lx, ly, lz, rot, 1.5 * sx, 0.015, 0.015, IRON);
-      for (const a of [-0.72, 0.72]) { const [bx, bz] = at(a * sx, 0.2); put('bar', bx, ly, bz, rot, 0.03, 0.03, 0.4, IRON); }
-      const n = 2 + ((rng() * 3) | 0);
-      for (let i = 0; i < n; i++) {
-        const [px, pz] = at((-0.6 + (i + rng() * 0.3) * (1.2 / n)) * sx, 0.38);
-        put('cloth', px, ly, pz, rot, 0.26 + rng() * 0.26, 0.4 + rng() * 0.5, 1, this._c.set(rng.pick(K.washColours)));
-      }
-    }
+    put('cellarGlass', x, y, z, W.rot, k, ky, 1, this._gc);
+    put('bar', x + W.nx * 0.12, y - 0.3 * ky, z + W.nz * 0.12, W.rot, 0.03, 0.6 * ky, 0.03, IRON);
   }
 
   /** Terracotta pots with geraniums and greenery clustered by a door. */
