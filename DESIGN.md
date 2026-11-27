@@ -116,6 +116,15 @@ the colour palette, and the vegetation.
   cooler light and blue sea. Real-world photos live in the private repo
   `adamglenwines-beep/Rio-reference` (never copy them into this public repo).
 - **Textures:** a CC0 library in `assets/textures/` (see its README for recommended sets).
+- **Approach:** code generates the shapes (buildings, lanes, terrain); assets supply the
+  surfaces and dressing. Default look: neutral daylight, clear blue sky, blue sea; warmth
+  and time of day stay adjustable. The style switcher stays, but the game is built to look
+  best in the style closest to the targets (currently **Hand-painted**, the default).
+- **Material system (v0.8, `src/materials.js`):** every surface comes from two GPU texture
+  arrays (colour; normal + roughness). Buildings, paths and boxes use face-aligned
+  projection; terrain uses triplanar. A material's own colour stays its average colour, so
+  one greyscale plaster covers every pastel. Weathering (damp, grime, worn patches, sill
+  streaks) and anti-repetition are built in. Every texture used is logged in `ASSETS.md`.
 - Reference mood: Riomaggiore, Manarola and Vernazza for form, and Burano and Lake Como
   for colour and mood. Expect saturated pastel facades, green shutters, grey slate roofs,
   dry-stone terraces, and blue-green water.

@@ -144,3 +144,22 @@ The browser console has a few helpers:
 - `game.demo()` lays out the demo village;
 - `game.growth.grow(500)` runs 500 growth steps instantly;
 - `game.rig.postcard()` flies to the postcard view.
+
+## Tests and tools
+
+The game has no build step; `package.json` exists only for tests and tools.
+
+```
+npm install              # three + three-mesh-bvh, for running the tests in Node
+npm run test:unit        # fast logic tests (~2 s)
+npm run test:browser     # opens the game in a headless browser (needs Playwright)
+npm run textures         # re-pack the textures listed in assets/textures/web/sets.json
+```
+
+The browser test checks for errors, missing textures and frame-time regressions against
+`tests/browser/baseline.json` (re-create it on a new machine with
+`npm run test:browser -- --update-baseline`).
+
+Also see `PROGRESS.md` (where work stands), `GLOSSARY.md` (game-dev terms) and
+`ASSETS.md` (every texture used and its licence).
+
