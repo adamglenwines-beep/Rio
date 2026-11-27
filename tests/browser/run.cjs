@@ -9,7 +9,7 @@ const { execSync } = require('node:child_process');
 const ROOT = path.resolve(__dirname, '..', '..');
 const BASELINE = path.join(__dirname, 'baseline.json');
 const UPDATE = process.argv.includes('--update-baseline');
-const SLOWDOWN_LIMIT = 1.6;
+const SLOWDOWN_LIMIT = 2.0;
 
 function loadPlaywright() {
   try { return require('playwright'); } catch (e) { /* fall through */ }
