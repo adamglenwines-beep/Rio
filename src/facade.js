@@ -181,3 +181,127 @@ export function doorGeometries(w, h, recess, arched = false) {
   l.box(0.07, h * 0.45, z + t, 0.12, h * 0.45 + 0.05, z + t + 0.05, '#3a3a3a');
   return { surround: s.geometry(), leaf: l.geometry() };
 }
+
+/**
+ * A balcony of a variant from data (width w, depth d), origin on the wall face at the
+ * middle of the slab's top edge. `slab`: the stone slab, its moulded edge and the consoles
+ * under it (vertex-coloured). `rail`: the iron railing (white: tinted by the instance
+ * colour), or for a solid one a rendered parapet (tinted with the wall colour).
+ */
+export function balconyGeometries(w, d, kind) {
+  const B = FACADES.balconies, t = B.slab, H = B.railHeight, s = new Parts(), r = new Parts();
+  const stone = '#e6dfd2', under = '#cfc7b8';
+  s.box(-w / 2, -t, 0, w / 2, 0, d, stone);
+  s.box(-w / 2 - 0.03, -t - 0.02, d - 0.05, w / 2 + 0.03, -t + 0.04, d + 0.03, under);   // a moulded front edge
+  const nb = w > 2.2 ? 3 : 2;
+  for (let k = 0; k < nb; k++) {                                         // consoles under the slab, tapering to the wall
+    const x = nb === 2 ? (k ? 1 : -1) * (w / 2 - 0.22) : (k - 1) * (w / 2 - 0.25);
+    s.box(x - 0.06, -t - 0.16, 0, x + 0.06, -t, d * 0.75, under);
+    s.box(x - 0.06, -t - 0.34, 0, x + 0.06, -t - 0.16, d * 0.35, under);
+  }
+  const zf = d - 0.06, white = '#ffffff';
+  if (kind === 'solid') {
+    r.box(-w / 2, 0, zf - 0.04, w / 2, H * 0.95, zf + 0.04, white);
+    r.box(-w / 2, 0, 0.02, -w / 2 + 0.08, H * 0.95, zf, white);
+    r.box(w / 2 - 0.08, 0, 0.02, w / 2, H * 0.95, zf, white);
+    r.box(-w / 2 - 0.03, H * 0.95, zf - 0.07, w / 2 + 0.03, H * 0.95 + 0.05, zf + 0.06, '#f2efe8');
+  } else {
+    const bar = 0.022;
+    r.box(-w / 2, H - 0.04, zf - 0.025, w / 2, H, zf + 0.025, white);          // hand rail
+    r.box(-w / 2, 0.08, zf - 0.015, w / 2, 0.11, zf + 0.015, white);           // bottom rail
+    for (const x of [-w / 2, w / 2 - 0.04]) {                                  // side rails and corner posts
+      r.box(x, H - 0.04, 0.02, x + 0.04, H, zf, white);
+      r.box(x, 0, zf - 0.02, x + 0.04, H, zf + 0.02, white);
+    }
+    const n = Math.max(2, Math.round(w / B.barSpacing));
+    for (let k = 1; k < n; k++) { const x = -w / 2 + (k / n) * w; r.box(x - bar / 2, 0.11, zf - bar / 2, x + bar / 2, H - 0.04, zf + bar / 2, white); }
+    const ns = Math.max(2, Math.round(d / B.barSpacing));
+    for (const x of [-w / 2 + 0.02, w / 2 - 0.02]) for (let k = 1; k < ns; k++) {
+      const z = 0.02 + (k / ns) * (zf - 0.02); r.box(x - bar / 2, 0.11, z - bar / 2, x + bar / 2, H - 0.04, z + bar / 2, white);
+    }
+  }
+  return { slab: s.geometry(), rail: r.geometry() };
+}
+
+/** A chair on a balcony or terrace (seat, back, legs), about 0.45 m wide. */
+export function chairGeometry() {
+  const p = new Parts(), c = '#ffffff';
+  p.box(-0.21, 0.42, -0.2, 0.21, 0.46, 0.2, c);
+  p.box(-0.21, 0.46, -0.21, 0.21, 0.88, -0.18, c);
+  for (const [x, z] of [[-0.19, -0.18], [0.17, -0.18], [-0.19, 0.16], [0.17, 0.16]]) p.box(x, 0, z, x + 0.03, 0.42, z + 0.03, c);
+  return p.geometry();
+}
+
+/** A shopfront in a recessed opening w × h: frame, glazing bars, a glazed door and a stall riser (vertex-coloured). */
+export function shopfrontGeometry(w, h, recess) {
+  const p = new Parts(), wood = '#e9e1cf', glass = '#2c3238', riser = '#cfc6b5', z0 = -recess, z1 = -recess + 0.08, b = 0.08;
+  p.box(-w / 2, 0, z0, w / 2, 0.55, z1, riser);                                   // the stall riser
+  p.box(-w / 2, 0.55, z0 - 0.02, w / 2, h, z0 + 0.01, glass);                      // glazing (behind the bars)
+  p.box(-w / 2, h - b, z0, w / 2, h, z1, wood);
+  p.box(-w / 2, 0.55, z0, w / 2, 0.55 + b, z1, wood);
+  for (const x of [-w / 2, w / 2 - b, -w / 6 - b / 2, w / 6 - b / 2]) p.box(x, 0, z0, x + b, h, z1, wood);
+  p.box(-w / 2, h - 0.6, z0, w / 2, h - 0.6 + b * 0.7, z1, wood);                  // transom bar
+  p.box(-w / 6, 0, z0 - 0.01, w / 6, 0.55, z1 - 0.01, glass);                     // the door's glazed lower half (it is a door)
+  p.box(-w / 2 - 0.15, -0.16, z0, w / 2 + 0.15, 0.0, 0.3, '#e0dcd4');              // stone threshold
+  return p.geometry();
+}
+
+/** A shop sign board over the opening (white: tinted per shop), with pale lettering strokes. */
+export function signGeometry(w) {
+  const p = new Parts();
+  p.box(-w / 2, 0, GAP - 0.01, w / 2, 0.42, GAP + 0.04, '#ffffff');
+  for (let k = 0; k < 5; k++) { const x = -w * 0.3 + k * w * 0.13; p.box(x, 0.12, GAP + 0.04, x + w * 0.08, 0.3, GAP + 0.05, '#f0e9d8'); }
+  return p.geometry();
+}
+
+/**
+ * A round-headed entry w × h (opening cut through the wall as a rectangle): the spandrels
+ * that fill its top corners and the arch's curved soffit (tinted with the wall colour),
+ * and a ring of stone voussoirs standing just proud of the wall.
+ */
+export function archGeometries(w, h, recess) {
+  const r = w / 2, ys = h - r;
+  const sp = new THREE.Shape();
+  sp.moveTo(-r, ys); sp.lineTo(-r, h); sp.lineTo(r, h); sp.lineTo(r, ys);
+  sp.absarc(0, ys, r, 0, Math.PI, false);
+  const spandrel = new THREE.ExtrudeGeometry(sp, { depth: recess, bevelEnabled: false, curveSegments: 14 }).translate(0, 0, -recess).toNonIndexed();
+  spandrel.computeVertexNormals();
+  const ring = new THREE.Shape(), R2 = r + 0.2;
+  ring.absarc(0, ys, R2, 0, Math.PI, false); ring.lineTo(-r, ys); ring.absarc(0, ys, r, Math.PI, 0, true); ring.lineTo(R2, ys);
+  const voussoirs = new THREE.ExtrudeGeometry(ring, { depth: 0.05, bevelEnabled: false, curveSegments: 14 }).translate(0, 0, GAP - 0.03).toNonIndexed();
+  voussoirs.computeVertexNormals();
+  return { spandrel, voussoirs };
+}
+
+/**
+ * An awning: a sloping canopy with a valance along its front, 1 m wide (scaled to the
+ * opening) and `depth` deep, hung from the wall at the origin. Striped in the shader.
+ */
+export function awningGeometry(depth, drop) {
+  const p = new Parts(), c = '#ffffff';
+  const slope = 0.42, zf = depth, yf = -depth * Math.tan(slope);
+  p.quad([-0.5, 0, GAP], [-0.5, yf, zf], [0.5, yf, zf], [0.5, 0, GAP], c);           // canopy, top
+  p.quad([-0.5, 0, GAP], [0.5, 0, GAP], [0.5, yf, zf], [-0.5, yf, zf], '#d9d9d9');   // canopy, underside
+  p.quad([-0.5, yf - drop, zf], [0.5, yf - drop, zf], [0.5, yf, zf], [-0.5, yf, zf], c);   // valance
+  p.quad([-0.5, yf - drop, zf], [-0.5, yf, zf], [0.5, yf, zf], [0.5, yf - drop, zf], '#d9d9d9');
+  for (const x of [-0.5, 0.5]) p.quad([x, 0, GAP], [x, yf, zf], [x, yf - 0.02, zf], [x, -0.02, GAP], '#bdbdbd');   // side arms (thin)
+  return p.geometry();
+}
+
+/** Awning cloth: stripes of the instance colour and cream across its width (`stripe` metres each). */
+export function awningMaterial(stripe) {
+  const m = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = 'varying vec3 vAw;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      vAw = position;
+      #ifdef USE_INSTANCING
+        vAw.x *= length(instanceMatrix[0].xyz);           // metres across, so stripes keep their width
+      #endif`);
+    sh.fragmentShader = 'varying vec3 vAw;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      {
+        float st = step(0.5, fract(vAw.x / ${(2 * stripe).toFixed(3)} + 0.25));
+        diffuseColor.rgb = mix(vec3(0.86, 0.82, 0.72), diffuseColor.rgb, st);
+      }`);
+  };
+  return m;
+}

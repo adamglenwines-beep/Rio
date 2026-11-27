@@ -84,7 +84,8 @@
     "archedEntry": { "w": 1.6, "h": 2.7, "recess": 0.32 },
     "door": { "w": 1.05, "h": 2.15, "recess": 0.22 },
     "steps": 0.5,
-    "awning": { "depth": 1.5, "drop": 0.35, "stripes": 9 }
+    "awning": { "depth": 1.5, "drop": 0.3, "stripe": 0.2, "plain": 0.35 },
+    "stoneBase": { "height": [0.55, 1.0], "out": 0.06 }
   },
 
   "trim": {

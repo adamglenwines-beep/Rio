@@ -22,7 +22,7 @@ import { sub, norm, dist, lerp2, centroid, edgeNormal, offsetPoly, chamferPoly, 
 import { STYLES, registerStyled } from './style.js';
 import { LAYERS } from './materials.js';
 import { PALETTE, FACADES } from './data.js';
-import { frameGeometry, leafGeometry, surroundGeometry, paintedOpeningMaterial, doorGeometries, WINDOW_TYPES, GLASS_Z } from './facade.js';
+import { frameGeometry, leafGeometry, surroundGeometry, paintedOpeningMaterial, doorGeometries, balconyGeometries, chairGeometry, WINDOW_TYPES, GLASS_Z } from './facade.js';
 
 const FH = CONFIG.building.floorHeight;
 const WHITE = new THREE.Color(1, 1, 1);
@@ -312,7 +312,7 @@ export class BuildingRenderer {
       streak:  { geo: new THREE.PlaneGeometry(1.1, 1.9).translate(0, -0.95, GAP + 0.02), mat: this._streakMaterial(), shadow: false },
       // the glass: an interior-mapped fake room behind every window (see _glassMaterial)
       // (v0.13: at the back of the recess; scaled to each opening)
-      glass:   { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, GLASS_Z), mat: this._glassMaterial(), shadow: false, lod: 'near' },
+      glass:   { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, GLASS_Z), mat: this._glassMaterial(), shadow: true, lod: 'near' },   // casts: otherwise sun shines through the openings
       balcony: { geo: shift(0.02, [[box(1.56, 0.12, 0.86, 0, -0.78, 0.42), pale], [box(0.1, 0.22, 0.6, -0.6, -0.92, 0.3), stoneTrim], [box(0.1, 0.22, 0.6, 0.6, -0.92, 0.3), stoneTrim],
                                      [box(1.52, 0.05, 0.05, 0, 0.21, 0.8), iron], [box(1.52, 0.03, 0.03, 0, -0.68, 0.8), iron],
                                      [box(0.05, 0.05, 0.8, -0.74, 0.21, 0.42), iron], [box(0.05, 0.05, 0.8, 0.74, 0.21, 0.42), iron], ...bars]), mat: vc, shadow: true },
@@ -354,9 +354,16 @@ export class BuildingRenderer {
     this.parts.leafR = { geo: leafGeometry(true, true), mat: leafMat, shadow: true, lod: 'near' };
     this.parts.cellarGlass = { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, Ly.glass), mat: this.parts.glass.mat, shadow: false };
     const paintGeo = new THREE.PlaneGeometry(2, 1.06).translate(0, -0.03, GAP + 0.02);
+    // balconies: a slab (stone, consoles) and a railing per variant in data/facades.json
+    for (const v of FACADES.balconies.variants) {
+      const g = balconyGeometries(v.width, v.depth, v.rail);
+      this.parts['balSlab_' + v.name] = { geo: g.slab, mat: vc, shadow: true };
+      this.parts['balRail_' + v.name] = { geo: g.rail, mat: lambert(), shadow: true, far: 320 };
+    }
+    this.parts.chair = { geo: chairGeometry(), mat: lambert(), shadow: false, far: 120 };
     const D = FACADES.groundFloors.door, dg = doorGeometries(D.w, D.h, D.recess);
     this.parts.doorJambs = { geo: dg.surround, mat: lambert({ vertexColors: true }), shadow: true };
-    this.parts.doorLeaf = { geo: dg.leaf, mat: lambert({ vertexColors: true }), shadow: false };
+    this.parts.doorLeaf = { geo: dg.leaf, mat: lambert({ vertexColors: true }), shadow: true };
     for (const st of ['closed', 'open', 'half', 'none']) this.parts['paint_' + st] = { geo: paintGeo, mat: paintedOpeningMaterial(st), shadow: false, lod: 'far' };
     for (const p of Object.values(this.parts)) { p.mesh = null; p.cap = 0; }
     registerStyled(this.massMat, 'surface', { mode: 'face', layer: 'attr', weather: true, trueMean: true });
@@ -933,25 +940,7 @@ export class BuildingRenderer {
       }
     }
     const at = (along, out) => [o.px + e[0] * along + n[0] * out, o.pz + e[1] * along + n[1] * out];
-    if (o.balcony) {
-      const by = o.y0 + 0.7;                                // the old balcony part: its slab top 0.72 below its origin
-      put(F.balconySolid ? 'balconySolid' : 'balcony', o.px, by, o.pz, rot, 1, 1, 1, F.balconySolid ? b.facade : F.balconyTint);
-      if (rng() < K.balconyPots) for (const a of [-0.52, 0.5]) {
-        if (rng() < 0.3) continue;
-        const [px, pz] = at(a + (rng() - 0.5) * 0.2, 0.57);
-        put('pot', px, by - 0.72, pz, 0, 0.8, 0.9, 0.8, TERRACOTTA);
-        put('blob', px, by - 0.3, pz, rng() * 6, 0.22, 0.24, 0.22, LEAF);
-        if (rng() < 0.7) put('blob', px, by - 0.1, pz, rng() * 6, 0.13, 0.1, 0.13, F.flowerCol);
-      }
-      if (rng() < K.balconyWashing) {
-        const nn = 2 + ((rng() * 3) | 0);
-        for (let i = 0; i < nn; i++) {
-          const [px, pz] = at(-0.55 + (i + rng() * 0.4) * (1.1 / nn), 0.86);
-          put('cloth', px, by + 0.2, pz, rot, 0.28 + rng() * 0.22, 0.5 + rng() * 0.4, 1, this._c.set(rng.pick(K.washColours)));
-        }
-      }
-      return foldRight;
-    }
+    if (o.balcony) return foldRight;                      // (the balcony is added per floor, see _balcony)
     if (o.ground) return foldRight;
     if (rng() < F.flowers) {
       const [px, pz] = at(0, 0.2);
@@ -968,6 +957,52 @@ export class BuildingRenderer {
       }
     }
     return foldRight;
+  }
+
+  /**
+   * A balcony on a wall (v0.13): slab on consoles with an iron railing or a rendered
+   * parapet, a variant from data/facades.json chosen to fit the width it must span;
+   * then pots and flowers along the rail, sometimes a chair, washing over the rail.
+   */
+  _balcony(put, b, rng, F, W, uC, span, y, wide, inset = 0) {
+    const BAL = FACADES.balconies, K = CONFIG.building.look, { A, e, n, rot } = W, t = this.terrain;
+    const fits = BAL.variants.filter((v) => (wide ? v.width >= 2.2 : v.width < 2.2));
+    const v = rng.weighted((fits.length ? fits : BAL.variants).map((x) => [x, x.weight]));
+    const sx = Math.max(span, v.width * 0.85) / v.width, w = v.width * sx, d = v.depth;
+    const ox = A[0] + e[0] * uC + n[0] * inset, oz = A[1] + e[1] * uC + n[1] * inset;
+    if (y - t.heightAt(ox + n[0] * d, oz + n[1] * d) < 2.2) return;   // never a balcony hanging over a lane at head height
+    const solid = v.rail === 'solid';
+    const railCol = solid ? b.facade.clone().offsetHSL(0, -0.04, 0.05) : new THREE.Color(rng.weighted(BAL.railColours));
+    put('balSlab_' + v.name, ox, y, oz, rot, sx, 1, 1, WHITE);
+    put('balRail_' + v.name, ox, y, oz, rot, sx, 1, 1, railCol);
+    b.balconyCount = (b.balconyCount || 0) + 1; (b.balconyWalls = b.balconyWalls || []).push(W.wall);
+    const at = (along, out) => [ox + e[0] * along + n[0] * out, oz + e[1] * along + n[1] * out];
+    const H = BAL.railHeight, potY = solid ? y + H * 0.95 + 0.05 : y, potOut = solid ? d - 0.06 : d - 0.2;
+    if (rng() < BAL.pots) {
+      const np = Math.max(1, Math.round(w / 0.55));
+      for (let k = 0; k < np; k++) {
+        const a = -w / 2 + 0.2 + (k + 0.5) * ((w - 0.4) / np) + (rng() - 0.5) * 0.1;
+        if (!wide && Math.abs(a) < 0.35 && !solid) continue;      // keep the doorway clear
+        if (rng() < 0.25) continue;
+        const [px, pz] = at(a, potOut), s = 0.7 + rng() * 0.4;
+        put('pot', px, potY, pz, 0, s, 0.9 * s, s, TERRACOTTA);
+        put('blob', px, potY + 0.38 * s, pz, rng() * 6, 0.22 * s, 0.24 * s, 0.22 * s, LEAF);
+        if (rng() < BAL.flowers) put('blob', px, potY + 0.56 * s, pz, rng() * 6, 0.15, 0.11, 0.15, rng() < 0.5 ? F.flowerCol : this._c.set(rng.pick(K.flowerColours)));
+      }
+      // geraniums spilling over the front rail
+      if (!solid && rng() < BAL.flowers) for (let k = 0; k < 2 + ((rng() * 3) | 0); k++) {
+        const [px, pz] = at((rng() - 0.5) * (w - 0.4), d + 0.04);
+        put('blob', px, y + H * (0.55 + rng() * 0.3), pz, rng() * 6, 0.2, 0.16, 0.09, rng() < 0.6 ? F.flowerCol : LEAF);
+      }
+    }
+    if (rng() < BAL.chair) { const [px, pz] = at((rng() < 0.5 ? -1 : 1) * (w / 2 - 0.35), 0.45); put('chair', px, y, pz, rot + (rng() - 0.5) * 0.6, 1, 1, 1, this._c.set(rng.pick(['#2f5a44', '#e9e6de', '#8a6844']))); }
+    if (!solid && rng() < BAL.washing) {
+      const nn = 2 + ((rng() * 3) | 0);
+      for (let i = 0; i < nn; i++) {
+        const [px, pz] = at(-w / 2 + 0.3 + (i + rng() * 0.4) * ((w - 0.6) / nn), d + 0.02);
+        put('cloth', px, y + H + 0.01, pz, rot, 0.3 + rng() * 0.25, 0.55 + rng() * 0.35, 1, this._c.set(rng.pick(K.washColours)));
+      }
+    }
   }
 
   /** Walls of a footprint: chamfered (and shaded round) in the softer styles. */
@@ -1357,12 +1392,19 @@ export class BuildingRenderer {
         }
       }
 
+      // balconies: most upper floors of harbour-front houses, some elsewhere; one per floor, or now and then
+      // one running across the whole facade
+      const BAL = FACADES.balconies, [hcx, hcz] = centroid(q), hbr = this.terrain.harbour;
+      const harbourHouse = Math.hypot(hcx - hbr.x, hcz - hbr.z) < FACADES.groundFloors.harbourRadius;
+      const seaward = harbourHouse && n[1] > 0.35;          // the sea lies toward +z: walls looking out over the harbour
+      const pBal = seaward ? BAL.chanceHarbourFront : front ? (b.balconies ? BAL.chanceFront : 0) : (b.balconies ? BAL.chanceSide : 0);
       let lowestFloor = true;
       for (let k = 0; ; k++) {
         const floorBottom = b.top - FH * (k + 1);
         if (floorBottom < base) break;
         let any = false;
-        const row = [];                                   // this storey's windows: planned first, shutters decided left to right
+        const row = [];
+        const floorBal = rng() < pBal ? ((front || seaward) && cols >= 2 && rng() < 0.45 ? 'all' : 'one') : 'none', balCol = (rng() * cols) | 0;                                   // this storey's windows: planned first, shutters decided left to right
         for (let ci = 0; ci < cols; ci++) {
           const u = us[ci];
           const wx = A[0] + e[0] * u, wz = A[1] + e[1] * u;
@@ -1371,7 +1413,7 @@ export class BuildingRenderer {
           const groundFloor = floorBottom < ground + 1.2;
           const inStone = stoneTop && floorBottom < stoneTop - 0.5;
           // which kind of window: a balcony door (French window), a small top-floor window, or the standard one
-          const balcony = front && b.balconies && !lowestFloor && !groundFloor && rng() < 0.42;
+          const balcony = floorBal !== 'none' && !lowestFloor && !groundFloor && (floorBal === 'all' || ci === balCol);
           let type = balcony ? 'french' : (k === 0 && F.smallTop ? 'small' : 'standard');
           let T = WIN.types[type];
           let y0 = floorBottom + T.sillAt, y1 = y0 + T.h;
@@ -1385,7 +1427,7 @@ export class BuildingRenderer {
           if (t.heightAt(wx + n[0] * WIN.clearInFront, wz + n[1] * WIN.clearInFront) > y0 - 0.3) continue;
           const w = T.w;
           // on a wall area covered by, or within ~2 m of, a neighbour? Shared walls get no openings.
-          if (covered(A, e, n, u - w, u + w, y0 - 0.2, y1 + 0.3, WIN.clearInFront)) continue;
+          if (covered(A, e, n, u - w / 2 - 0.15, u + w / 2 + 0.15, y0 - 0.2, y1 + 0.3, WIN.clearInFront)) continue;
           if (ci === doorCol && door && y0 < door.y1 && y1 > door.y0) { any = true; continue; }   // the door is here
           const yc = (y0 + y1) / 2;
           if (front && groundFloor && b.kind === ZONE.COM) {
@@ -1427,12 +1469,23 @@ export class BuildingRenderer {
           if (door && o.y0 < door.y1 && o.y1 > door.y0 && door.u < o.u) used = Math.max(used, door.u + door.w / 2);
           const next = r + 1 < row.length ? row[r + 1] : null;
           const nextEdge = next ? next.u - next.w / 2 : (door && door.u > o.u && o.y0 < door.y1 && o.y1 > door.y0 ? door.u - door.w / 2 : L - 0.08);
-          o.roomLeft = o.u - o.w / 2 - used >= lw + 0.03;
-          o.roomRight = nextEdge - (o.u + o.w / 2) >= lw + 0.03 + (next ? next.w / 2 + 0.03 : 0);   // leave the next window its own left leaf
+          // (and a folded leaf must not reach into a neighbour standing beside the window)
+          o.roomLeft = o.u - o.w / 2 - used >= lw + 0.03 && !covered(A, e, n, o.u - o.w / 2 - lw - 0.05, o.u - o.w / 2, o.y0, o.y1, 0.25);
+          o.roomRight = nextEdge - (o.u + o.w / 2) >= lw + 0.03 + (next ? next.w / 2 + 0.03 : 0)   // leave the next window its own left leaf
+            && !covered(A, e, n, o.u + o.w / 2, o.u + o.w / 2 + lw + 0.05, o.y0, o.y1, 0.25);
           holes[i].push({ u0: o.u - o.w / 2, u1: o.u + o.w / 2, y0: o.y0, y1: o.y1, depth: WIN.recess });
-          b.openings.push({ kind: 'window', wall: i, u0: o.u - o.w, u1: o.u + o.w, y0: o.y0, y1: o.y1 });
+          b.openings.push({ kind: 'window', wall: i, u0: o.u - o.w / 2, u1: o.u + o.w / 2, y0: o.y0, y1: o.y1 });
           const foldRight = this._opening(put, b, rng, F, W, o);
           used = o.u + o.w / 2 + (foldRight ? lw : 0);
+        }
+        // the balconies of this floor: one per French window, merged where two would touch
+        const bal = row.filter((o) => o.balcony);
+        for (let r = 0; r < bal.length;) {
+          let r2 = r;
+          while (r2 + 1 < bal.length && bal[r2 + 1].u - bal[r2].u < 2.4) r2++;
+          const u0 = bal[r].u - bal[r].w / 2 - 0.25, u1 = bal[r2].u + bal[r2].w / 2 + 0.25;
+          this._balcony(put, b, rng, F, W, (u0 + u1) / 2, u1 - u0, bal[r].y0 - 0.005, r2 > r || floorBal === 'all', lean(bal[r].y0));
+          r = r2 + 1;
         }
         if (any) lowestFloor = false;
       }
