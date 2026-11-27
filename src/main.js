@@ -123,7 +123,7 @@ game.renderFrame = (dt, rawDt = dt) => {
   if (game.infill.busy && game.infill.work(CONFIG.infill.frameBudgetMs)) { terraces.refresh(game.growth, game.infill); scenery.refresh(game.growth, game.infill); terrain.setTownMask((x, z) => game.infill.townDistance(x, z)); }
   rig.update(dt);
   camera.updateMatrixWorld();   // everything drawn this frame uses this frame's camera
-  game.growth.renderer.updateLod(camera);   // detail by distance, per chunk of the town
+  if (game.growth.renderer.updateLod(camera)) game.gfx.shadowsDirty();   // detail by distance, per chunk (the frames and leaves cast shadows)
   sea.update(elapsed, dt * (game.speed > 0 ? 1 : 0));
   matUniforms.uTime.value = elapsed;
   game.fish.update(dt, elapsed, game.gfx.tod ? 1 - game.gfx.tod.night : 1);

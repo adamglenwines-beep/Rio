@@ -313,7 +313,7 @@ export class BuildingRenderer {
       streak:  { geo: new THREE.PlaneGeometry(1.1, 1.9).translate(0, -0.95, GAP + 0.02), mat: this._streakMaterial(), shadow: false },
       // the glass: an interior-mapped fake room behind every window (see _glassMaterial)
       // (v0.13: at the back of the recess; scaled to each opening)
-      glass:   { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, GLASS_Z), mat: this._glassMaterial(), shadow: true, lod: 'near' },   // casts: otherwise sun shines through the openings
+      glass:   { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, GLASS_Z), mat: this._glassMaterial(), shadow: false, lod: 'near' },
       balcony: { geo: shift(0.02, [[box(1.56, 0.12, 0.86, 0, -0.78, 0.42), pale], [box(0.1, 0.22, 0.6, -0.6, -0.92, 0.3), stoneTrim], [box(0.1, 0.22, 0.6, 0.6, -0.92, 0.3), stoneTrim],
                                      [box(1.52, 0.05, 0.05, 0, 0.21, 0.8), iron], [box(1.52, 0.03, 0.03, 0, -0.68, 0.8), iron],
                                      [box(0.05, 0.05, 0.8, -0.74, 0.21, 0.42), iron], [box(0.05, 0.05, 0.8, 0.74, 0.21, 0.42), iron], ...bars]), mat: vc, shadow: true },
@@ -355,6 +355,9 @@ export class BuildingRenderer {
     this.parts.leafR = { geo: leafGeometry(true, true), mat: leafMat, shadow: true, lod: 'near' };
     this.parts.cellarGlass = { geo: new THREE.PlaneGeometry(0.74, 1.24).translate(0, 0, Ly.glass), mat: this.parts.glass.mat, shadow: false };
     const paintGeo = new THREE.PlaneGeometry(2, 1.06).translate(0, -0.03, GAP + 0.02);
+    // the back of every window opening: a dark plate behind the frame, always drawn and casting a
+    // shadow, so the sun never shines through a house's openings whatever the detail level
+    this.parts.holeBack = { geo: new THREE.PlaneGeometry(1, 1).translate(0, 0, -FACADES.windows.recess - 0.01), mat: lambert({ color: '#2b2a28' }), shadow: true };
     // balconies: a slab (stone, consoles) and a railing per variant in data/facades.json
     for (const v of FACADES.balconies.variants) {
       const g = balconyGeometries(v.width, v.depth, v.rail);
@@ -888,6 +891,7 @@ export class BuildingRenderer {
     this._gc.setRGB(rng(), rng(), rng());
     const fb = WIN.frame.bar;
     put('glass', o.px, o.yc, o.pz, rot, (o.w - 2 * fb) / 0.74, (o.h - 2 * fb) / 1.24, 1, this._gc);
+    put('holeBack', o.px, o.yc, o.pz, rot, o.w, o.h, 1, WHITE);
     if (F.deco === 'surrounds' || F.deco === 'full') {
       put('sur_' + o.type, o.px, o.yc, o.pz, rot, 1, ky, 1, F.trimSoft);
       if (F.deco === 'full' && o.type !== 'small') put('pediment', o.px, o.y1 + WIN.lintel.height + 0.04 - 0.92, o.pz, rot, (o.w + 0.4) / 1.52, 1, 1, F.trimSoft);
@@ -1213,15 +1217,17 @@ export class BuildingRenderer {
    */
   updateLod(camera) {
     const D = this.lodDist.value, p = camera.position;
+    let changed = false;
     for (const ch of this.chunks.values()) {
       const near = p.distanceTo(ch.sphere.center) - ch.sphere.radius * 0.55 < D;
       if (near === ch.lodNear) continue;
-      ch.lodNear = near;
+      ch.lodNear = near; changed = true;
       for (const m of Object.values(ch.parts)) {
         const lod = m.userData.lod;
         m.visible = m.count > 0 && (!lod || (lod === 'near') === near);
       }
     }
+    return changed;
   }
 
   /** How many instances of a part kind the town has (all chunks). */

@@ -143,7 +143,7 @@ export const CONFIG = {
     floorBonus: [[0, 4], [1, 3], [2, 1.2], [-1, 2]],   // each house's own leaning: storeys above or below what its site suggests
     roofPitch: 0.07,       // (old flat roofs; each house now draws its pitch from look.roofPitch)
     detailReach: { low: 0.5, medium: 0.8, high: 1.0 },
-    chunkSize: 36,         // the town is drawn in square chunks this wide (m): off-screen chunks are skipped
+    chunkSize: 48,         // the town is drawn in square chunks this wide (m): off-screen chunks are skipped
     lodDistance: 75,       // closer than this (m, × detailReach), openings are recessed with louvred shutters; further, painted flat   // how far small facade details are drawn (× each detail's own distance)
     // The look of a house: shares (0–1) of houses or windows that get each thing.
     look: {
