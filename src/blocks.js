@@ -290,7 +290,7 @@ export function planLots(world, grid) {
         // the lane it lies along: the frontage line most of its lane-side cells are nearest to
         const votes = new Map();
         for (const k of comp) {
-          const p = [grid.xOf(k % grid.N), grid.xOf((k / grid.N) | 0)], nf = world.nearestFrontage(p, 1.6, null);
+          const p = [grid.xOf(k % grid.N), grid.xOf((k / grid.N) | 0)], nf = world.nearestFrontage(p, D.gapReach, null);
           if (!nf) continue;
           const key = nf.lane.name + ':' + nf.side, v = votes.get(key) || { n: 0, lane: nf.lane, side: nf.side, pts: [] };
           v.n++; v.pts.push(p); votes.set(key, v);
@@ -304,7 +304,7 @@ export function planLots(world, grid) {
           const p = [grid.xOf(k % grid.N), grid.xOf((k / grid.N) | 0)], pr = project(line, p);
           if (pr.d > D.maxDepth8 || pr.d < -0.5) continue;
           dmax = Math.max(dmax, pr.d + 0.5);
-          if (pr.d < 2.5) { s0 = Math.min(s0, pr.s - 0.5); s1 = Math.max(s1, pr.s + 0.5); }   // its stretch of lane
+          if (pr.d < D.gapReach + 1) { s0 = Math.min(s0, pr.s - 0.5); s1 = Math.max(s1, pr.s + 0.5); }   // its stretch of lane
         }
         s0 = Math.max(0, s0); s1 = Math.min(line.total, s1);
         if (!(s1 - s0 >= D.gapMinWidth)) continue;

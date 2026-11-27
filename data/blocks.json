@@ -16,5 +16,6 @@
   "rearMin": 3.2,
   "rearMax": 9,
   "cornerDepth": [4.5, 8],
-  "sample": 0.25, "wedgePasses": 2, "wedgeReach": 5, "wedgeMinSin": 0.4, "maxOverlap": 0.004, "gapMinArea": 6, "gapMinWidth": 2.4, "maxDepth8": 9
+  "sample": 0.25, "wedgePasses": 2, "wedgeReach": 5, "wedgeMinSin": 0.4, "maxOverlap": 0.004, "gapMinArea": 6, "gapMinWidth": 2.4, "gapReach": 2.6, "maxDepth8": 9,
+  "test": { "maxSliver": 12, "maxYard": 60, "minBlockArea": 100, "blockSlack": 0.12 }
 }
