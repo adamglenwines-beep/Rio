@@ -111,6 +111,11 @@ the colour palette, and the vegetation.
   a **placeholder**, and the final **art style is still undecided.**
 - **Target: desktop browser** (PC first). Every effect still has Low / Medium / High
   quality settings, which will matter again for a later tablet port.
+- **Art target:** the four images in `docs/art-target/` (see its README). Match them from
+  the postcard view; simplify where you play. They read too yellow: prefer target 03's
+  cooler light and blue sea. Real-world photos live in the private repo
+  `adamglenwines-beep/Rio-reference` (never copy them into this public repo).
+- **Textures:** a CC0 library in `assets/textures/` (see its README for recommended sets).
 - Reference mood: Riomaggiore, Manarola and Vernazza for form, and Burano and Lake Como
   for colour and mood. Expect saturated pastel facades, green shutters, grey slate roofs,
   dry-stone terraces, and blue-green water.
