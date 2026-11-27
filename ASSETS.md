@@ -50,3 +50,18 @@ game by the large-scale second sample.
   built from sets already in the library instead.
 - No 3D model packs (Kenney, Quaternius) yet: shapes are made by code. The sandbox cannot
   reach those sites either, so nothing new was downloaded in this run.
+
+## Paid packs that might be worth buying (nothing has been bought)
+
+Prices could **not be checked** in the v0.9–v0.11 run (the build sandbox has no access to
+shop sites); the figures are from memory and need confirming before any purchase. Check
+that each licence allows use in a game you may sell.
+
+| Pack | Rough price | Why it could be worth it |
+|---|---|---|
+| A Mediterranean plant set of real 3D models: bougainvillea, agave, prickly pear, olive, stone pine (for example from the Fab / Quixel Megascans store, or a stylised plant pack on itch.io or the Unity/Unreal stores) | about US$10–40 per pack; some single plants a few dollars | The biggest remaining gap from the targets is vegetation. Our bushes and climbers are lumps made by code; proper leafy models with cut-out textures would lift every view. Check first whether the free Quaternius and Kenney nature packs are enough. |
+| A small-boat pack with rowing and fishing boats in the Mediterranean style (CGTrader, Sketchfab store, itch.io) | about US$10–30 | Our boats are simple hulls. A handful of good gozzo-style boats, with oars, nets and crates, would improve the harbour close up. |
+| SpeedTree (subscription) or a tree-library pack | about US$19 a month for the indie plan | Only if a later run wants trees that move in the wind and come with ready-made levels of detail. Probably overkill for this game's style. |
+
+Not recommended: paid texture subscriptions (Poliigon, Textures.com). The CC0 library
+already in `assets/textures/` covers every surface used so far.

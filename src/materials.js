@@ -44,6 +44,7 @@ export const matUniforms = {
   uMipBias: { value: 0 },                // >0 = softer textures (per art style)
   uMacro: { value: 1 },                  // large-scale anti-repetition sample (off on Low)
   uWeather: { value: 1 },                // damp / grime strength
+  uTime: { value: 0 },                   // seconds (for the moving light on the sea bed)
 };
 
 /** Layer indices by key, filled from the manifest. */
@@ -140,7 +141,7 @@ const f1 = (v) => Number(v).toFixed(4);
 
 const GLSL_COMMON = /* glsl */`
   uniform highp sampler2DArray uAlbedoArr, uDataArr;
-  uniform float uTexOn, uDetail, uNormalK, uMipBias, uMacro, uWeather;
+  uniform float uTexOn, uDetail, uNormalK, uMipBias, uMacro, uWeather, uTime;
   uniform vec4 uLayerP[32];
   uniform vec3 uLayerMean[32];
   float mHash(vec2 p) { p = fract(p * vec2(233.34, 851.73)); p += dot(p, p + 23.45); return fract(p.x * p.y); }
@@ -357,6 +358,11 @@ export function terrainGLSL() {
           }
           cp *= mix(1.0, 0.5, 1.0 - smoothstep(-0.1, 0.45, y)); // wet at the waterline
           cp = mix(cp, ${g3(C.seabed)}, smoothstep(-1.0, -8.0, y) * 0.75);
+          if (y < 0.0 && y > -6.0) {                             // light dancing on the shallow sea bed
+            vec2 cq = wp.xz * 0.8;
+            float c1 = mNoise(cq + vec2(uTime * 0.31, uTime * 0.17)), c2 = mNoise(cq * 1.37 - vec2(uTime * 0.23, -uTime * 0.29));
+            cp += vec3(0.95, 0.92, 0.72) * smoothstep(0.6, 1.0, 1.0 - abs(c1 - c2) * 3.2) * ${f1(CONFIG.water.caustics)} * (1.0 - smoothstep(0.5, 6.0, -y)) * smoothstep(0.0, -0.3, y);
+          }
           cg = mix(cg, cp, shore); tn = mix(tn, pb.tn, shore); rg = mix(rg, pb.rough * 0.8, shore);
         }
         tn = normalize(tn);

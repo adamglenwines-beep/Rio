@@ -14,7 +14,9 @@ live link, carry straight on. Dev branch: `claude/hopeful-knuth-kp9ia6`.
 | Step 0: flashing when the camera moves | (in v0.9) | done |
 | Phase B: terrain and vegetation | `v0.9 · Terrain` | done, published |
 | Phase C: facades, town shape and clutter | `v0.10 · Facades` | done, published |
-| Phase D: sky and water | `v0.11 · Sea and sky` | **next** |
+| Phase D: sky and water | `v0.11 · Sea and sky` | done, published |
+
+**The run is complete.** Next up would be Phases E to I (see "What to do next" below).
 
 Not in this run: Phases E to I (landmarks, life, camera and cutaway, foundations, gameplay).
 
@@ -93,9 +95,38 @@ What was found:
   frontage system already kept fronts on the lane edge and houses off the paths).
 - Comparisons: `docs/progress/phase-c/` (and its README).
 
+## Phase D — sky and water (done, `v0.11 · Sea and sky`)
+
+- `src/water.js`: the sea reads a height texture of the ground and boulders
+  (`sea.syncHeights(scenery)`, re-baked by `game.rebuildLandscape()`): colour and clarity
+  by depth, foam fringe and surf lines, ripple normals, reflection kept. Water no longer
+  writes depth. Moored boats with buoys, a rowing boat on a route kept in deep water
+  (`rowingRoute`), a sailboat on a timer.
+- `src/fish.js`: `FishSchool` (pure simulation, unit-tested) and `FishView` (one instanced
+  mesh; orientation and tail-wag in the vertex shader). Counts per quality.
+- Sky shader (`gfx.js`): soft drifting clouds in every style; brighter midday.
+- Ground shader: light patterns on the shallow sea bed (`matUniforms.uTime`).
+- Zone overlay hidden unless a zoning or path tool is active.
+- Lit windows at dusk were already there (interior mapping, random share lit); checked.
+- Comparisons: `docs/progress/phase-d/` (and its README).
+
+## What to do next (suggestions)
+
+1. **Grow the town to fill the valley** like the targets: wider demo zoning and more stair
+   lanes, then tune the postcard framing. Cheap and very visible.
+2. **Vegetation, full pass** (already planned): real leafy models or better procedural
+   plants; bougainvillea as sheets of leaves rather than lumps. See the paid-pack notes in
+   ASSETS.md.
+3. **Cliffs beside the quay**: raise and roughen the rock right at the harbour sides.
+4. **Recessed windows and louvred shutters** (a facade normal map or real reveals).
+5. **Street lamps and warm lane light at dusk**, then Phase E (landmarks: church, tower,
+   washhouse) and Phase F (people).
+6. Check the flashing on real hardware: if it is still there, the frame time and slowest
+   frame in Settings will say whether it is a quality change or something else.
+
 ## Tests
 
-`npm run test:unit` (46 tests, ~8 s) and `npm run test:browser` (22 checks, ~8 min in the
+`npm run test:unit` (51 tests, ~9 s) and `npm run test:browser` (27 checks, ~9 min in the
 software renderer). `tests/browser/baseline.json` holds software-renderer frame times per
 preset (2× tolerance). Re-create with `npm run test:browser -- --update-baseline`.
 
@@ -123,6 +154,11 @@ preset (2× tolerance). Re-create with `npm run test:browser -- --update-baselin
   the real towns are pale; pitch raised from nearly flat to about 13–23°.
 - **Plaster wear amount**: most houses sound, 3 in 10 worn, 1 in 8 badly; an earlier pass
   with more wear made the town look derelict from the postcard view.
+- **Zone overlay only with a zoning tool.** It is unlit, so it glowed at dusk and tinted the
+  ground green by day; the targets show no overlay.
+- **Fish drawn after the water** (the water no longer writes depth) so they show through
+  it, as Wattle Creek does by clearing its sea; simpler than making the water clear.
+- **Paid packs**: listed in ASSETS.md with prices from memory, flagged as unchecked.
 - **Shadows redraw only on change**: bobbing boats therefore keep a still shadow (the
   movement is a few centimetres).
 - **Default style = Hand-painted**; WebP textures, texture arrays (from Phase A, unchanged).
@@ -156,6 +192,4 @@ PHASE D: Sky and water
 - Boats bobbing at moorings, the odd one rowing in or out, and a sailboat on the horizon now and then.
 - If time allows: lit windows at dusk (interior mapping), a random mix of lit and dark windows.
 
-At the end: merge to main, live link, short plain-English summary of what changed, what
-still differs from the targets, and what to do next. Also still owed: a list in ASSETS.md
-of any paid pack worth buying (price and reason; buy nothing).
+(All of the above is done; the lists are kept for reference.)

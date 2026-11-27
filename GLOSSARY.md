@@ -10,16 +10,19 @@ Game-development terms used in this project, one plain-English line each.
 | **Antialiasing (MSAA)** | Smooths the jagged "staircase" edges of shapes on screen. |
 | **Bloom** | A soft glow around very bright things (the sun, lit windows). |
 | **BVH (bounding-volume hierarchy)** | A tree of boxes around a mesh's triangles, so a ray test only checks the few triangles near the ray instead of all of them. We use the `three-mesh-bvh` library. |
+| **Caustics** | The moving net of light that sunlight makes on the sea bed through ripples. Ours is a cheap pattern in the ground shader. |
 | **Colour grading** | A final adjustment of the whole image's colours (warmth, saturation, contrast). |
 | **Dado** | The lower band of a wall finished differently from the rest (here: rough grey render a metre or so high). |
 | **Decal** | A flat patch drawn on top of a surface to add a mark (our grime streaks under window sills). |
 | **Draw call** | One instruction to the graphics card to draw a batch of triangles; fewer is faster. |
 | **Face-aligned projection** | Our way of putting a texture on a flat face: it's laid flat along that face's own direction, so walls at any angle and wedge houses get an undistorted texture. |
+| **Foam fringe / surf line** | White water drawn where the sea is very shallow: a fringe at the edge, and thin lines running in. |
 | **Frame time** | How long one picture takes to make, in milliseconds (16.7 ms = 60 frames per second). |
 | **Bedding plane / strata** | The flat layers rock was laid down in. Ours are tilted (they "dip" about 55°), which is why the cliffs are striped diagonally. |
 | **Budget (instance budget)** | A cap on how many copies of something (bushes, say) are drawn; lower quality settings get a smaller budget. |
 | **Contour line** | A line joining points of equal height. Terrace walls follow contour lines. |
 | **Dead band / hysteresis** | A deliberate gap between the "too slow" and "fast enough" thresholds, so a setting doesn't flip back and forth. |
+| **Height texture (depth texture)** | The ground heights stored as a picture the water shader can read, so every pixel of sea knows how deep it is. |
 | **Heightfield** | Terrain stored as a grid of heights (one number per grid point) rather than as a 3D model. |
 | **Hitch** | One unusually long frame (a pause), e.g. while a shader compiles. |
 | **Instancing** | Drawing many copies of the same small object (windows, shutters) in one draw call. |
@@ -35,6 +38,7 @@ Game-development terms used in this project, one plain-English line each.
 | **Raycast / ray test** | Shooting an invisible line into the scene to see what it hits (used for clicking and camera collision). |
 | **Roughness map** | A texture saying how shiny (smooth) or matte (rough) each spot of a surface is. |
 | **Shader** | A small program that runs on the graphics card and decides each pixel's colour. |
+| **Planar reflection** | A mirror image of the scene drawn from below the water plane, then shown on the water. |
 | **Render pass** | One drawing of the scene (or of a full-screen effect). A frame is several passes: mirror, scene, effects. |
 | **Shadow map** | A picture of the scene from the sun's point of view, used to work out what's in shadow. |
 | **sRGB / linear** | Two ways to store colour values; colour textures are sRGB, data textures (normals, roughness) are linear. |

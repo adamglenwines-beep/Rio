@@ -243,6 +243,35 @@ export const CONFIG = {
     boatYard: 0.65,        // share of yards in the fishing quarter given over to boats and nets
   },
 
+  // ---- Sea, boats and fish (water.js, fish.js) ---------------------------------------
+  water: {
+    shallow: '#58c4ae',    // turquoise over the shallows…
+    mid: '#15788c',        // …teal a few metres down…
+    deep: '#0e5a84',       // …and deep blue beyond
+    foam: '#f2f7f6',
+    clearAlpha: 0.3,       // how see-through the water is right at the shore (0 = glass)…
+    clearDepth: 6,       // …and the depth (m) by which it has turned opaque
+    foamAmount: 1.0,       // 0 = no foam
+    mooredBoats: 13,
+    // the rowing boat's loop, as offsets from the middle of the quay: [metres along the shore, metres out to sea]
+    rowRoute: [[-5, 9], [-9, 20], [-4, 36], [10, 52], [26, 60], [34, 46], [24, 30], [12, 18], [4, 10]],
+    rowSpeed: 1.1,         // metres per second
+    rowStroke: 2.1,        // oar strokes (radians per second)
+    sailDistance: 620,     // how far out the sailboat passes (m)
+    sailSpan: 900,         // it sails from this far one side to this far the other (m)
+    sailSpeed: 5,          // metres per second
+    sailFirst: 25,         // seconds before the first one appears
+    sailEvery: [70, 190],  // then one every so many seconds
+    caustics: 0.11,        // brightness of the light patterns on the shallow sea bed
+  },
+  fish: {
+    shoals: 4, perShoal: { low: 10, medium: 22, high: 34 },
+    radius: 60,            // fish stay within this distance of the harbour (m)
+    depth: [1.1, 7],       // …where the water is this deep (m)
+    cruise: 1.0, dart: 2.2,   // speeds (m/s)
+    viewDistance: 260,     // not simulated or drawn when the camera is further than this from the harbour
+  },
+
   // ---- Graphics ---------------------------------------------------------------
   // (presets and time-of-day keyframes live in gfx.js)
   graphics: {
@@ -262,6 +291,7 @@ export const CONFIG = {
     ssaoIntensity: 0.7,
     reflectionStrength: 0.5,  // how strongly the harbour mirrors the town (Medium/High)
     reflectionPlane: 0.05,   // height of the mirror (the mean sea surface)
+    cloudCover: 0.5,         // higher = fewer clouds (0.4 overcast … 0.65 nearly clear)
     hazeNear: 140,            // distance haze starts here (m)…
     hazeFar: 800,            // …and reaches its full strength here
     hazeDensity: 1.25,        // how thick it gets at hazeFar

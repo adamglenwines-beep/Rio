@@ -79,6 +79,37 @@ function check(name, ok, detail = '') {
       check('quarter clutter and café are placed', r.infill.boat >= 2 && r.infill.cone >= 3, `${r.infill.boat} boats hauled up, ${r.infill.cone} cones (parasols, pines)`);
     } catch (e) { check('facade checks', false, e.message); }
 
+    // d4. sea and sky: depth texture, fish by quality, the rowing boat moves in water, the sailboat turns up, the zone overlay hides
+    try {
+      const r = await page.evaluate(async () => {
+        const { CONFIG } = await import('./src/config.js');
+        const sea = game.sea, out = {};
+        const T = game.THREE, d = sea.heightData, n = game.terrain.FV;
+        // depth texture agrees with the ground at a deep spot and a dry spot
+        const at = (x, z) => T.DataUtils.fromHalfFloat(d[Math.round((z + game.terrain.half) / game.terrain.fcell) * n + Math.round((x + game.terrain.half) / game.terrain.fcell)]);
+        const hb = game.terrain.harbour;
+        out.deep = at(hb.x, hb.z + 40); out.dry = at(hb.x, hb.z - 30);
+        out.fish = {};
+        for (const q of ['low', 'medium', 'high']) { game.fish.setQuality(q); out.fish[q] = game.fish.mesh.geometry.instanceCount; }
+        const p0 = sea.rowboat.group.position.clone();
+        let wet = true;
+        for (let i = 0; i < 600; i++) { sea.update(i * 0.1, 0.1); const p = sea.rowboat.group.position; if (game.terrain.heightAt(p.x, p.z) > -0.3) wet = false; }
+        out.rowMoved = p0.distanceTo(sea.rowboat.group.position) > 1; out.rowWet = wet;
+        let sailed = false;
+        for (let i = 0; i < 800 && !sailed; i++) { sea.update(60 + i * 0.5, 0.5); sailed = sea.sailboat.group.visible; }
+        out.sailed = sailed;
+        game.ui.setTool('view'); out.overlayView = game.zones.mesh.visible;
+        game.ui.setTool('res'); out.overlayZone = game.zones.mesh.visible;
+        game.ui.setTool('view');
+        return out;
+      });
+      check('the sea knows its depth', r.deep < -3 && r.dry > 1, `harbour mouth ${r.deep.toFixed(1)} m, inland ${r.dry.toFixed(1)} m`);
+      check('fish numbers follow quality', r.fish.low > 0 && r.fish.low < r.fish.medium && r.fish.medium < r.fish.high, JSON.stringify(r.fish));
+      check('the rowing boat moves and keeps to the water', r.rowMoved && r.rowWet);
+      check('a sailboat appears on the horizon', r.sailed);
+      check('zone overlay shows only with a zoning tool', r.overlayView === false && r.overlayZone === true);
+    } catch (e) { check('sea and sky checks', false, e.message); }
+
     // e. frame time per preset
     for (const p of ['low', 'medium', 'high']) {
       try {

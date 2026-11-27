@@ -101,6 +101,22 @@ A **Manor Lords-style hybrid**:
 - **Detail by distance**: small things (pots, bars, washing, flower boxes) are not drawn
   beyond a distance set per item and scaled by the quality setting.
 
+## Sea and sky (v0.11)
+
+- **The sea knows its depth** (ground heights baked into a texture): turquoise shallows
+  fading through teal to deep blue; clear near the shore so rocks and the sea bed show;
+  a foam fringe and surf lines where it meets rock, shore and breakwater; light dancing
+  on the shallow bed. Calm by default.
+- **Boats**: fishing boats lie to orange buoys and bob; one boat is rowed round the harbour;
+  a sailboat crosses the horizon now and then. **Fish** shoal in the harbour shallows and
+  dart from the rowing boat.
+- **Sky**: soft fair-weather clouds drifting, clear toward the horizon; haze over the far
+  headlands. Midday is brighter than before. Windows light up warm at dusk (a random
+  share of them), as before.
+- **The zone overlay shows only while a zoning or path tool is in hand.** It used to tint
+  the ground around the town green all the time.
+- **No ambient sound yet.**
+
 ## Resources and industry
 
 - **Stone** comes from a quarry. It's needed for the harbour, terraces and stone bases.

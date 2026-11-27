@@ -84,8 +84,8 @@ const LADDER = [
 // Keyframes by hour; everything in between is interpolated.
 export const TIMES = { midday: 12, golden: 18.6, dusk: 20.4, night: 23 };
 const KEYS = [
-  { h: 12, elev: 50, az: 35, sun: '#fffaf2', sunI: 3.0, sky: '#e2f0ff', ground: '#94866e', hemiI: 1.5,
-    top: '#2c86d4', hor: '#bfe0f5', glow: '#fff6e6', glowI: 0.6, fog: '#c3dcee', exp: 1.08, lit: 0 },
+  { h: 12, elev: 50, az: 35, sun: '#fff7ea', sunI: 3.35, sky: '#e2f0ff', ground: '#9a8a70', hemiI: 1.5,
+    top: '#2a7fd0', hor: '#bcdcf4', glow: '#fff6e6', glowI: 0.6, fog: '#bcd6ec', exp: 1.14, lit: 0 },
   { h: 18.6, elev: 14, az: 40, sun: '#ffdcb6', sunI: 3.2, sky: '#eef0f2', ground: '#94806a', hemiI: 1.4,
     top: '#4f8fd6', hor: '#f6dcc6', glow: '#ffc79c', glowI: 2.0, fog: '#e4dad2', exp: 1.12, lit: 0.06 },
   { h: 20.4, elev: 7, az: 75, sun: '#ff9a7a', sunI: 0.35, sky: '#8a7fb8', ground: '#3d3550', hemiI: 0.95,
@@ -122,12 +122,14 @@ export class Graphics {
     this.skyU = {
       uTop: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uGlow: { value: new THREE.Color() },
       uGlowI: { value: 1 }, uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uClouds: { value: 0 },
+      uTime: { value: 0 }, uCloudLit: { value: new THREE.Color(1, 1, 1) }, uCloudShade: { value: new THREE.Color(0.7, 0.75, 0.85) },
+      uCover: { value: CONFIG.graphics.cloudCover },
     };
     const skyMat = new THREE.ShaderMaterial({
       uniforms: this.skyU, side: THREE.BackSide, depthWrite: false, fog: false,
       vertexShader: `varying vec3 vDir;
         void main() { vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }`,
-      fragmentShader: `uniform vec3 uTop, uHor, uGlow; uniform float uGlowI, uClouds; uniform vec3 uSunDir; varying vec3 vDir;
+      fragmentShader: `uniform vec3 uTop, uHor, uGlow, uCloudLit, uCloudShade; uniform float uGlowI, uClouds, uTime, uCover; uniform vec3 uSunDir; varying vec3 vDir;
         float h2(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
         float n2(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
           return mix(mix(h2(i), h2(i + vec2(1, 0)), u.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), u.x), u.y); }
@@ -137,10 +139,17 @@ export class Graphics {
           float t = clamp(d.y / 0.42, 0.0, 1.0);
           vec3 c = mix(uHor, uTop, pow(t, 0.75));
           if (uClouds > 0.0 && d.y > 0.0) {
-            // painted clouds: soft horizontal brush streaks
-            vec2 q = d.xz / (d.y + 0.12);
-            float cl = smoothstep(0.52, 0.78, f2(vec2(q.x * 0.9, q.y * 2.6)));
-            c = mix(c, mix(uHor, vec3(1.0), 0.6), cl * uClouds * 0.75 * smoothstep(0.02, 0.2, d.y));
+            // soft fair-weather clouds: a flat layer overhead, seen in perspective, drifting slowly.
+            // Puffs come from broad noise; a finer noise breaks up their edges. The horizon stays clear.
+            vec2 q = d.xz / (d.y + 0.1) * 0.75 + vec2(uTime * 0.006, uTime * 0.002);
+            float broad = f2(q * 0.8), fine = f2(q * 3.1 + 5.0);
+            float dens = broad + (fine - 0.5) * 0.3;
+            float cl = smoothstep(uCover, uCover + 0.2, dens);
+            // lit from the sun's side: compare the cloud with itself a step toward the sun
+            vec2 toSun = normalize(uSunDir.xz + 1e-4) * 0.35;
+            float lit = clamp(0.62 + (dens - (f2((q + toSun) * 0.8) + (fine - 0.5) * 0.3)) * 2.2, 0.0, 1.0);
+            vec3 cc = mix(uCloudShade, uCloudLit, lit) * (0.9 + 0.1 * smoothstep(uCover, uCover + 0.35, dens));
+            c = mix(c, cc, cl * uClouds * 0.92 * smoothstep(0.035, 0.22, d.y));
           }
           float s = max(dot(d, normalize(uSunDir)), 0.0);
           c += uGlow * uGlowI * (pow(s, 6.0) * 0.35 + pow(s, 64.0) * 0.8 + pow(s, 900.0) * 3.0);
@@ -226,6 +235,7 @@ export class Graphics {
     this._buildPipeline();
     if (this.game.scenery) this.game.scenery.setQuality(name);
     if (this.game.growth) this.game.growth.renderer.setQuality(name);
+    if (this.game.fish) this.game.fish.setQuality(name);
     this.shadowsDirty();
     this._emit();
   }
@@ -359,6 +369,10 @@ export class Graphics {
     this.skyU.uTop.value.copy(tint(C('top'), W.sky, 0.12)); this.skyU.uHor.value.copy(tint(C('hor'), W.sky, 0.2));
     if (St.sky.soft) this.skyU.uTop.value.lerp(this.skyU.uHor.value, 0.22 * St.sky.soft);
     this.skyU.uClouds.value = St.sky.clouds;
+    // clouds take their light from the sun and their shade from the sky
+    const day = THREE.MathUtils.clamp(L('sunI') / 3.2, 0.08, 1);
+    this.skyU.uCloudLit.value.copy(C('sun')).lerp(new THREE.Color(1, 1, 1), 0.55).multiplyScalar(0.25 + 0.85 * day);
+    this.skyU.uCloudShade.value.copy(C('hor')).lerp(C('top'), 0.35).multiplyScalar(0.55 + 0.4 * day);
     this.skyU.uGlow.value.copy(C('glow')); this.skyU.uGlowI.value = L('glowI');
     // the visible sun sits a little lower than the light (so golden-hour shadows stay readable)
     this.skyU.uSunDir.value.copy(this.sunDir).setY(this.sunDir.y * 0.45).normalize();
@@ -433,6 +447,7 @@ export class Graphics {
     this.cameraMoving = this._camPos.distanceToSquared(cam.position) > 1e-8 || Math.abs(this._camQuat.dot(cam.quaternion)) < 1 - 1e-9;
     this._camPos.copy(cam.position); this._camQuat.copy(cam.quaternion);
     this.sky.position.copy(cam.position);
+    this.skyU.uTime.value += dt;
     this._shadowTimer -= dt;
     if (this._shadowTimer <= 0) { this._shadowTimer = 0.5; this._fitShadow(); }
     this._shadowsIfDirty();
@@ -493,7 +508,7 @@ export class Graphics {
     clip.multiplyScalar(2 / clip.dot(q));
     pm[2] = clip.x; pm[6] = clip.y; pm[10] = clip.z + 1; pm[14] = clip.w;
     // skip what barely shows in a ripply reflection (and the sea itself)
-    const hide = [g.sea.water, g.infill.group, g.scenery.group, g.terraces.group, g.zones.mesh, ...g.growth.renderer.smallParts()];
+    const hide = [g.sea.water, g.sea.farSea, g.fish.mesh, g.infill.group, g.scenery.group, g.terraces.group, g.zones.mesh, ...g.growth.renderer.smallParts()];
     const was = hide.map((o) => o.visible);
     hide.forEach((o) => (o.visible = false));
     const prevTarget = r.getRenderTarget(), dirty = r.shadowMap.needsUpdate;

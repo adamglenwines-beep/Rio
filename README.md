@@ -75,7 +75,8 @@ The first load needs internet access, to fetch Three.js from the CDN.
 | `index.html` | Page, styles, toolbar, import map for Three.js |
 | `src/config.js` | **All tunable numbers** (slope bands, sizes, effort weights, speeds, colours) |
 | `src/terrain.js` | Procedural cove: 1 m ground mesh, rock ledges along tilted strata, shore shelves, slope bands, the distant hills |
-| `src/water.js` | Animated low-poly sea and boats |
+| `src/water.js` | The sea (colour and clarity by depth, foam, ripples, reflections), moored boats, the rowing boat, the sailboat |
+| `src/fish.js` | Shoals of fish in the harbour shallows (simulation + drawing) |
 | `src/camera.js` | Orbit camera, ground-collision clamp, postcard view |
 | `src/paths.js` | Stairs/lanes: switchback routing, the path graph, stone-step rendering |
 | `src/zones.js` | Zone painting on a hidden 2 m grid, soft overlay |

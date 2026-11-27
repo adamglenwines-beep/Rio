@@ -28,7 +28,7 @@ export const STYLES = {
     // geometry
     chamfer: 0, smoothCorners: false, roundFoliage: false, smoothTerrain: false,
     detailScale: 1, cornice: 0.32, overhang: 0.2,
-    sky: { clouds: 0, soft: 0 },
+    sky: { clouds: 0.75, soft: 0 },
   },
   soft: {
     label: 'Soft stylised', flat: false, paint: 0, grad: 1,
@@ -36,7 +36,7 @@ export const STYLES = {
     hemi: 1.15, sun: 0.92, sat: 1.06, contrast: 0.97, shadowTint: [1.05, 1.0, 1.12],
     chamfer: 0.32, smoothCorners: true, roundFoliage: true, smoothTerrain: true,
     detailScale: 1.06, cornice: 0.42, overhang: 0.32,
-    sky: { clouds: 0, soft: 1 },
+    sky: { clouds: 0.85, soft: 1 },
   },
   painted: {
     label: 'Hand-painted', flat: false, paint: 0.4, grad: 0.4,

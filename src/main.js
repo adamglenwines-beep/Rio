@@ -13,12 +13,13 @@ import { Growth } from './growth.js';
 import { layDemo } from './demo.js';
 import { Scenery } from './scenery.js';
 import { Terraces } from './terraces.js';
+import { FishView } from './fish.js';
 import { Infill } from './infill.js';
 import { UI } from './ui.js';
 import { Graphics } from './gfx.js';
 import { VERSION } from './version.js';
 import { STYLES, applyStyleToMaterials } from './style.js';
-import { loadManifest } from './materials.js';
+import { loadManifest, matUniforms } from './materials.js';
 
 // the texture manifest (layer order) must be known before any material compiles
 await loadManifest();
@@ -58,6 +59,8 @@ const scenery = new Scenery(terrain, terraces);
 scene.add(scenery.group);
 
 const game = { THREE, scene, camera, renderer, terrain, sea, rig, paths, zones, scenery, terraces, speed: 1, access: null };
+game.fish = new FishView(game);
+scene.add(game.fish.mesh);
 game.gfx = new Graphics(game, renderer, scene, camera);
 game.growth = new Growth(game);
 scene.add(game.growth.group);
@@ -75,9 +78,10 @@ game.refreshAccess = (force = false) => {
   game.growth.onAccessChanged();
 };
 /** Re-cut the terraces and re-seed the wild plants (after terrace areas change). */
-game.rebuildLandscape = () => { terraces.rebuild(game); scenery.regenerate(); };
+game.rebuildLandscape = () => { terraces.rebuild(game); scenery.regenerate(); sea.syncHeights(scenery); };
 game.reset = () => { paths.clear(); zones.clear(); game.growth.clear(); terraces.clear(); game.rebuildLandscape(); game.refreshAccess(true); };
 game.demo = () => { layDemo(game); game.refreshAccess(true); };
+sea.syncHeights(scenery);
 game.refreshAccess(true);
 /** Switch the whole scene to an art style ('clean' | 'soft' | 'painted'). */
 game.setStyle = (name) => {
@@ -117,7 +121,9 @@ game.renderFrame = (dt, rawDt = dt) => {
   if (game.infill.busy && game.infill.work(CONFIG.infill.frameBudgetMs)) { terraces.refresh(game.growth, game.infill); scenery.refresh(game.growth, game.infill); terrain.setTownMask((x, z) => game.infill.townDistance(x, z)); }
   rig.update(dt);
   camera.updateMatrixWorld();   // everything drawn this frame uses this frame's camera
-  sea.update(elapsed);
+  sea.update(elapsed, dt * (game.speed > 0 ? 1 : 0));
+  matUniforms.uTime.value = elapsed;
+  game.fish.update(dt, elapsed, game.gfx.tod ? 1 - game.gfx.tod.night : 1);
   game.ui.update(dt);
   game.gfx.update(dt, rawDt);
   game.gfx.render();

@@ -80,5 +80,6 @@ export class Zones {
   }
 
   /** Stronger overlay while a zoning tool is in hand. */
-  setEmphasis(on) { this.material.opacity = on ? 0.95 : 0.45; }
+  /** The overlay shows only while a zoning or path tool is in hand (it is unlit, and would tint the whole town green). */
+  setEmphasis(on) { this.material.opacity = 0.9; this.mesh.visible = on; }
 }
