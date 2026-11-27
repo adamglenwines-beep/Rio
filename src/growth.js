@@ -1,6 +1,11 @@
 // ---------------------------------------------------------------------------
 // growth.js — the town grows itself. THIS IS THE CORE OF THE PROTOTYPE.
 //
+// v0.14: BLOCKS AND LOTS. With CONFIG.sim.plannedLots (the default) the town is laid out by
+// src/blocks.js as a plan of lots that fill every block between the lanes; each step builds the
+// open lot nearest the harbour (fronts first, rear houses once their front house stands). The
+// template growth described below is kept for comparison (plannedLots = false).
+//
 // LANES COME FIRST. Every footprint is a convex quadrilateral
 //     corners = [frontLeft, frontRight, backRight, backLeft]
 // and houses are laid out from the lanes inward (see lanes.js):

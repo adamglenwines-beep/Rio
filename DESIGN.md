@@ -37,8 +37,21 @@ A **Manor Lords-style hybrid**:
 - **Lanes come first.** Buildings line them with **flush facades that follow the lane**
   and fill blocks **edge to edge**, so each lane reads as a continuous corridor between
   walls.
+- **Blocks and lots (v0.14, `src/blocks.js`, `data/blocks.json`).** A *block* is zoned land
+  enclosed by lanes, the shore, the piazza and unbuildable ground. Each block's lane edges are
+  cut into narrow *lots*: fronts exactly on the lane, sides square to it, as deep as the middle
+  of the block (or the band's maximum). Corner lots snap to the crossing lane; the ends of a
+  row and the backs of lots meet their neighbours exactly; leftover corners become wedge lots
+  or *gap lots* fronting the nearest lane. Houses are then built lot by lot, near the harbour
+  first, fronts before interiors. Neighbours share **party walls** with no gap and no openings.
+- **Density by land value**, from walking effort to the harbour (bands in `data/blocks.json`):
+  *harbour* blocks ≥ 85% built over, *town* ≥ 70%, *edge* about 40% (open land for orti).
+  Narrow tower-house lots by the harbour (3–4.6 m), wider ones up the hill.
+- **Every house is reached from a lane**: its front is on a lane, or (a *rear* house in a deep
+  block) through an arched passage in the house in front of it.
 - **No ordinary house may overlap a path.**
-- **Archways and covered passages** over lanes are welcome.
+- **Archways and covered passages** over lanes are welcome (the v0.13 growth made them; the
+  v0.14 block plan doesn't yet).
 - Footprints are irregular (trapezoids, wedges) to fit bends and forks. The irregularity
   is hidden at the backs of buildings and in the middle of blocks.
 - **Main lanes win:** a corner building fronts the busier lane. Sharp forks get pointed

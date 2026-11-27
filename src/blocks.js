@@ -147,15 +147,30 @@ export function planLots(world, grid) {
     if (hl && hl.t / 2 < lim.t) lim = { t: hl.t / 2, by: 'mid' };
     return lim;
   };
-  const clash = (q) => {
-    const [cx, cz] = centroid(q);
-    for (const o of lots.concat(existing)) {
-      if (Math.abs(o.cx - cx) > 22 || Math.abs(o.cz - cz) > 22) continue;
+  // a spatial index of lots (and standing houses) by their bounding boxes, 8 m cells
+  const HASH = 8, buckets = new Map();
+  const box = (q) => { let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity; for (const p of q) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]); } return [x0, z0, x1, z1]; };
+  const keys = (b) => { const out = []; for (let i = Math.floor(b[0] / HASH); i <= Math.floor(b[2] / HASH); i++) for (let j = Math.floor(b[1] / HASH); j <= Math.floor(b[3] / HASH); j++) out.push(i * 4099 + j); return out; };
+  const index = (o) => {
+    for (const k of o._keys || []) { const a = buckets.get(k); a.splice(a.indexOf(o), 1); }
+    o._box = box(o.corners); o._keys = keys(o._box);
+    for (const k of o._keys) { if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(o); }
+  };
+  for (const e of existing) index(e);
+  /** Does q push into any lot or house other than `skip`? */
+  const overlaps = (q, skip = null) => {
+    const b = box(q), seen = new Set();
+    for (const k of keys(b)) for (const o of buckets.get(k) || []) {
+      if (o === skip || seen.has(o)) continue;
+      seen.add(o);
+      const ob = o._box;
+      if (ob[0] > b[2] || ob[2] < b[0] || ob[1] > b[3] || ob[3] < b[1]) continue;
       if (convexOverlap(q, o.corners) > D.maxOverlap) return true;
     }
     return false;
   };
-  const accept = (lot, who) => { [lot.cx, lot.cz] = centroid(lot.corners); lot.index = lots.length; lots.push(lot); claim(lot.corners, who); return lot; };
+  const clash = (q) => overlaps(q);
+  const accept = (lot, who) => { [lot.cx, lot.cz] = centroid(lot.corners); lot.index = lots.length; lots.push(lot); index(lot); claim(lot.corners, who); return lot; };
   const dbg = world.debug || null, why = (k) => { if (dbg) dbg[k] = (dbg[k] || 0) + 1; return false; };
   const good = (q) => (isConvex(q) || why('convex')) && (Math.abs(signedArea(q)) >= D.minLotArea || why('area')) && (world.clear(q) || why('lane')) && (!clash(q) || why('clash'));
   /** Bisection: the x in [bad, ok] closest to `bad` for which test(x) holds (test(ok) is known true). */
@@ -339,15 +354,8 @@ export function planLots(world, grid) {
     forCellsIn(grid, q, (k) => { n++; if (grid.id[k] !== lot.block || (claimed[k] && claimed[k] !== lot.who)) bad++; });
     return bad <= Math.max(1, n * 0.04);
   };
-  const others = (lot, q) => {
-    const [cx, cz] = centroid(q);
-    for (const o of lots.concat(existing)) {
-      if (o === lot || Math.abs(o.cx - cx) > 24 || Math.abs(o.cz - cz) > 24) continue;
-      if (convexOverlap(q, o.corners) > D.maxOverlap) return true;
-    }
-    return false;
-  };
-  const fits = (lot, q) => isConvex(q, D.wedgeMinSin) && world.clear(q) && inBlock(q, lot) && !others(lot, q) && fall(world, q) <= D.maxFall + 1;
+  const others = (lot, q) => overlaps(q, lot);
+  const fits = (lot, q) => isConvex(q, D.wedgeMinSin) && !others(lot, q) && world.clear(q) && inBlock(q, lot) && fall(world, q) <= D.maxFall + 1;   // cheapest tests first
   const DIRS = [];
   for (let a = 0; a < 16; a++) DIRS.push([Math.cos((a * Math.PI) / 8), Math.sin((a * Math.PI) / 8)]);
   for (let pass = 0; pass < D.wedgePasses; pass++) for (const lot of lots) {
@@ -368,9 +376,10 @@ export function planLots(world, grid) {
         if (dep > (BLOCKS.bands.find((x) => x.name === lot.band)?.maxDepth ?? 10) + 2) continue;
         if (g > gain) { gain = g; best = q; }
       }
-      if (best) { lot.corners = best; [lot.cx, lot.cz] = centroid(best); lot.wedge = true; claim(best, lot.who); }
+      if (best) { lot.corners = best; [lot.cx, lot.cz] = centroid(best); lot.wedge = true; index(lot); claim(best, lot.who); }
     }
   }
+  for (const l of lots) { delete l._box; delete l._keys; }
   return lots;
 }
 

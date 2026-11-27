@@ -39,6 +39,73 @@ Dev branch: `claude/nice-planck-k467qs`.
 - **Facade builder**: footprints are any convex quadrilateral (trapezoids and wedges already
   work); each of the four walls gets its own facade, openings, bands and party-wall checks.
 
+### What was done (v0.14)
+
+**Steps 1–2: blocks from paths, lots along the frontage** — new `src/blocks.js` (pure rules, no
+Three.js, no DOM) with its numbers in `data/blocks.json`; `growth.js` builds its plan.
+- *Blocks*: zoned, reachable, buildable land on a 1 m grid, minus every lane, the quay, piazza
+  and slipway (the exact lane test), split into connected pieces. Each block gets a value band
+  from its mean walking effort: harbour (≤ 75), town (≤ 140), edge.
+- *Lots*: each lane's two frontage lines (busiest lane first, the quay first of all) are cut
+  into runs where the same free block lies behind, and each run into lots of varied width
+  (harbour 3.0–4.6 m, town 3.3–5.0 m, steep 3.3–4.6 m). Fronts lie exactly on the frontage line;
+  sides follow the lane's normal there, so neighbours share side walls exactly and rows follow
+  bends as trapezoids. Depth: to the middle of the block, its edge or a lot already there, or
+  the band's maximum (8–8.5 m).
+- *Corners*: where a run ends at another lane, the end lot's side is snapped onto that lane's
+  frontage line, so the corner house fronts both. Run ends and lot backs are moved (by
+  bisection) until they meet the neighbouring lot exactly.
+- *Wedges and gap lots*: leftover corners are taken by moving a lot's back corners out until
+  they meet a neighbour or a lane (never out into open land, never sharper than ~24°); any
+  leftover still beside a lane in a harbour or town block gets a lot of its own fronting that lane.
+- *Quads*: the facade builder already handled any convex quadrilateral (each wall its own
+  facade, openings and cover checks), so no change was needed there.
+- The old template growth is still there behind `CONFIG.sim.plannedLots = false`.
+
+**Step 3: party walls** — the cover test already left openings, balconies, pipes and plants
+off any wall a neighbour stands against (the 2 m rule from v0.13). Now the hidden part of such a
+wall isn't drawn at all: the wall starts at the neighbour's eaves height (`_partyTops` in
+`buildings.js`), and string courses/bases on it are skipped. Heights still vary per house
+(`targetFloors`), so the roofline steps.
+
+**Step 4: interiors** — mostly by deeper front houses that reach the middle of the block (the
+blocks in the demo are 14–20 m between frontages). A *rear* lot is made behind a front lot that
+stopped at its maximum depth with ≥ 3.2 m of block left; the front house then gets an arched
+passage (`b.passage` → arched ground floor). In the demo only one block is deep enough.
+
+**Step 5: density by land value** — the bands' coverage targets and lot sizes are data
+(`data/blocks.json`). Result on the demo town (700 steps):
+
+| Band | blocks | area | built over (v0.13 growth) | built over (v0.14) |
+|---|---|---|---|---|
+| harbour | 7 | 880 m² | 52% | 86% (target 85%) |
+| town | 7 | 1,615 m² | 66% | 91% (target 70%) |
+| edge | 6 | 4,750 m² | 67% | 62% (target ~40%) |
+
+(Measured over the same blocks. The v0.13 edge figure is higher because its side lots spread
+into open edge land; v0.14 keeps the edges looser on purpose.)
+
+**Step 6: slopes** — no terrain smoothing. Lots follow the lanes; each house still steps with
+its own ground (floors counted from the uphill side, walls down to the lowest ground). A lot whose
+ground falls more than 7.5 m is cut into a front and a rear house.
+
+**Step 7: growth** — each step builds the open lot nearest the harbour (frontage first, rear
+houses once their front house stands); floors keep growing as before. No new gameplay. The
+plan is redone (lazily, at the next growth step) when paths or zones change, fitting around the
+houses already standing.
+
+Numbers: 175 houses (v0.13: 219), mean footprint 30 m² (v0.13: 23 m²), 545 storeys (v0.13:
+563), tallest 8 (8). Planning the demo town takes ~0.3–0.4 s in Node.
+
+### Tests added (`tests/unit/blocks.test.js`)
+- the town is built from the plan; no building overlaps a path, quay, piazza or slipway;
+- no sliver/wedge gap (long and thin, over 12 m²) beside a lane in a harbour or town block, and
+  at most one yard (≤ 60 m²) per block;
+- harbour and town blocks meet their coverage targets (and no big one is > 12 points under);
+- every house is reached from a lane (front on a connected lane, or a rear house through a
+  passage);
+- no opening or wall-mounted part on a party wall below the neighbour's top.
+
 ## Earlier run: v0.13 · Facades (facade detail and colour)
 
 Adam's buildings brief, narrowed by his addendum after reviewing v0.12: building shapes and massing

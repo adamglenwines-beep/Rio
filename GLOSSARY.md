@@ -11,6 +11,13 @@ Game-development terms used in this project, one plain-English line each.
 | **Bloom** | A soft glow around very bright things (the sun, lit windows). |
 | **BVH (bounding-volume hierarchy)** | A tree of boxes around a mesh's triangles, so a ray test only checks the few triangles near the ray instead of all of them. We use the `three-mesh-bvh` library. |
 | **Caustics** | The moving net of light that sunlight makes on the sea bed through ripples. Ours is a cheap pattern in the ground shader. |
+| **Block** | A piece of buildable land enclosed by lanes (and the shore, piazza or cliffs). Houses fill it from its lane edges inward. |
+| **Lot** | The plot of ground one house stands on. Its front is on a lane; its sides are shared with the neighbours. |
+| **Frontage line** | The line along a lane where house fronts stand: the lane's edge plus a small setback. |
+| **Party wall** | A side or back wall shared with the house next door: no gap, no windows, and (since v0.14) not even drawn where the neighbour hides it. |
+| **Passage (sottoportico)** | An arched way through a front house's ground floor to a house behind it. |
+| **Coverage** | The share of a block's land with a house on it (85% means 15% is yard, garden or courtyard). |
+| **Wedge / gap lot** | A lot shaped to fill an odd corner where lanes meet at an angle, so no triangle of bare ground is left. |
 | **Colour grading** | A final adjustment of the whole image's colours (warmth, saturation, contrast). |
 | **Dado** | The lower band of a wall finished differently from the rest (here: rough grey render a metre or so high). |
 | **Decal** | A flat patch drawn on top of a surface to add a mark (our grime streaks under window sills). |
