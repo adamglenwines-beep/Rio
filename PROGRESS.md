@@ -32,14 +32,21 @@ recorded here with the reason.
 - **BVH ray tests**: terrain picking and a camera-collision ray use three-mesh-bvh.
 - `GLOSSARY.md`, `ASSETS.md`, `package.json` (tests only; the game has no build step).
 
-### In progress
-- Unit tests (`tests/unit/`) and the browser test (`tests/browser/run.cjs`).
-- Visual tuning against the targets; performance per preset; side-by-side vs target.
+- **Tests**: `npm run test:unit` (21 tests, ~2 s) and `npm run test:browser` (10 checks:
+  errors, missing assets, textures load, demo grows, all styles render, frame-time vs
+  `tests/browser/baseline.json`, 2× tolerance). All pass.
+- **Side-by-side vs target 03**: `docs/progress/phase-a/` (with a list of what differs).
+- Published as `v0.8 · Textures`.
 
-### Next
-- Finish Phase A, publish `v0.8 · Textures`.
-- Then, by priority (see the end-of-round report): terrain & vegetation, facade detail,
-  sky & water.
+### In progress
+- Nothing.
+
+### Next (recommended order)
+1. **Terrain and vegetation** — the biggest gap from the postcard view (bare slopes vs the
+   target's dense planting, sculpted rock and surf line).
+2. **Sky and water** — clouds, turquoise shallows, foam and sparkle; cheap and very visible.
+3. **Facade detail** — balconies with flowers, washing, awnings, stone window surrounds.
+- Possible later: KTX2/Basis GPU texture compression (for a tablet port), height-blending.
 
 ### Decisions (made without asking, with reasons)
 - **Default style = Hand-painted.** With real textures at full strength it is the
