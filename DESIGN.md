@@ -72,16 +72,21 @@ A **Manor Lords-style hybrid**:
   by the ridge, as in reality; the targets' glimpse of sea behind the town is not copied.
 - **Postcard view** = from out on the water, looking up the cove (as in the art targets).
 - Vegetation is a **light first pass** (lumpy instanced bushes); a fuller pass comes later.
+  **v0.12: trees and bushes are switched off** (`CONFIG.flora.trees`) until that pass; the
+  hillsides are bare for now. Terrace vines, agave, prickly pear, bougainvillea, pots and
+  flower boxes stay.
 
 ## The look of the town (v0.10)
 
 - **Tower houses**: narrow fronts (3.5–6 m), each with its own leaning to be a storey or
   two taller or shorter than its site suggests. A house beside two lanes gets a door on
   each (front door low, back door on the higher lane: the *uservàn*).
-- **Colour**: a 13-colour palette between the real town (pale cream, pink, salmon) and the
-  targets (saturated gold and coral), a little cooler than the targets. Houses that touch
-  never share a colour and rarely a colour family. Shutters are dark green on almost every
-  house.
+- **Colour** (v0.12, replacing v0.10's cooler palette): lighter, warmer, sun-faded pigments:
+  ochre, golden ochre, lemon, cream, limewash, peach, faded burnt orange and terracotta,
+  salmon, dusty and pale rose, sage, limestone render; soft variation and sun-faded patches
+  within each wall. Calibrated so an ochre wall shows the art target's sunlit and shaded
+  colours (art-target-v2). Houses that touch never share a colour and rarely a colour family.
+  Shutters are a rich, fairly light green on almost every house.
 - **Walls**: rough stone ground floors (the cellar) or a rough render dado, plaster above,
   walls leaning in a touch. Plaster wears in layers (colour coat, pale undercoat, grey
   render, rubble stone), mostly low down and at corners; about one house in eight is badly
@@ -100,6 +105,20 @@ A **Manor Lords-style hybrid**:
   with parasols on the piazza.
 - **Detail by distance**: small things (pots, bars, washing, flower boxes) are not drawn
   beyond a distance set per item and scaled by the quality setting.
+
+## Light (v0.12)
+
+- **Warm sun from the west, cool sky fill.** The sun stands to the left of the postcard view
+  (setting over the sea, as at Riomaggiore), so fronts and west sides are sunlit and east sides
+  and lanes are in shade. Midday is an early-afternoon sun.
+- **Target spread**: sunlit warm walls ~72% lightness, shaded ~46% (the art target's yellow
+  wall #F3C17B / #9E794D); checked with `tools/measure_walls.cjs` on the six-house scene
+  (`index.html?scene=six`), and the same on Low, Medium and High.
+- **Tone mapping: Khronos PBR Neutral**, exposure ~1.2.
+- **Ambient occlusion is baked**, on every quality level: wall feet (deeper in narrow lanes),
+  under the eaves, a soft ring round every window and under its sill. No screen-space AO.
+- **Depth**: the camera's near plane moves out with distance; every wall-mounted part stands
+  at least 3 cm clear of its wall; houses never intersect; covered walls get no openings.
 
 ## Sea and sky (v0.11)
 
@@ -207,7 +226,7 @@ warm). Default: neutral midday with a blue sky and sea. Comparison grids are in
 
 **Strong yes:**
 - Interior mapping for windows (fake rooms, some lit warm at dusk).
-- SSAO and contact shadows.
+- Ambient occlusion and contact shadows (since v0.12 baked, not screen-space: see Light).
 - Bloom.
 - Antialiasing.
 
@@ -226,8 +245,8 @@ warm). Default: neutral midday with a blue sky and sea. Comparison grids are in
 - Subsurface scattering, and hair and fur shaders.
 
 **Status:** the first graphics pass below is in (quality presets with Auto and resolution
-scaling; time of day; antialiasing; bloom; soft shadows with baked AO on all presets and
-SSAO on High; harbour reflections on Medium/High; distance haze; interior-mapped windows
+scaling; time of day; antialiasing; bloom; soft shadows with baked AO on all presets (SSAO on High
+until v0.12); harbour reflections on Medium/High; distance haze; interior-mapped windows
 that light up at dusk). The houses' shapes and colours are unchanged.
 
 **Suggested first graphics pass, in order:**

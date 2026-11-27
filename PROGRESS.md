@@ -12,9 +12,10 @@ Not touched (later runs): building shapes, window design, roofs, materials, terr
 | Part | State |
 |---|---|
 | 1. Flicker: windows, shutters, washing | done |
-| 2. Roof shimmer | (in progress) |
+| 2. Roof shimmer | done |
 | 3. Take out the trees | done |
-| 4. Light and colour on the buildings | (in progress) |
+| 4. Light and colour on the buildings | done |
+| Performance | done (see below) |
 
 ### Part 1 — flicker (done)
 
@@ -49,9 +50,39 @@ Causes found (videos and notes in `Rio-reference/bug-reports/`):
    sitting where the above flickering parts were. (See part 2 for what replaced GTAO.)
 - Level-of-detail on facade parts was checked: small parts shrink smoothly with distance
   (no on/off switching), so it was not a cause.
+- **Measured** (`tools/flicker_strip.cjs`, High, Golden hour, views like the bug videos): with
+  the camera still, the far plane is nudged by 0.05–0.2 %; that changes only depth rounding, so
+  any pixel that changes is two surfaces fighting. Share of such pixels, v0.11 → v0.12: whole
+  town from the water 0.189% → 0.005% (38× fewer), tall houses close 0.117% → 0.010%, washing
+  close up 0.009% → 0.003%, roof 0.018% → 0.007%. Frame strips and maps:
+  `docs/progress/run-e/flicker_*`.
 - Test: `tests/unit/openings.test.js`: houses never overlap; no opening on a covered wall
   (an independent point-sampling check, which fails if the cover test is switched off);
   wall parts stand clear of the wall and a window's layers are apart.
+
+### Part 2 — roof shimmer (done)
+
+Measured with `tools/shimmer.cjs` (a slow sub-pixel camera drift; it scores how much the
+picture changes between frames, and how unstable the fine detail is), switching each
+suspect off in turn on a real slate roof seen from a few metres above:
+- **Not the cause:** mipmaps (they are generated for the texture arrays), anisotropic
+  filtering (on: 8x on High), the normal maps (switching them off changed nothing), the
+  screen-space AO (tiny change), the hand-painted brushstrokes (no change).
+- **The cause:** the slate texture's own detail. A texture's detail is applied as
+  (brightness ÷ average brightness), multiplied onto the roof colour. The slate photo is
+  dark with pale chipped edges, so that ratio reached 11x: hard white texel-sized specks
+  that crawl as the camera moves (the "gravel" in the video). Fix: a per-texture detail
+  contrast and extra mip bias (`CONFIG.textures`; slate 0.5 and +0.75, a few others 0.75–0.8
+  and +0.25), and the ratio capped at 0.3–2.4 for every texture. Frame-to-frame change on the
+  roof halved (2.84 → 1.39), the fine-detail instability fell from 0.45 to 0.38.
+- **Every material checked** close up and at grazing angles (plaster wall, paving, a lane at a
+  grazing angle, a hillside close up): none fizzed like the roof; a mip bias of +1 calmed all of
+  them a little, so the default style now uses +0.3 everywhere (anisotropic filtering keeps
+  them sharp at an angle). The hillside close-up's big score is the camera rig nudging the
+  camera off the slope, not the texture.
+- Screen-space AO (GTAO) is switched off on High (it was High-only): it cost about a fifth of a
+  High frame, drew the scene a second time, and its un-antialiased edges caused the jagged,
+  changing edges on washing. Baked AO replaces it on every quality level (part 4).
 
 ### Part 3 — trees taken out (done)
 
@@ -62,6 +93,50 @@ the plant on low walls (`infill.js`). **To bring them back, set `trees: true` in
 `src/config.js` (`flora`)**; nothing was deleted. Kept: ground colour and slope blending,
 terrace vines, agave and prickly pear (not trees or bushes), bougainvillea on houses and
 terrace walls, pots, flower boxes, balcony plants, vegetable rows.
+
+### Part 4 — light and colour on the buildings (done)
+
+Method: a test scene of six real houses (`index.html?scene=six`, `src/testscene.js`; add
+`&colours=E2BC78,...` to paint them), measured with `tools/measure_walls.cjs`: it renders a
+view, then a mask of house walls only, then the view with the sun off, and reports the HSL
+lightness of warm wall pixels in sun and in shade.
+
+**Before (v0.11, postcard view, High, Hand-painted, Warm):** warm walls in sun 50% (median),
+in shade 29%, overall 21% (shade, 10th percentile) to 65% (sun, 90th). Low: sun 58%, shade
+36%. So v0.11 was darker than both the target and the 47–88% you measured on v0.10 (that
+screenshot was Clean style, Neutral, Low).
+
+What was wrong, and what changed:
+1. **Every textured surface was drawn at about 65% of its colour** (since v0.8): texture
+   brightness, in linear light, was divided by an average measured in sRGB. Fixed for houses
+   (walls, roofs, wall parts): `materials.js`, `trueMean`. Ground, rock and paths keep their
+   old look exactly (the terrain run can switch them over).
+2. **Tone mapping**: ACES → Khronos PBR Neutral (keeps colours true and sunlit walls bright;
+   ACES shifted yellows to mustard and washed highlights; AgX washed everything out).
+3. **The sun was behind the camera's right shoulder** at the postcard view, so nearly every wall
+   you saw was sunlit. The sun now stands in the west (as at Riomaggiore, where it sets over
+   the sea): fronts and west sides lit, east sides in shade, shadows falling between houses.
+   Midday is now an early-afternoon sun (42° high).
+4. **Sun and sky fill calibrated**: warm sun ×1.6, cooler sky fill ×1.3–1.5, exposure 1.2 at
+   midday; the Hand-painted grade's extra saturation (1.12) removed (it made walls egg-yolk).
+5. **Baked ambient occlusion** on every quality level: per pixel (it used to be smeared up the
+   whole wall from two vertices), darker at the wall foot and in narrow lanes, a band under the
+   eaves, and a soft ring round every window and under its sill (`CONFIG.building.ao`).
+6. **Palette** (`FACADE_COLOURS`): lighter, warmer, sun-faded: ochre, golden ochre, lemon,
+   cream, limewash, peach, faded burnt orange, faded terracotta, salmon, dusty rose, pale rose,
+   sage, limestone render. Started from section 7 of the graphics review; each colour
+   lightened and faded the way ochre #D5AC55 had to become #E2BC78 to match the target, then
+   brought back to mid-tones after a first, too-pale try. Touching houses still never share a
+   colour. Soft variation within each wall: broad brightness drift plus paler, greyer
+   sun-faded patches (`wallVariation`, `sunFade`).
+7. **Shutters**: richer, lighter greens (#2f7656 … #4a8a63) instead of near-black.
+
+**After, the single-building test** (all six houses ochre #E2BC78, midday; the same on Low,
+Medium and High): sunlit wall **#E9C18D, 71%, hue 34°** (target #F3C17B, 72%, 35°); shaded wall
+**#96744C, 44%** (target #9E794D, 46%). Golden hour: 69% / 42%, a warmer hue (30°).
+**After, the whole town** (postcard, High, midday): warm walls 36% (shade, 10th percentile) to
+83% (sun, 90th), median 68%; the paint-overs run 34% to 78%, median 60%. The game still has less
+deep shade than the paint-overs: their houses stand closer and cast more shadow on each other.
 
 ## Earlier run: Borgo brief, Step 0 + Phases B, C, D (v0.9–v0.11)
 
@@ -185,11 +260,34 @@ What was found:
 
 ## Tests
 
-`npm run test:unit` (51 tests, ~9 s) and `npm run test:browser` (27 checks, ~9 min in the
-software renderer). `tests/browser/baseline.json` holds software-renderer frame times per
+`npm run test:unit` (54 tests, ~10 s) and `npm run test:browser` (27 checks, ~9 min in the
+software renderer). New in v0.12: `tests/unit/openings.test.js` (no opening on a covered wall,
+houses never intersect, wall parts stand clear). Tools: `tools/profile.cjs` (where frame time
+goes), `tools/measure_walls.cjs` (wall colours in sun and shade), `tools/shimmer.cjs`,
+`tools/flicker_strip.cjs`, and the six-house scene `index.html?scene=six`. `tests/browser/baseline.json` holds software-renderer frame times per
 preset (2× tolerance). Re-create with `npm run test:browser -- --update-baseline`.
 
 ## Decisions (made without asking, with reasons)
+
+v0.12:
+- **Trees switched off, not deleted** (`CONFIG.flora.trees`): one switch to bring them back for
+  the vegetation pass. Agave, prickly pear and bougainvillea kept (not trees or bushes).
+- **Screen-space AO (GTAO) off on all presets**, baked AO instead: GTAO cost ~20% of a High
+  frame and caused jagged crawling edges; baked AO is stable and now on Low and Medium too.
+- **Sun moved to the west** (from the east): the postcard view showed almost no shade, and at
+  Riomaggiore the sun sets over the sea to the west of the harbour.
+- **Tone mapping: Khronos PBR Neutral** (ACES and AgX were tried side by side on the six houses).
+- **Texture brightness fix only on houses**: ground, rock and paths keep their exact old look,
+  since this run must not change terrain; switch them over in the terrain/materials run.
+- **Roof textures**: the fix in (1) also makes roofs show their intended (lighter) colours,
+  and the slate's detail contrast was halved to stop the shimmer. The roof colours themselves
+  are unchanged.
+- **Near plane** follows the camera distance (0.5–6 m) rather than a fixed larger value, so
+  close-up views near walls still work.
+- **Houses may not overlap by more than 5 mm** (was 12 cm). The demo town grows 226 houses in
+  the browser (was 235); still well over the 150 the tests ask for.
+- **Palette calibrated on the six-house scene** to the single-building target, not on the
+  whole-town paint-overs, because the town's geometry (spacing, shade) still differs from them.
 
 - **No new downloads this run.** The build sandbox cannot reach Poly Haven, ambientCG,
   Kenney or Quaternius. Everything uses the CC0 library already in `assets/textures/`

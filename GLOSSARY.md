@@ -42,7 +42,7 @@ Game-development terms used in this project, one plain-English line each.
 | **Render pass** | One drawing of the scene (or of a full-screen effect). A frame is several passes: mirror, scene, effects. |
 | **Shadow map** | A picture of the scene from the sun's point of view, used to work out what's in shadow. |
 | **sRGB / linear** | Two ways to store colour values; colour textures are sRGB, data textures (normals, roughness) are linear. |
-| **SSAO** | Screen-space ambient occlusion: AO worked out from the finished image each frame (costly; High only). |
+| **SSAO** | Screen-space ambient occlusion: AO worked out from the finished image each frame (costly; switched off since v0.12, see Baked AO). |
 | **String course** | A horizontal band across a facade at a floor line (moulded or painted). |
 | **Texture array** | Many same-sized textures stacked in one GPU object; a shader picks a layer by number. |
 | **Texture compression** | Storing textures in smaller formats: WebP shrinks downloads; GPU formats (KTX2/Basis) also shrink video memory. |
@@ -54,3 +54,13 @@ Game-development terms used in this project, one plain-English line each.
 | **Uniform** | A value passed from JavaScript to a shader for every pixel (e.g. the time of day). |
 | **Vertex colour** | A colour stored on each corner of a triangle, blended across it. |
 | **WebP** | A compact image format browsers understand; our packed textures use it. |
+| **Depth buffer / depth precision** | For every pixel, how far away the nearest surface is, so nearer things hide further ones. It is finer near the camera and coarser far away; too coarse and two close surfaces swap (see z-fighting). |
+| **Near plane / far plane** | The closest and furthest distances the camera draws. Moving the near plane out a little makes depth far more precise in the distance (v0.12 moves it out as the camera pulls back). |
+| **Z-fighting (depth fighting)** | Two surfaces at almost the same depth taking turns to show, so a window flickers in and out. Fixed by real gaps between surfaces and better depth precision. |
+| **Tone mapping** | Squeezes the scene's unlimited brightness into what a screen can show. We use Khronos PBR Neutral, which keeps colours true (ACES made yellows mustard). |
+| **Exposure** | Overall brightness before tone mapping, like a camera's exposure setting. |
+| **Sky fill (hemisphere light)** | Soft light from the whole sky (bluish from above, warm bounce from the ground) that lights everything the sun doesn't; it sets how dark shade is. |
+| **Baked AO** | Ambient occlusion worked out once when a house is built and stored with it, instead of every frame from the screen: cheap and steady. Ours darkens wall feet, eaves and round windows. |
+| **GTAO** | Ground-truth ambient occlusion, a screen-space AO method. Used on High until v0.12; switched off because it was costly and made thin edges crawl. |
+| **Shimmer / fizz** | Fine detail (texture specks, thin lines) flickering as the camera moves, because it is smaller than a pixel. Fixed with softer texture levels (mip bias) and less extreme detail. |
+| **Calibration** | Tuning settings until a measured result matches a reference, e.g. lights tuned until a test wall shows the art target's sunlit and shaded colours. |
