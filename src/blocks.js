@@ -96,6 +96,21 @@ function insideConvex(p, q) {
   return true;
 }
 
+/** Where p lies relative to a frontage line: s along it and d (distance in front, along its normal). */
+function project(line, p) {
+  const { O, S } = line;
+  let best = { s: 0, d: Infinity, dd: Infinity };
+  for (let i = 0; i + 1 < O.length; i++) {
+    const a = O[i], b = O[i + 1], e = sub(b, a), L2 = e[0] * e[0] + e[1] * e[1] || 1;
+    const u = Math.max(0, Math.min(1, ((p[0] - a[0]) * e[0] + (p[1] - a[1]) * e[1]) / L2));
+    const q = [a[0] + e[0] * u, a[1] + e[1] * u], dd = dist(p, q);
+    if (dd < best.dd) best = { s: S[i] + u * (S[i + 1] - S[i]), dd, i };
+  }
+  const e = norm(sub(O[best.i + 1], O[best.i])), n = line.N[best.i];
+  best.d = dot(sub(p, O[best.i]), n);
+  return best;
+}
+
 /** Intersection of lines p + t·d and q + u·e (t, u returned), or null if parallel. */
 function cross(p, d, q, e) {
   const den = d[0] * e[1] - d[1] * e[0];
@@ -254,6 +269,69 @@ export function planLots(world, grid) {
       if (r * k >= D.rearMin && good(q)) { const w = ++runId; accept({ corners: q, kind: 'rear', block: f.block, band: f.band, parent: f.index, effort: f.effort + 6, who: w }, w); break; }
     }
   }
+  // GAP LOTS: a leftover piece of a dense block beside a lane (where lanes meet at a sharp
+  // angle, or a run's end was cut short) gets a lot of its own, fronting that lane
+  {
+    const seen = new Uint8Array(grid.N * grid.N);
+    for (const blk of grid.blocks) {
+      if (blk.band.name === 'edge') continue;
+      for (const c0 of blk.cells) {
+        if (claimed[c0] || seen[c0]) continue;
+        const comp = [], st = [c0]; seen[c0] = 1;
+        while (st.length) {
+          const k = st.pop(); comp.push(k);
+          const i = k % grid.N, j = (k / grid.N) | 0;
+          for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nk = (j + dj) * grid.N + i + di;
+            if (grid.id[nk] === blk.id && !claimed[nk] && !seen[nk]) { seen[nk] = 1; st.push(nk); }
+          }
+        }
+        if (comp.length < D.gapMinArea) continue;
+        // the lane it lies along: the frontage line most of its lane-side cells are nearest to
+        const votes = new Map();
+        for (const k of comp) {
+          const p = [grid.xOf(k % grid.N), grid.xOf((k / grid.N) | 0)], nf = world.nearestFrontage(p, 1.6, null);
+          if (!nf) continue;
+          const key = nf.lane.name + ':' + nf.side, v = votes.get(key) || { n: 0, lane: nf.lane, side: nf.side, pts: [] };
+          v.n++; v.pts.push(p); votes.set(key, v);
+        }
+        const v = [...votes.values()].sort((x, y) => y.n - x.n)[0];
+        if (dbg) (dbg.gaps ||= []).push({ at: [grid.xOf(c0 % grid.N), grid.xOf((c0 / grid.N) | 0)], n: comp.length, votes: [...votes.values()].map((x) => x.lane.name + ':' + x.side + '=' + x.n).join(' ') });
+        if (!v || v.n < 2) continue;
+        const line = v.lane.lines[v.side];
+        let s0 = Infinity, s1 = -Infinity, dmax = 0;
+        for (const k of comp) {
+          const p = [grid.xOf(k % grid.N), grid.xOf((k / grid.N) | 0)], pr = project(line, p);
+          if (pr.d > D.maxDepth8 || pr.d < -0.5) continue;
+          dmax = Math.max(dmax, pr.d + 0.5);
+          if (pr.d < 2.5) { s0 = Math.min(s0, pr.s - 0.5); s1 = Math.max(s1, pr.s + 0.5); }   // its stretch of lane
+        }
+        s0 = Math.max(0, s0); s1 = Math.min(line.total, s1);
+        if (!(s1 - s0 >= D.gapMinWidth)) continue;
+        const who = ++runId;
+        const lotQ = (a0, a1, dd) => { const A = world.at(line, a0), Bp = world.at(line, a1); return [A.p, Bp.p, add(Bp.p, mul(Bp.n, dd)), add(A.p, mul(A.n, dd))]; };
+        const fitsGap = (q) => isConvex(q) && world.clear(q) && !clash(q);
+        // try a narrow seed lot at each point of the stretch, deep first; grow the best one sideways
+        let best = null;
+        const hw = D.gapMinWidth / 2;
+        for (let dep = Math.max(D.minDepth, Math.min(dmax, blk.band.maxDepth)); dep >= D.minDepth - 1e-6 && !best; dep = dep > D.minDepth ? Math.max(D.minDepth, dep * 0.75) : -1) {
+          for (let c = s0 + hw; c <= s1 - hw + 1e-6; c += 0.5) {
+            if (!fitsGap(lotQ(c - hw, c + hw, dep))) continue;
+            const a = fitsGap(lotQ(s0, c + hw, dep)) ? s0 : closest((x) => fitsGap(lotQ(x, c + hw, dep)), s0, c - hw);
+            const b = fitsGap(lotQ(a, s1, dep)) ? s1 : closest((x) => fitsGap(lotQ(a, x, dep)), s1, c + hw);
+            const area = (b - a) * dep;
+            if (!best || area > best.area) best = { a, b, dep, area };
+          }
+        }
+        if (dbg) dbg.gaps[dbg.gaps.length - 1].ok = !!best;
+        if (!best || best.area < D.gapMinArea * 0.6) continue;
+        const A = world.at(line, best.a);
+        accept({ corners: lotQ(best.a, best.b, best.dep), kind: 'front', block: blk.id, band: blk.band.name, corner: false, by: 'edge', gap: true,
+          frontage: { name: v.lane.name, side: v.side, s0: best.a, s1: best.b, key: v.lane.name + ':' + v.side }, rear: false,
+          effort: world.effortAt(A.p[0], A.p[1]), who }, who);
+      }
+    }
+  }
   // WEDGES: the leftover corners of odd-shaped blocks (where lanes meet at an angle) are taken
   // by the lot beside them: its back corners move out until the lot meets its neighbours
   const inBlock = (q, lot) => {
@@ -269,7 +347,7 @@ export function planLots(world, grid) {
     }
     return false;
   };
-  const fits = (lot, q) => isConvex(q) && world.clear(q) && inBlock(q, lot) && !others(lot, q) && fall(world, q) <= D.maxFall + 1;
+  const fits = (lot, q) => isConvex(q, D.wedgeMinSin) && world.clear(q) && inBlock(q, lot) && !others(lot, q) && fall(world, q) <= D.maxFall + 1;
   const DIRS = [];
   for (let a = 0; a < 16; a++) DIRS.push([Math.cos((a * Math.PI) / 8), Math.sin((a * Math.PI) / 8)]);
   for (let pass = 0; pass < D.wedgePasses; pass++) for (const lot of lots) {
