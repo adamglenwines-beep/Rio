@@ -23,7 +23,7 @@ once at the very end. After each stage: commit, merge to `main`, publish, screen
 | 3. Small-scale shading | `v0.18 · Shading` | **done, published** |
 | 4. Windows, shutters and doors | `v0.19 · Windows` | **done, published** |
 | 5. Plaster weathering | `v0.20 · Weathering` | **done, published** |
-| 6. Break the procedural rhythm | `v0.21` | to do |
+| 6. Break the procedural rhythm | `v0.21 · Rhythm` | **done, published** |
 | Wrap-up: browser suite, final sheets in `docs/progress/final/`, summary | | to do |
 
 **To resume:** read this section, look at the table, and carry on with the first stage that is
@@ -357,6 +357,54 @@ storey's windows share one drip length, and a drip stops at the window below.
 warmer and cooler washes) than ours; close up our plaster is clean between the streaks.
 
 Pictures: `docs/progress/v0.20/`.
+
+### Stage 6 · Break the procedural rhythm (v0.21) — done
+
+Every house now draws its own numbers from ranges in `data/facades.json` → `rhythm` (content is
+data; the code is in `_look` and `_buildOne`, `src/buildings.js`). **Windows still stack in
+vertical columns.**
+
+| Asked for | What was done |
+|---|---|
+| **Storey heights** | each house has its own: ordinary storeys 2.75–3.25 m, a low attic (2.3–2.65 m) on 35% of houses, one storey of higher rooms (+0.25–0.5 m) on 35%, and ±7 cm on every storey. They are fitted so the ground floor still starts at ground level and the eaves stay where the town's growth put them (which still counts 3 m a storey) |
+| **Mismatched window sizes** | per house: width × 0.86–1.06, height × 0.84–1.08 (and never taller than the storey allows); 30% of houses have one column of narrower windows (× 0.76), 25% one storey of shorter ones (× 0.8, sill raised) |
+| **Irregular column spacing between houses** | per house: the spacing between columns is × 0.76–1.08; on 55% of fronts the columns sit to one side instead of centred; windows may stand 30 cm from a corner (was 55) |
+| **Occasional blank walls** | 12% of side and back walls have no windows at all (never the front, never a wall looking over the harbour); another 14% of them have a single column |
+| **Painted fake windows** | a blind column on 18% of fronts (was 8%), painted 6 times in 10; on a blank wall, 12% of the places a window would have been are painted. 89 in the demo town (v0.20: about 60) |
+| **Interrupted string courses** | laid wall by wall now: always along the front, round each other wall only 55% of the time (33% on the back), never where a neighbour hides them, and on 30% of houses the front one stops 40–75% of the way along |
+| **Interrupted cornices** | 48% of houses keep the two-step cornice, 29% have one plain step, 24% none (the eaves sit on the wall), so the cornice line breaks from house to house |
+| **Asymmetric balconies** | each wall has a "balcony column" where 75% of its balconies stack; each house has × 0.7–1.3 the usual number; a balcony across the whole front is rarer (22% of balcony storeys, was 45%) |
+
+Also: painted corner stones are lower in contrast (they read as a dotted white line from the
+Postcard).
+
+**Numbers (demo town, 182 houses):** 1,991 windows (v0.20: 2,492), 112 balconies (134), 89 painted
+windows. A new unit test (`tests/unit/facades.test.js`) checks that windows stack in columns on
+over 90% of walls while window widths, heights and storey heights vary; 61/61 pass.
+
+**A bug caught on the way.** The first version lost a third of all windows. Two causes: storeys
+of free height no longer lined up with the ground, so the ground-floor row fell half underground
+and was dropped (fixed by fitting the heights between the ground and the eaves); and my change
+to the "too short, make it a small window" rule moved such windows back down into the dado.
+Found by counting, per storey, why each window was skipped.
+
+**Decisions.**
+- *Fewer windows (−20%) on purpose*: blank and one-column side walls and wider spacing on some
+  houses are what the brief asked for. If the town now looks too closed from the Postcard, lower
+  `rhythm.blankWall` and `rhythm.sparseWall`, or `rhythm.columnPitch`'s upper end.
+- *Storey heights vary inside the same total height.* Changing how tall a house is would have
+  been massing (out of scope) and would have moved roofs.
+- *Cornices vary per house rather than breaking along one wall*: along a street that reads as an
+  interrupted line, and a half-cornice on one wall would need new end pieces.
+
+**Frame rate (High, Postcard, midday, software renderer):** 4.83 s a frame (v0.20 5.24 s, v0.15
+4.33 s). Draw calls 101 → **95**, triangles 0.76 M → **0.69 M** (fewer windows).
+
+**Still differs.** The paint-overs' facades carry more on them (awnings, plants, washing on most
+floors): out of scope here (no new decorative objects). Blank walls are plain plaster; real ones
+often show a bricked-up opening or a drainpipe.
+
+Pictures: `docs/progress/v0.21/`.
 
 ### Decisions that hold for the whole run
 - **CC0 models (windows, shutters, doors, railings): looked, not used.** Poly Haven is reachable

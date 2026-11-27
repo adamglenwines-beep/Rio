@@ -1068,11 +1068,11 @@ export class BuildingRenderer {
    */
   _opening(put, b, rng, F, W, o) {
     const WIN = FACADES.windows, SH = FACADES.shutters, K = CONFIG.building.look;
-    const { A, e, n, rot, sgn } = W, T = WIN.types[o.type], ky = o.h / T.h;
-    if (T.sill !== false) put('sill_' + o.type, o.px, o.yc, o.pz, rot, 1, ky, 1, F.sillCol);
+    const { A, e, n, rot, sgn } = W, T = WIN.types[o.type], ky = o.h / T.h, kx = o.w / T.w;
+    if (T.sill !== false) put('sill_' + o.type, o.px, o.yc, o.pz, rot, kx, ky, 1, F.sillCol);
     put('holeBack', o.px, o.yc, o.pz, rot, o.w, o.h, 1, WHITE);
     if (F.deco === 'surrounds' || F.deco === 'full') {
-      put('sur_' + o.type, o.px, o.yc, o.pz, rot, 1, ky, 1, F.trimSoft);
+      put('sur_' + o.type, o.px, o.yc, o.pz, rot, kx, ky, 1, F.trimSoft);
       if (F.deco === 'full' && o.type !== 'small') put('pediment', o.px, o.y1 + WIN.lintel.height + 0.04 - 0.92, o.pz, rot, (o.w + 0.4) / 1.52, 1, 1, F.trimSoft);
     }
     // ---- shutters: what each leaf is doing ('shut' | 'flat' | an angle in radians | null = missing) ----
@@ -1099,7 +1099,7 @@ export class BuildingRenderer {
     const bothShut = leaves[-1] === 'shut' && leaves[1] === 'shut';
     // the glass (and near, the frame) show unless both leaves are shut in front of them
     if (!bothShut) {
-      put('frame_' + o.type, o.px, o.yc, o.pz, rot, 1, ky, 1, WHITE);
+      put('frame_' + o.type, o.px, o.yc, o.pz, rot, kx, ky, 1, WHITE);
       // per-window randoms (packed in the instance colour): when its light comes on, the room's wall colour, the curtain
       this._gc.setRGB(rng(), rng(), rng());
       put('glass', o.px, o.yc, o.pz, rot, o.w / 0.74, o.h / 1.24, 1, this._gc);
@@ -1296,6 +1296,17 @@ export class BuildingRenderer {
         if (B.bottom) gb.face(oq.map((p) => [p[0], B.y0, p[1]]), B.col.clone().multiplyScalar(0.8), [0, -1, 0]);
       }
     }
+  }
+
+  /** A flat band standing `out` proud of a wall (from corner A along e, outward n), from u0 to u1: a string course that can stop short. */
+  _strip(gb, A, e, n, u0, u1, y0, y1, out, col) {
+    const p = (u, o, y) => [A[0] + e[0] * u + n[0] * o, y, A[1] + e[1] * u + n[1] * o];
+    const N = [n[0], 0, n[1]], E = [e[0], 0, e[1]];
+    gb.face([p(u0, out, y0), p(u1, out, y0), p(u1, out, y1), p(u0, out, y1)], col, N);
+    gb.face([p(u0, -0.02, y1), p(u1, -0.02, y1), p(u1, out, y1), p(u0, out, y1)], col.clone().multiplyScalar(1.04), [0, 1, 0]);
+    gb.face([p(u0, -0.02, y0), p(u1, -0.02, y0), p(u1, out, y0), p(u0, out, y0)], col.clone().multiplyScalar(0.72), [0, -1, 0]);
+    gb.face([p(u0, -0.02, y0), p(u0, out, y0), p(u0, out, y1), p(u0, -0.02, y1)], col, [-E[0], 0, -E[2]]);
+    gb.face([p(u1, -0.02, y0), p(u1, out, y0), p(u1, out, y1), p(u1, -0.02, y1)], col, E);
   }
 
   /** Walls of a footprint: chamfered (and shaded round) in the softer styles. */
@@ -1579,6 +1590,21 @@ export class BuildingRenderer {
     F.sillCol = new THREE.Color(rng.weighted(FACADES.windows.sill.colours));
     F.shutFade = rng() < FACADES.shutters.fadedHouses ? FACADES.shutters.fade[0] + rng() * (FACADES.shutters.fade[1] - FACADES.shutters.fade[0]) : 0;
     F.shutFadeCol = new THREE.Color(FACADES.shutters.fadeColour);
+    // the house's own rhythm (v0.21, data/facades.json rhythm): storey heights, window size and spacing, trim
+    const RH = FACADES.rhythm, pickIn = (r) => r[0] + rng() * (r[1] - r[0]);
+    F.floorH = pickIn(RH.storey);
+    F.atticH = rng() < RH.lowAttic ? pickIn(RH.attic) : F.floorH;
+    F.tallFloor = rng() < RH.tallFloor ? 1 + ((rng() * 3) | 0) : -1;      // one storey (counted from the top) with higher rooms
+    F.tallBy = pickIn(RH.tallBy);
+    F.storeyJit = Array.from({ length: 8 }, () => (rng() - 0.5) * 2 * RH.storeyJitter);
+    F.colPitch = pickIn(RH.columnPitch);
+    F.colShift = rng() < RH.centred ? 0.5 : rng();                       // where the window columns sit between the corners
+    F.winW = pickIn(RH.windowWidth); F.winH = pickIn(RH.windowHeight);
+    F.oddCol = rng() < RH.oddColumn ? (rng() * 4) | 0 : -1;              // one column of narrower windows
+    F.oddFloor = rng() < RH.oddFloor ? 1 + ((rng() * 4) | 0) : -1;       // one storey of shorter windows
+    F.cornice = rng.weighted(RH.cornice);
+    F.balMul = rng.pick(RH.balconyShare);
+    F.bandBreak = rng() < RH.bandBreak ? (rng() < 0.5 ? -1 : 1) * pickIn(RH.bandBreakAt) : 0;   // a string course that stops part-way (sign: from which end)
     F.shutMul = { closed: F.shut[0] / K.shutClosed, open: F.shut[2] / K.shutOpen };
     F.trimSoft = F.trim.clone().lerp(b.facade, 0.5);        // painted surrounds and bands: half way to the wall colour (thin and low in contrast)
     F.ridge = F.ridgeTerracotta ? new THREE.Color(rng.pick(['#ae7055', '#b6775d', '#a2643f'])) : new THREE.Color('#dcd8cf');
@@ -1613,6 +1639,17 @@ export class BuildingRenderer {
     F.flowers *= 0.4 + cond; F.pots = F.pots && rng() < 0.45 + cond;
     const base = b.gMin - 1.2;
     const q = b.corners;
+    // Storeys, from the roof down (v0.21): each house has its own heights (a low attic, one storey of
+    // higher rooms, none quite equal), fitted so that together they still fill the house from the
+    // uphill ground to the eaves: the ground floor's floor stays at ground level. Below that (the
+    // downhill side of a house on a slope) the storeys are the plain 3 m. floorBottoms[k] = the floor of storey k.
+    const nFl = Math.max(1, Math.round((b.top - b.gMax) / FH));
+    const rawH = [];
+    for (let k = 0; k < nFl; k++) rawH.push(Math.max(2.3, (k === 0 && nFl >= 3 ? F.atticH : F.floorH + (k === F.tallFloor && nFl >= 3 ? F.tallBy : 0)) + F.storeyJit[k % 8]));
+    const fitH = (b.top - b.gMax) / rawH.reduce((a, v) => a + v, 0);
+    const storeyH = (k) => (k < nFl ? rawH[k] * fitH : FH);
+    const floorBottoms = [];
+    for (let y = b.top, k = 0; k < 40; k++) { y -= storeyH(k); if (y < base) break; floorBottoms.push(k === nFl - 1 ? b.gMax : y); }
     const qTop = offsetPoly(q, -F.taper);                 // walls lean in a touch: old walls are never plumb
     gb.wear = Math.min(F.wear, 0.95) + (F.quoins ? 1 : 0);
 
@@ -1687,25 +1724,46 @@ export class BuildingRenderer {
     const covered = this._coverTest(b);
     // trim (data/facades.json trim): bands at the floor lines on decorated houses and some plain ones, kept
     // subtle (close to the wall colour), always above the highest ground so they never cross a door
-    const TR = FACADES.trim;
+    const TR = FACADES.trim, RH = FACADES.rhythm;
+    const party = b.arch ? null : this._partyTops(b, q);   // (where a neighbour hides the lower part of a wall)
+    b.partyTops = party;
     if (!b.arch && (F.deco !== 'none' || rng() < TR.bands.chance)) {
+      // v0.21: a string course is laid wall by wall. It always runs along the front; on the other walls only
+      // sometimes; never where a neighbour hides it; and on some houses it stops part-way along the front.
       gb.layer = LAYERS.plaster;
       const bandCol = F.deco === 'none' ? paint.clone().offsetHSL(0, -0.04, 0.05) : F.trimSoft;
+      const onWall = [true, rng() < RH.bandOnSide, rng() < RH.bandOnSide * 0.6, rng() < RH.bandOnSide];
       let first = true;
-      for (let k = Math.floor((b.top - b.gMin) / FH); k >= 1; k--) {
-        const y = b.top - FH * k;
-        if (y < Math.max(b.gMax + 2.9, stoneTop + 0.3)) continue;
-        if (first || F.deco !== 'band') gb.prism(offsetPoly(q, TR.bands.proud), y - TR.bands.height / 2, y + TR.bands.height / 2, bandCol, true, true);
+      for (let k = floorBottoms.length - 1; k >= 0; k--) {
+        const y = floorBottoms[k];
+        if (y < Math.max(b.gMax + 2.9, stoneTop + 0.3) || y > b.top - 2) continue;
+        if (first || F.deco !== 'band') {
+          for (let i = 0; i < 4; i++) {
+            if (!onWall[i] || (party && party[i] >= y - 0.1)) continue;
+            const A = q[i], Bc = q[(i + 1) % 4], L = dist(A, Bc), e = norm(sub(Bc, A)), n = edgeNormal(q, i), o = TR.bands.proud;
+            let u0 = -o, u1 = L + o;
+            if (i === 0 && F.bandBreak && L > 3) { if (F.bandBreak > 0) u1 = L * F.bandBreak; else u0 = L * (1 + F.bandBreak); }
+            this._strip(gb, A, e, n, u0, u1, y - TR.bands.height / 2, y + TR.bands.height / 2, o, bandCol);
+          }
+        }
         first = false;
       }
     }
-    // the cornice under the eaves: two steps, the upper standing further out, so it casts a shadow line
+    // the cornice under the eaves. v0.21: not every house has the full one. 'full' = two steps, the upper
+    // standing further out, so it casts a shadow line; 'single' = one plain step; 'none' = the eaves sit
+    // straight on the wall. Along a street the cornice line therefore breaks from house to house.
     const corniceCol = rng() < 0.6 ? cream : b.facade.clone().offsetHSL(0, -0.1, 0.12);
     const cor = this.style.cornice, cp = TR.cornice.proud * (0.8 + 0.4 * this.style.cornice);
+    const corKind = b.arch ? 'full' : F.cornice;
     gb.layer = LAYERS.plaster;
-    this._walls(gb, offsetPoly(qTop, cp * 0.45), b.top - cor, b.top - cor * 0.45, corniceCol.clone().multiplyScalar(0.97), true);
-    this._walls(gb, offsetPoly(qTop, cp), b.top - cor * 0.45, b.top, corniceCol, true);
-    gb.face(offsetPoly(qTop, cp).map((p2) => [p2[0], b.top - cor * 0.45, p2[1]]), corniceCol.clone().multiplyScalar(0.7), [0, -1, 0]);   // its underside, in shade
+    if (corKind === 'full') {
+      this._walls(gb, offsetPoly(qTop, cp * 0.45), b.top - cor, b.top - cor * 0.45, corniceCol.clone().multiplyScalar(0.97), true);
+      this._walls(gb, offsetPoly(qTop, cp), b.top - cor * 0.45, b.top, corniceCol, true);
+      gb.face(offsetPoly(qTop, cp).map((p2) => [p2[0], b.top - cor * 0.45, p2[1]]), corniceCol.clone().multiplyScalar(0.7), [0, -1, 0]);   // its underside, in shade
+    } else if (corKind === 'single') {
+      this._walls(gb, offsetPoly(qTop, cp * 0.55), b.top - cor * 0.5, b.top, corniceCol.clone().lerp(paint, 0.4), true);
+      gb.face(offsetPoly(qTop, cp * 0.55).map((p2) => [p2[0], b.top - cor * 0.5, p2[1]]), corniceCol.clone().multiplyScalar(0.7), [0, -1, 0]);
+    }
 
     // --- roof, chimneys, roof terrace ---
     const ridge = this._roof(gb, b, ov, F.pitch, F);
@@ -1747,14 +1805,25 @@ export class BuildingRenderer {
         for (const o of nearHouses) if (pointInPoly([px, pz], o.corners)) top = Math.max(top, o.top);
         if (top > base + 1 && L > 2 * AOc.cornerReach) feats[i].push(this._shadeCorner(atEnd, L, base, Math.min(top, b.top), AOc.cornerReach, AOc.cornerFrom));
       }
-      const cols = Math.max(1, Math.round(L / (front ? WIN.columns.front : WIN.columns.side)));
       const [hcx, hcz] = centroid(q), hbr = this.terrain.harbour;
       const harbourHouse = Math.hypot(hcx - hbr.x, hcz - hbr.z) < FACADES.groundFloors.harbourRadius;
-      const wStd = WIN.types.standard.w, margin = WIN.edgeMargin + wStd / 2;
-      // uneven rhythm: each column a little off the regular grid; now and then two windows paired close together
-      const slack = Math.max(0, L / cols - wStd - 0.6) * 0.5 * F.irregular;
+      const seaward = harbourHouse && n[1] > 0.35;          // the sea lies toward +z: walls looking out over the harbour
+      // Window columns (v0.21). Windows still stack in vertical columns, but each house has its own spacing
+      // (`F.colPitch`), its columns need not sit centred between the corners (`F.colShift`), a side wall may
+      // have a single column or stand blank, and one column may be of narrower windows.
+      const RH = FACADES.rhythm;
+      const wStd = WIN.types.standard.w * F.winW, margin = WIN.edgeMargin + wStd / 2, avail = Math.max(0, L - 2 * margin);
+      const pitchWanted = (front ? WIN.columns.front : WIN.columns.side) * F.colPitch;
+      let cols = Math.max(1, Math.round(L / pitchWanted));
+      while (cols > 1 && avail / (cols - 1) < wStd + RH.minGap) cols--;
+      const plainSide = !front && !seaward && !b.arch;
+      const blankWall = plainSide && rng() < RH.blankWall;                // a wall with no windows at all (a painted one, now and then)
+      if (plainSide && rng() < RH.sparseWall) cols = 1;
+      const pitch = cols > 1 ? Math.min(pitchWanted, avail / (cols - 1)) : 0;
+      const start = margin + (avail - pitch * (cols - 1)) * (front ? F.colShift : rng());
+      const jit = Math.min(0.12, Math.max(0, pitch - wStd - RH.minGap) * 0.5) * F.irregular;
       const us = [];
-      for (let ci = 0; ci < cols; ci++) us.push(clamp(L * ((ci + 0.5) / cols) + (rng() - 0.5) * 2 * slack, Math.min(margin, L / 2), Math.max(L - margin, L / 2)));
+      for (let ci = 0; ci < cols; ci++) us.push(clamp(start + ci * pitch + (rng() - 0.5) * 2 * jit, Math.min(margin, L / 2), Math.max(L - margin, L / 2)));
       if (front && cols >= 2 && rng() < WIN.pairChance) {
         const ci = (rng() * (cols - 1)) | 0, mid = (us[ci] + us[ci + 1]) / 2, half = wStd / 2 + WIN.pairGap / 2;
         us[ci] = clamp(mid - half, Math.min(margin, L / 2), L / 2); us[ci + 1] = clamp(mid + half, L / 2, Math.max(L - margin, L / 2));
@@ -1832,15 +1901,16 @@ export class BuildingRenderer {
       // balconies: most upper floors of harbour-front houses, some elsewhere; one per floor, or now and then
       // one running across the whole facade
       const BAL = FACADES.balconies;
-      const seaward = harbourHouse && n[1] > 0.35;          // the sea lies toward +z: walls looking out over the harbour
-      const pBal = seaward ? BAL.chanceHarbourFront : front ? (b.balconies ? BAL.chanceFront : 0) : (b.balconies ? BAL.chanceSide : 0);
+      // (v0.21) each house has more or fewer balconies than its neighbours (`F.balMul`), and on a wall they
+      // mostly stack in one column (`balHome`), so facades are lopsided the way real ones are
+      const pBal = (seaward ? BAL.chanceHarbourFront : front ? (b.balconies ? BAL.chanceFront : 0) : (b.balconies ? BAL.chanceSide : 0)) * F.balMul;
+      const balHome = (rng() * cols) | 0;
       let lowestFloor = true;
-      for (let k = 0; ; k++) {
-        const floorBottom = b.top - FH * (k + 1);
-        if (floorBottom < base) break;
+      for (let k = 0; k < floorBottoms.length; k++) {
+        const floorBottom = floorBottoms[k], hF = storeyH(k);
         let any = false;
         const row = [];
-        const floorBal = rng() < pBal ? ((front || seaward) && cols >= 2 && rng() < 0.45 ? 'all' : 'one') : 'none', balCol = (rng() * cols) | 0;                                   // this storey's windows: planned first, shutters decided left to right
+        const floorBal = rng() < pBal ? ((front || seaward) && cols >= 2 && rng() < RH.balconyAcross ? 'all' : 'one') : 'none', balCol = rng() < RH.balconyStack ? balHome : (rng() * cols) | 0;   // this storey's windows: planned first, shutters decided left to right
         for (let ci = 0; ci < cols; ci++) {
           const u = us[ci];
           const wx = A[0] + e[0] * u, wz = A[1] + e[1] * u;
@@ -1852,16 +1922,19 @@ export class BuildingRenderer {
           const balcony = floorBal !== 'none' && !lowestFloor && !groundFloor && (floorBal === 'all' || ci === balCol);
           let type = balcony ? 'french' : (k === 0 && F.smallTop ? 'small' : 'standard');
           let T = WIN.types[type];
-          let y0 = floorBottom + T.sillAt, y1 = y0 + T.h;
+          // the window's height: the house's own proportion, shorter on its odd storey, and never taller than the storey allows
+          const odd = k === F.oddFloor && type === 'standard';
+          const hWin = Math.min(T.h * (type === 'small' ? 1 : F.winH) * (odd ? RH.oddFloorScale : 1), Math.max(0.9, hF - T.sillAt - 0.32));
+          let y0 = floorBottom + T.sillAt + (odd ? 0.15 : 0), y1 = y0 + hWin;
           for (const s2 of skins) if (s2.dado && y0 < s2.top + 0.1) { y0 = s2.top + 0.1; y1 = Math.max(y1, y0 + 1.1); }   // clear of a dado
           const yMax = b.top - cor - WIN.lintel.height - 0.08;
           if (y1 > yMax) y1 = yMax;
-          if (y1 - y0 < 1.3 && type !== 'small') { type = 'small'; T = WIN.types.small; y1 = Math.min(y0 + T.h, yMax); }
+          if (y1 - y0 < 1.2 && type !== 'small') { type = 'small'; T = WIN.types.small; y1 = Math.min(y0 + T.h, yMax); }
           if (y1 - y0 < 0.8) continue;
           if (y0 < ground + 0.35) continue;                // this storey is underground here
           // facing the hillside close in front? (no openings onto a bank of earth)
           if (t.heightAt(wx + n[0] * WIN.clearInFront, wz + n[1] * WIN.clearInFront) > y0 - 0.3) continue;
-          const w = T.w;
+          const w = T.w * (type === 'small' ? Math.min(1, F.winW) : F.winW) * (ci === F.oddCol % cols && cols > 1 && type !== 'french' ? RH.oddColumnScale : 1);
           // on a wall area covered by, or within ~2 m of, a neighbour? Shared walls get no openings.
           if (covered(A, e, n, u - w / 2 - 0.15, u + w / 2 + 0.15, y0 - 0.2, y1 + 0.3, WIN.clearInFront)) continue;
           if (ci === doorCol && door && y0 < door.y1 && y1 > door.y0) { any = true; continue; }   // the door is here
@@ -1883,8 +1956,8 @@ export class BuildingRenderer {
           if (!plain(y0)) continue;
           const inset = lean(yc), px = wx + n[0] * inset, pz = wz + n[1] * inset;
           // a blind bay: bare wall, or a window painted on it
-          if ((front && ci === F.blindCol && cols > 1) || rng() < WIN.skipWindow) {
-            if (rng() < WIN.fakeWindow) put('fake', px, yc, pz, srot, w / 1.0, (y1 - y0) / 1.5, 1, b.shutter);
+          if ((front && ci === F.blindCol && cols > 1) || blankWall || rng() < WIN.skipWindow) {
+            if (rng() < (blankWall ? RH.blankWallPainted : WIN.fakeWindow)) put('fake', px, yc, pz, srot, w / 1.0, (y1 - y0) / 1.5, 1, b.shutter);
             continue;
           }
           any = true;
@@ -1948,8 +2021,6 @@ export class BuildingRenderer {
     gb.layer = LAYERS.plaster;
     const yb = b.arch ? b.arch.y : base;
     if (b.arch) gb.face(q.map((p2) => [p2[0], yb, p2[1]]), b.facade, [0, -1, 0]);
-    const party = b.arch ? null : this._partyTops(b, q);
-    b.partyTops = party;
     this._shell(gb, q, qTop, yb, b.top, paint, holes, party, feats);
     this._bands(gb, q, bands, holes, party);
 

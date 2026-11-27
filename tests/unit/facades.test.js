@@ -78,3 +78,32 @@ test('tower houses: narrow fronts, and the harbour front stands tallest', () => 
 test('no ordinary house stands on a lane', () => {
   for (const b of houses) if (!b.arch) assert.ok(G.lanes.clearOf(b.corners), 'house ' + b.id + ' overlaps a lane');
 });
+
+// v0.21: facades must not look stamped out, but windows still stack in columns.
+test('windows stack in vertical columns, yet houses differ in window size, spacing and storey height', () => {
+  G.renderer.rebuild(houses);
+  const widths = new Set(), heights = new Set(), storeys = new Set();
+  let walls = 0, stacked = 0, painted = G.renderer.partCount('fake');
+  for (const b of houses) {
+    const byWall = {};
+    for (const o of b.openings || []) if (o.kind === 'window') (byWall[o.wall] = byWall[o.wall] || []).push(o);
+    for (const list of Object.values(byWall)) {
+      for (const o of list) { widths.add(Math.round((o.u1 - o.u0) * 20) / 20); heights.add(Math.round((o.y1 - o.y0) * 10) / 10); }
+      if (list.length < 4) continue;
+      walls++;
+      // columns: several windows share (nearly) the same position along the wall
+      const cols = {};
+      for (const o of list) { const k = Math.round(((o.u0 + o.u1) / 2) * 5); cols[k] = (cols[k] || 0) + 1; }
+      if (Math.max(...Object.values(cols)) >= 2 && Object.keys(cols).length <= Math.ceil(list.length / 2) + 2) stacked++;
+      // the gap between two storeys' sills, for the tallest column
+      const ys = list.filter((o) => Math.abs((o.u0 + o.u1) / 2 - (list[0].u0 + list[0].u1) / 2) < 0.2).map((o) => o.y0).sort((a, c) => a - c);
+      for (let i = 1; i < ys.length; i++) storeys.add(Math.round((ys[i] - ys[i - 1]) * 10) / 10);
+    }
+  }
+  assert.ok(walls > 40, walls + ' walls with four or more windows');
+  assert.ok(stacked / walls > 0.9, `${stacked}/${walls} walls have their windows in columns`);
+  assert.ok(widths.size >= 5, 'window widths: ' + [...widths].sort().join(', '));
+  assert.ok(heights.size >= 6, 'window heights: ' + [...heights].sort().join(', '));
+  assert.ok(storeys.size >= 5, 'storey heights (sill to sill): ' + [...storeys].sort().join(', '));
+  assert.ok(painted >= 20, painted + ' painted windows');
+});

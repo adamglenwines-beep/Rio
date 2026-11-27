@@ -292,7 +292,7 @@ const WEATHER_GLSL = (() => { const W = CONFIG.building.weather; return `
         c = mix(c, mix(vec3(dot(c, LUM)), c, 0.7) * 1.1, fadeP);
         // painted corner stones: long and short blocks alternating up both corners
         if (flags > 0.5 && dCorner < (mod(floor(wp.y / 0.34), 2.0) < 0.5 ? 0.58 : 0.34) && fract(wp.y / 0.34) > 0.07)
-          c = mix(c, vec3(0.80, 0.77, 0.69) * mix(1.0, c.g / max(base.g, 0.05), 0.5), 0.9);
+          c = mix(c, vec3(0.80, 0.77, 0.69) * mix(1.0, c.g / max(base.g, 0.05), 0.5), 0.6);   // (painted, so low in contrast: at 0.9 they read as a dotted line from the Postcard)
         // ---- drip streaks: rain off a sill or a balcony slab, in soft runs a hand or two wide ----
         float drip = vBake.y;
         if (drip > 0.004) {

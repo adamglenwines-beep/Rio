@@ -113,9 +113,14 @@ A **Manor Lords-style hybrid**:
 - **Painted trim**: string courses, window surrounds and cornice strips on some houses,
   painted corner stones on a few, and now and then a window painted on a blank bay
   (sometimes with a cat).
-- **Windows**: uneven rhythm, small top-floor windows on a third of houses; shutters shut,
-  shut with the lower panel pushed out, open, or half and half. Balconies (bars or solid),
-  flower boxes, washing lines, drainpipes, bougainvillea up some corners, pots by doors.
+- **No two facades alike (v0.21, `data/facades.json` → `rhythm`)**: each house has its own storey
+  heights (a low attic on a third, one storey of higher rooms on a third), its own window size
+  and spacing, columns that need not sit centred, sometimes a column of narrower windows or a
+  blind column with painted windows; some side walls are blank or have one column; string
+  courses stop at corners or part-way; cornices come in three kinds; balconies stack to one side.
+  **Windows always stack in vertical columns.** Shutter states vary per window (see Facades).
+  Balconies (bars or solid), flower boxes, washing lines, drainpipes, bougainvillea up some
+  corners, pots by doors.
 - **Roofs**: low-pitched, mostly pale weathered slate with a terracotta or lime-mortar
   ridge, about one in six terracotta; chimneys with slab caps or pots; roof terraces with
   railings, pergolas, parasols and washing.
@@ -144,7 +149,8 @@ A **Manor Lords-style hybrid**:
   a rendered parapet, pots and geraniums, now and then a chair or washing.
 - **Ground floors** show their use: shopfronts with signs and striped awnings, workshop doors,
   arched entries, house doors with stone jambs and steps; harbour houses open onto the quay.
-- **Trim**: a two-step cornice under every eaves; subtle floor bands on some houses.
+- **Trim**: a cornice under the eaves (two steps, one plain step, or none); subtle floor bands on
+  some houses, laid wall by wall (they may stop at a corner or part-way along the front).
 - **No facade detail on walls with a neighbour or the hillside within 2 m.**
 - **Each house has a plan** (`src/houseplan.js`, `data/houses.json`, pure game state): a
   condition 0–1 (paint fade, plaster loss below 0.35, tidiness) and a use per floor (family,
