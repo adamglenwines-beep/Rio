@@ -116,7 +116,7 @@ A **Manor Lords-style hybrid**:
 - **No two facades alike (v0.21, `data/facades.json` → `rhythm`)**: each house has its own storey
   heights (a low attic on a third, one storey of higher rooms on a third), its own window size
   and spacing, columns that need not sit centred, sometimes a column of narrower windows or a
-  blind column with painted windows; some side walls are blank or have one column; string
+  blind column with painted windows; some inland-facing side walls are blank or have one column; string
   courses stop at corners or part-way; cornices come in three kinds; balconies stack to one side.
   **Windows always stack in vertical columns.** Shutter states vary per window (see Facades).
   Balconies (bars or solid), flower boxes, washing lines, drainpipes, bougainvillea up some

@@ -25,6 +25,7 @@ once at the very end. After each stage: commit, merge to `main`, publish, screen
 | 5. Plaster weathering | `v0.20 · Weathering` | **done, published** |
 | 6. Break the procedural rhythm | `v0.21 · Rhythm` | **done, published** |
 | Revisit: sunlit colour, and the stipple bug | `v0.22 · Sunlit` | **done, published** |
+| Revisit: corner windows restored, blank walls only facing inland | `v0.23 · Built and sunlit` | **done, published (final)** |
 | Wrap-up: browser suite, final sheets in `docs/progress/final/`, summary | | **done** (see "End of the run") |
 
 **The run is complete.** To carry on, read "End of the run: where it stands" below (it lists
@@ -369,8 +370,8 @@ vertical columns.**
 |---|---|
 | **Storey heights** | each house has its own: ordinary storeys 2.75–3.25 m, a low attic (2.3–2.65 m) on 35% of houses, one storey of higher rooms (+0.25–0.5 m) on 35%, and ±7 cm on every storey. They are fitted so the ground floor still starts at ground level and the eaves stay where the town's growth put them (which still counts 3 m a storey) |
 | **Mismatched window sizes** | per house: width × 0.86–1.06, height × 0.84–1.08 (and never taller than the storey allows); 30% of houses have one column of narrower windows (× 0.76), 25% one storey of shorter ones (× 0.8, sill raised) |
-| **Irregular column spacing between houses** | per house: the spacing between columns is × 0.76–1.08; on 55% of fronts the columns sit to one side instead of centred; windows may stand 30 cm from a corner (was 55) |
-| **Occasional blank walls** | 12% of side and back walls have no windows at all (never the front, never a wall looking over the harbour); another 14% of them have a single column |
+| **Irregular column spacing between houses** | per house: the spacing between columns is × 0.76–1.08; on 55% of fronts the columns sit to one side instead of centred (windows keep 48 cm from a corner: v0.21 tried 30 cm, which lost corner columns to the neighbour-clearance rule; fixed in v0.23) |
+| **Occasional blank walls** | some side and back walls have no windows at all, others a single column (never the front, never a wall looking over the harbour; since v0.23 only walls facing inland: 30% blank, 20% one column) |
 | **Painted fake windows** | a blind column on 18% of fronts (was 8%), painted 6 times in 10; on a blank wall, 12% of the places a window would have been are painted. 89 in the demo town (v0.20: about 60) |
 | **Interrupted string courses** | laid wall by wall now: always along the front, round each other wall only 55% of the time (33% on the back), never where a neighbour hides them, and on 30% of houses the front one stops 40–75% of the way along |
 | **Interrupted cornices** | 48% of houses keep the two-step cornice, 29% have one plain step, 24% none (the eaves sit on the wall), so the cornice line breaks from house to house |
@@ -481,11 +482,32 @@ High ×0.50 of its (old) baseline.
 Pictures: `docs/progress/v0.22/`; the three final sheets (v0.15 | v0.22 | closest target) and
 an enlarged town crop are in **`docs/progress/final/`**.
 
-### End of the run: where it stands (v0.22)
+### Revisit · Corner windows and blank walls (v0.23) — done
+
+Looking at the final Postcard sheet, two big side walls in the front row stood blank, and they
+were not ones the "blank wall" rule had picked.
+- **A regression from Stage 6, fixed.** Stage 6 let windows stand 30 cm from a house's corner
+  (it was 55). That close, the strip in front of the window touches the next house's eaves
+  outline, so the keep-clear-of-neighbours rule (kept, as asked) threw the whole column out.
+  `windows.edgeMargin` is 0.48 m now; the rule and its test are unchanged.
+- **Blank and one-column walls only face inland** (`rhythm.blankFacing`): the Postcard and
+  Overview cameras look in from the sea, so the walls they see keep their windows. To keep the
+  same number of blank walls overall, the chance on an inland-facing wall went up (blank 30%,
+  one column 20%).
+
+Demo town now: **2,195 windows** (v0.21: 1,991; v0.20: 2,492), **117 balconies** (112; 134), 97
+painted windows. Light is unchanged from v0.22: wall pixels 33 / 61 / 77 on High and Low;
+Postcard picture like the paint-overs 31.6 / 59.0 / 78.8, saturation 0.45.
+Frame (High, one run): 4.80 s, 94 draw calls, 0.72 M triangles. Unit 61/61; **browser suite
+27/27, run again after this change**, so it is the true last thing run.
+Pictures: `docs/progress/v0.23/`; the final sheets in `docs/progress/final/` are v0.15 | v0.23 |
+target.
+
+### End of the run: where it stands (v0.23)
 
 **Live:** https://adamglenwines-beep.github.io/Rio/ — the title pill should read
-`v0.22 · Sunlit`. Every stage is its own commit on `main` (v0.16 … v0.22), so any of them can
-be rolled back to.
+`v0.23 · Built and sunlit`. Every stage is its own commit on `main` (v0.16 … v0.23), so any of
+them can be rolled back to.
 
 **How close to the targets, honestly.**
 - *Close:* the light on the walls (typical and brightest lightness, shade of a single wall),
@@ -504,10 +526,10 @@ be rolled back to.
   Overview picture in particular is mostly roofs, so it changed least in this run.
 
 **What got worse.**
-- About 20% fewer windows (1,990 against 2,490) and 16% fewer balconies (112 against 134):
-  blank and one-column side walls and wider spacing. Two big blank side walls face the
-  Postcard camera in the demo town.
-- Frame time about +6% on High in this sandbox; triangles +12%.
+- About 12% fewer windows (2,195 against 2,490) and 13% fewer balconies (117 against 134):
+  wider spacing on some houses, blind columns, and blank or one-column walls on the inland side.
+- Frame time about +6% on High in this sandbox (v0.22, measured back to back with v0.15; v0.23
+  adds windows back: one run 4.80 s against v0.15's 4.22 s mean); triangles +17% (0.72 M).
 - The whole scene is lit by a slightly weaker sun than v0.15 (5.4 → 5.3 at midday, with the new
   tone curve holding highlights back), so ground, rock and sea are a little less bright.
 - Close up, shutter wood is streaky; "ajar" leaves pass through the corner of the reveal by a
@@ -525,8 +547,9 @@ be rolled back to.
 1. Roofs (terracotta share, tile relief, ridge and eaves detail): the biggest gap from above.
 2. Wall richness: a painted wash (warmer and cooler areas) on the plaster, and a second, finer
    plaster photo up close.
-3. `rhythm.blankWall` / `sparseWall` down a little if the town reads too closed; and a rule
-   that the wall facing the harbour camera is never the blank one.
+3. If you see single bright or dark pixels sparkling on walls on your PC (I see none in this
+   sandbox): the walls are now cut into more pieces for the baked shade, and where a big piece
+   meets two small ones a real graphics card can leave pin-holes. Tell me and I'll close them.
 4. Shade: decide between the brief's 37% and the paint-overs' ~30% and set `hemiI` to match.
 5. Tilted lower shutter panels (*gelosie*), and curtains in open windows.
 

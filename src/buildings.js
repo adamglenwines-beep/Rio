@@ -1816,7 +1816,7 @@ export class BuildingRenderer {
       const pitchWanted = (front ? WIN.columns.front : WIN.columns.side) * F.colPitch;
       let cols = Math.max(1, Math.round(L / pitchWanted));
       while (cols > 1 && avail / (cols - 1) < wStd + RH.minGap) cols--;
-      const plainSide = !front && !seaward && !b.arch;
+      const plainSide = !front && !seaward && !b.arch && n[1] < RH.blankFacing;   // (never a wall that looks toward the sea: that is the side the Postcard and Overview cameras see)
       const blankWall = plainSide && rng() < RH.blankWall;                // a wall with no windows at all (a painted one, now and then)
       if (plainSide && rng() < RH.sparseWall) cols = 1;
       const pitch = cols > 1 ? Math.min(pitchWanted, avail / (cols - 1)) : 0;
