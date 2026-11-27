@@ -87,7 +87,51 @@ cross a door).
 - `damaged_plaster` (Poly Haven, CC0, confirmed) replaces the worn-plaster texture (ASSETS.md).
 
 ### Performance
-(numbers below, filled in at the end of the run)
+
+Measured in this sandbox's software renderer (`tools/profile.cjs`, postcard view, 1280×720): only
+relative numbers carry over to a real GPU, and single runs here vary by about ±20% (the same build
+measured 4.6 s and 5.9 s a frame an hour apart). So the fair comparison is **interleaved**: v0.12,
+v0.13, v0.12, v0.13 back to back, three timed frames each, Golden hour:
+
+| Preset | v0.12 | v0.13 | change |
+|---|---|---|---|
+| High | 5.16 / 3.97 s, mean 4.57 s | 4.67 / 4.62 s, mean 4.65 s | +2% (within the noise) |
+| Low | 2.84 / 2.57 s, mean 2.70 s | 2.66 / 2.78 s, mean 2.72 s | +1% (within the noise) |
+
+Single full runs, all presets (noisy): `docs/progress/run-f/profile_before.json` (v0.12) and
+`profile_after.json` (v0.13). Triangles per frame at the postcard view: Low 0.52 M → 0.58 M,
+Medium/High 1.04 M → 1.11 M; draw calls 57–59 → 142–144.
+
+**So v0.13 costs about the same as v0.12, with far more facade detail: not faster.** On your PC
+expect roughly the same fps as v0.12 on each preset (please check ⚙️ Settings). What kept it level:
+- **Chunks** (48 m) with whole-chunk culling and detail by distance: the first, unchunked version
+  of step 1 was ~60% slower on High (8.6 s a frame; every louvre slat processed for every window).
+- **Static parts merged** into two meshes per chunk: draw calls 263 → 135 (then 144 with flower
+  boxes instanced again).
+- **Near detail within 55 m only**, narrower painted openings, cheaper surrounds, plants and flower
+  boxes fading with distance, no openings or detail on walls with a neighbour or the hillside
+  within 2 m.
+- Not tried: a depth pre-pass (see Decisions); GPU occlusion culling (as asked).
+Where to look next for speed: the slatted leaves (480k triangles when a chunk is near: a cheaper
+slat shape, or slats only within ~25 m), and the ground (still about a third of the main pass).
+
+### What still differs from the targets, what got worse, what next
+
+Sheets: `Rio-reference/progress/v0.13_target-v2-1_vs_game.jpg`, `v0.13_single-building_vs_game.jpg`,
+`v0.13_target-05_vs_game.jpg`, `v0.13_target-v2-5_vs_game.jpg` (cameras matched by eye; the town
+differs from the one the paint-overs were made from, so building-by-building matches are approximate).
+- **Still differs:** the paint-overs pack houses tighter, with deep shade in the lanes between them;
+  the game's towers stand more apart. Their facades carry more balconies and greenery at every level,
+  and many more terracotta roofs. The single-building target has a balcony on almost every floor
+  and pairs of tall windows; ours has a balcony on most floors of harbour houses, fewer elsewhere.
+  Shopfronts and awnings are still few (14 shops, 12 awnings in the demo town): only harbour-area
+  lane walls get them. Close up, shutters and stone are crisp but plaster is still uniform from afar.
+- **Got worse:** draw calls up (57 → 144); the town looks busier from the postcard view (many more
+  windows); low-condition houses' plaster loss is now subtle, perhaps too subtle.
+- **Next:** more shops and awnings along the main street (zone more commercial ground floors); a
+  balcony and window rhythm closer to the single-building target (pairs of French windows with one
+  wide balcony); terracotta share on roofs (low priority); a test for "no triangular gaps beside
+  paths" (from the brief; not done because massing was out of scope); slats only within ~25 m.
 
 ### Decisions (v0.13)
 - **Openings are real holes** in the merged wall mesh rather than a shader trick: they cast real
