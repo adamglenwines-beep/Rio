@@ -4,6 +4,30 @@ So a new session can pick up with "Read PROGRESS.md and continue". Read `CLAUDE.
 `DESIGN.md` first. Decisions made without the user (they asked not to be asked) are
 recorded here with the reason.
 
+## v0.15 · Lot sizes (short data-only run)
+
+Brief: some lots were too big and became blocky houses, breaking the rhythm of narrow towers.
+Only `data/blocks.json` changed (no planner code, roofs, facades, lighting or terrain):
+
+| | v0.14 | v0.15 |
+|---|---|---|
+| harbour lots | 3.0–4.6 m wide, ≤ 8.5 m deep | 2.8–4.4 m wide, ≤ 7 m deep |
+| town lots | 3.3–5.0 m wide, ≤ 8 m deep | 3.0–4.6 m wide, ≤ 7 m deep |
+
+Result (demo town, 700 steps): 182 houses (177), 99 in harbour/town blocks (92); median
+footprint there 23 m² (25), houses over 40 m² 3 (7), largest 46 m² (54). Coverage: harbour 87%
+(86%), town 91% (92%). Draw calls 122 (unchanged). Unit tests 60/60; browser suite and speed
+comparison skipped as asked. Sheets: `docs/progress/v0.15/`.
+
+Tried and rejected: harbour depth 6.5 (coverage 83–84%), smaller wedge growth (`wedgeReach` 2.5–3,
+coverage 77–81%), and some width settings that left 13–19 m² slivers beside lanes (the sliver
+test caught them).
+
+Still too big: the remaining large houses are **corner and wedge lots** (a corner snaps onto the
+crossing lane; a wedge grows its back corners into leftover space). Lot width and depth settings
+don't limit those. **"Split any lot over that size" needs a small planner change**: cut corner or
+wedge lots over ~35 m² into two. I didn't make it, because this run was limited to data.
+
 ## The current run: v0.14 · Footprints (how houses fill the land between paths)
 
 Adam's brief: blocks enclosed by lanes should be nearly solid building (continuous fronts along
